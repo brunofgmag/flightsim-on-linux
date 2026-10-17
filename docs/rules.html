@@ -33,6 +33,9 @@
 
 <h2>Programs that run next to the simulator join its container</h2>
 <p>Steam starts the simulator inside the Steam Linux Runtime container. A Windows program started some other way while the simulator runs ends up in a different container and gets the same "Access denied" as above. Programs that talk to the simulator (AutoFPS, SayIntentions, Active Sky, vRAAS, Lorby AAO) have to be started inside the simulator's own container. The add-on guides give a launcher for each.</p>
+<p>To start any other Windows program there, give its Windows path to <code>bin/flightsim-on-linux run</code>. It enters the simulator's container and runs the program with the simulator's environment and Proton. Settings for that one program go before the path:</p>
+<pre><code>bin/flightsim-on-linux run WINEDLLOVERRIDES=d3d9=d 'C:\Program Files\App\App.exe'</code></pre>
+<p>The simulator has to be running already.</p>
 <p>A program left open in that container keeps Steam showing the simulator as running after you quit it. Close your add-ons before you quit the simulator.</p>
 
 <h2>If the simulator freezes, turn ntsync off first</h2>
@@ -45,7 +48,7 @@
 <p>On the test machine, a simulator force-quit during its loading screen came back with every Community package switched off. It gave no warning; the aircraft were gone from the list. It had marked each Community package <code>SystemDisabled</code> in <code>Content.xml</code>, in your profile folder inside the simulator's base folder. Force-quits after the main menu didn't do this.</p>
 <p>With the simulator closed, this turns back on only the Community packages the simulator switched off, and leaves the ones you switched off yourself (<code>UserDisabled</code>) alone:</p>
 <pre><code>find ~/.local/share/Steam/steamapps/compatdata/2537590/pfx/drive_c/users/steamuser/AppData/Roaming/"Microsoft Flight Simulator 2024" -maxdepth 2 -name Content.xml -exec sed -i -E 's/(&lt;Package name="community[^"]*" active=")SystemDisabled(")/\1Activated\2/' {} +</code></pre>
-<p>If your simulator is in another Steam library, use that library's <code>steamapps/compatdata/2537590</code>; <code>bin/flightsim-on-linux machine</code> prints it.</p>
+<p>If your simulator is in another Steam library, use that library's <code>steamapps/compatdata/2537590</code>; <code>bin/flightsim-on-linux machine</code> prints it. <code>bin/flightsim-on-linux doctor</code> warns when the simulator has switched Community packages off, and prints this command with your own path.</p>
 
 <h2>Junctions in Community look broken from Linux</h2>
 <p>GSX, SayIntentions and the FSDT sceneries put Windows junctions in Community. From Linux they look like empty folders with a <code>?</code> at the end of the name. That is normal: inside Wine they point to the right place.</p>
@@ -55,10 +58,10 @@
 <h2>WPF programs draw in software</h2>
 <p>Several add-on apps are WPF programs (Lorby AAO, AutoFPS, vRAAS, the FSLabs Control Center, the Fenix runner). On the test machine, under Wine's Wayland driver, they crashed the moment their window should appear, with <code>importing the supplied dmabufs failed</code> in the log. Started with Direct3D 9 turned off, or with this one setting in the prefix, they draw in software, as WPF does on a Windows PC without graphics acceleration:</p>
 <pre><code>protontricks -c 'wine reg add "HKCU\Software\Microsoft\Avalon.Graphics" /v DisableHWAcceleration /t REG_DWORD /d 1 /f' 2537590</code></pre>
-<p>It applies to every WPF program in the prefix. To undo it, run the same command with <code>reg delete "HKCU\Software\Microsoft\Avalon.Graphics" /v DisableHWAcceleration /f</code>.</p>
+<p>It applies to every WPF program in the prefix. To undo it, run the same command with <code>reg delete "HKCU\Software\Microsoft\Avalon.Graphics" /v DisableHWAcceleration /f</code>. <code>doctor</code> tells you whether the setting is there. When it's missing and your launch options turn on the Wayland driver, it warns.</p>
 
 <h2>Missing Windows fonts</h2>
-<p>A prefix has no Segoe UI or Consolas, so text in add-on windows falls back to a thin, jagged Times New Roman. Map them to free fonts under <code>HKCU\Software\Wine\Fonts\Replacements</code>. The test machine uses Noto Sans for Segoe UI and Segoe UI Bold, Noto Sans SemiBold for Segoe UI Semibold, DejaVu Sans Mono for Consolas, DejaVu Sans for Verdana and Noto Serif for Palatino Linotype. <code>winecfg</code> has no option for this.</p>
+<p>A prefix has no Segoe UI or Consolas, so text in add-on windows falls back to a thin, jagged Times New Roman. Map them to free fonts under <code>HKCU\Software\Wine\Fonts\Replacements</code>. Wine ignores a replacement whose font isn't installed, so the name has to match an installed font family exactly. These names work on the test machine: Noto Sans for Segoe UI and Segoe UI Bold, Noto Sans Medium for Segoe UI Semibold (Arch's noto-fonts package has no SemiBold), DejaVu Sans Mono for Consolas, DejaVu Sans for Verdana and Noto Serif for Palatino Linotype. <code>winecfg</code> has no option for this. <code>doctor</code> checks all six and prints one command that adds the missing ones.</p>
 <p>Calibri is the exception: Wine's GDI+ only finds a font whose full name matches its family name, so Active Sky needs a real file named Calibri, built from Carlito. Its guide has the script.</p>
 
 <h2>The first load of a heavy aircraft is slow</h2>

@@ -101,9 +101,7 @@ export WINEESYNC=0
 export WINEFSYNC=0
 export_settings
 
-x86_64-w64-mingw32-gcc -O2 -o "$WORK/notifyicon-guid-test.exe" "$HERE/src/notifyicon-guid-test.c" -lshell32 -luser32
-x86_64-w64-mingw32-gcc -O2 -o "$WORK/pathgradient-test.exe" "$HERE/src/pathgradient-test.c" -lgdiplus
-x86_64-w64-mingw32-gcc -O2 -municode -o "$WORK/centered-point-test.exe" "$HERE/src/centered-point-test.c" -lgdiplus -lgdi32
+"$HERE/build-checks.sh" "$WORK"
 x86_64-w64-mingw32-gcc -O2 -o "$WORK/Fenix.exe" "$(fetch_probe)"
 
 echo "Proton: $TOOL"
@@ -114,10 +112,12 @@ run_wine wineboot -i > /dev/null || true
 failures=0
 skipped=0
 report() {
-  local name="$1" status="$2" detail="$3"
+  local name="$1" status="$2" detail="$3" line
   echo
   echo "== $name: $status"
-  echo "$detail" | sed 's/^/   /'
+  while IFS= read -r line; do
+    echo "   $line"
+  done <<< "$detail"
   case "$status" in
     ok) ;;
     skipped) skipped=$((skipped + 1)) ;;

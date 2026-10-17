@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -t . -v
+
+  shellcheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck every shell script
+        run: tools/shell-scripts.sh | xargs -r -d '\n' shellcheck
+
+  site:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the site
+        run: python3 tools/build_site.py
+      - name: The committed docs folder matches the build
+        run: |
+          git status --porcelain -- docs
+          test -z "$(git status --porcelain -- docs)"
+
+  windows-programs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+      - name: Build checks and shims
+        run: tools/build-windows.sh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-programs
+          path: out
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [tests, shellcheck, site, windows-programs]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-programs
+          path: out
+      - name: Attach the shims and their sha256 to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes ""
+          if [ -s out/shims/SHA256SUMS ]; then
+            gh release upload "$GITHUB_REF_NAME" out/shims/* --clobber
+          fi

@@ -4,9 +4,10 @@ import os
 import sys
 from pathlib import Path
 
-from fsol import doctor, machine
+from fsol import addons, container, doctor, machine
 
 ROOT = Path(__file__).resolve().parent.parent
+CLI = ROOT / "bin" / "flightsim-on-linux"
 MARKS = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "info": "info"}
 
 
@@ -48,6 +49,99 @@ def proton_check(args):
     run_script(ROOT / "checks" / "check-proton.sh", [str(target)])
 
 
+def run_in_container(args):
+    try:
+        command, env = container.plan(machine.discover(), args.program, os.environ)
+    except container.ContainerError as error:
+        print(f"run: {error}", file=sys.stderr)
+        return 2
+    os.execvpe(command[0], command, env)
+
+
+def addon_root():
+    return Path(os.environ.get("FSOL_ADDONS") or ROOT / "addons")
+
+
+def addon_list(args):
+    found = machine.discover()
+    state = addons.state_folder()
+    rows = [addons.describe(addon, found, state) for addon in addons.load_all(addon_root())]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("No add-on fixes yet.")
+    for row in rows:
+        print(f"{row['id']:24} {row['name']:32} {row['status']}")
+    return 0
+
+
+def blocked(addon, found):
+    unmet = addons.unmet_needs(addon, found)
+    for reason in unmet:
+        print(f"  FAIL {addon.name}: {reason}")
+    return bool(unmet)
+
+
+def apply_one(addon, found, state):
+    print(addon.name)
+    if blocked(addon, found):
+        return 1
+    if addon.touches_addon_files:
+        print(f"  note this changes files of the add-on itself; flightsim-on-linux addon undo {addon.id} restores them")
+    code = addons.run_script(addon, "apply", found, CLI, print)
+    if code:
+        print(f"  FAIL the fix stopped with exit code {code}")
+        return 1
+    code = addons.run_script(addon, "check", found, CLI, print)
+    if code:
+        addons.forget(addon, state)
+        print("  FAIL the fix ran, but its check did not pass")
+        return 1
+    addons.remember(addon, state)
+    return 0
+
+
+def check_one(addon, found, state):
+    print(addon.name)
+    code = addons.run_script(addon, "check", found, CLI, print)
+    if code:
+        addons.forget(addon, state)
+    return 1 if code else 0
+
+
+def undo_one(addon, found, state):
+    print(addon.name)
+    if blocked(addon, found):
+        return 1
+    code = addons.run_script(addon, "undo", found, CLI, print)
+    if code:
+        print(f"  FAIL undo stopped with exit code {code}")
+        return 1
+    addons.forget(addon, state)
+    return 0
+
+
+def addon_action(action):
+    def run(args):
+        found = machine.discover()
+        state = addons.state_folder()
+        try:
+            chosen = [addons.find(addon_root(), wanted) for wanted in args.addons]
+            if not chosen and action is check_one:
+                chosen = [addon for addon in addons.load_all(addon_root()) if addons.is_installed(addon, found)]
+        except addons.AddonError as error:
+            print(f"addon: {error}", file=sys.stderr)
+            return 2
+        failures = 0
+        for number, addon in enumerate(chosen):
+            if number:
+                print()
+            failures += action(addon, found, state)
+        return 1 if failures else 0
+    return run
+
+
 def parser():
     top = argparse.ArgumentParser(prog="flightsim-on-linux", description="Check Microsoft Flight Simulator 2024 under Proton and prepare it for Windows add-ons.")
     commands = top.add_subparsers(dest="command", required=True)
@@ -67,6 +161,23 @@ def parser():
     check = proton.add_parser("check", help="test a Proton in a throwaway prefix")
     check.add_argument("proton", nargs="?", type=Path, help="Proton folder, default the one the simulator uses")
     check.set_defaults(run=proton_check)
+
+    inside = commands.add_parser("run", help="run a Windows program inside the running simulator's container, with its environment")
+    inside.add_argument("program", nargs=argparse.REMAINDER, help="[NAME=value ...] program.exe [arguments]")
+    inside.set_defaults(run=run_in_container)
+
+    addon = commands.add_parser("addon", help="list, fix, check or undo the fix of an add-on").add_subparsers(dest="action", required=True)
+    listing = addon.add_parser("list", help="show every add-on with a fix here and whether it is installed and fixed")
+    listing.add_argument("--json", action="store_true")
+    listing.set_defaults(run=addon_list)
+    for name, action, text, required in (
+        ("apply", apply_one, "apply an add-on's fix, then check it", True),
+        ("check", check_one, "check that an add-on's fix works, default every installed add-on", False),
+        ("undo", undo_one, "undo an add-on's fix", True),
+    ):
+        command = addon.add_parser(name, help=text)
+        command.add_argument("addons", nargs="+" if required else "*", metavar="addon")
+        command.set_defaults(run=addon_action(action))
     return top
 
 

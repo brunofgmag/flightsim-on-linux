@@ -8,10 +8,11 @@ The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if 
 
 | Path | What it is |
 |---|---|
-| `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check` |
+| `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check`, `run`, `addon list`, `addon apply`, `addon check`, `addon undo` |
 | `bin/flightsim-on-linux-gui` | The same, through zenity or kdialog dialogs |
 | `proton/build-proton-fenix.sh` | Builds Proton Fenix A320 from a Proton-CachyOS release |
 | `checks/` | Tests a Proton in a throwaway prefix |
+| `addons/` | One folder per add-on fix, with its apply, check and undo scripts; `addons/README.md` has the format |
 | `patches/wine/` | The two Wine patches this project adds |
 | `site/` | Source of the website; `tools/build_site.py` writes it to `docs/` |
 | `AGENTS.md` | Instructions for AI coding agents working on a user's machine |
@@ -47,6 +48,6 @@ Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-o
 
 ## Licences
 
-- Code (`bin/`, `fsol/`, `proton/`, `checks/`, `tools/`, `tests/`): MIT, in `LICENSE`.
+- Code (`bin/`, `fsol/`, `proton/`, `checks/`, `addons/`, `tools/`, `tests/`): MIT, in `LICENSE`.
 - Text of the site and the guides (`site/`, `docs/`, the Markdown files): CC BY 4.0, in `LICENSE-docs`.
 - Wine patches (`patches/wine/`): LGPL-2.1-or-later, like Wine itself, in `patches/wine/COPYING`.

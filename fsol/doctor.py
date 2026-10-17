@@ -1,6 +1,10 @@
 import re
+import shlex
 import shutil
+import subprocess
 from dataclasses import dataclass
+
+from fsol import registry
 
 BUILD_TOOLS = ("git", "curl", "patch", "perl", "autoreconf", "make", "gcc", "flex", "bison", "x86_64-w64-mingw32-gcc")
 
@@ -92,10 +96,106 @@ def check_build_tools(machine):
     return Check("build-tools", "info", f"Missing for building Proton Fenix A320: {', '.join(missing)}", "Install them with your distribution's package manager before running the build.")
 
 
-CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_library_paths, check_community, check_running, check_build_tools)
+WPF_KEY = r"Software\Microsoft\Avalon.Graphics"
+WPF_APPS = "Lorby AAO, AutoFPS, vRAAS, the FSLabs Control Center and the Fenix runner"
+WPF_COMMAND = "protontricks -c 'wine reg add \"HKCU\\Software\\Microsoft\\Avalon.Graphics\" /v DisableHWAcceleration /t REG_DWORD /d 1 /f' 2537590"
+FONTS_KEY = r"Software\Wine\Fonts\Replacements"
+FONT_REPLACEMENTS = (
+    ("Segoe UI", "Noto Sans"),
+    ("Segoe UI Bold", "Noto Sans"),
+    ("Segoe UI Semibold", "Noto Sans Medium"),
+    ("Consolas", "DejaVu Sans Mono"),
+    ("Verdana", "DejaVu Sans"),
+    ("Palatino Linotype", "Noto Serif"),
+)
+FALLBACK_FONT = "times new roman"
+SYSTEM_DISABLED = re.compile(r'<Package name="community[^"]*" active="SystemDisabled"')
+REACTIVATE = "s/(<Package name=\"community[^\"]*\" active=\")SystemDisabled(\")/\\1Activated\\2/"
+
+
+def user_registry(machine):
+    path = machine.prefix / "user.reg" if machine.prefix else None
+    return registry.load(path) if path and path.is_file() else None
+
+
+def wayland_in_options(machine):
+    return any(re.search(r"\bPROTON_ENABLE_WAYLAND=0*[1-9]", options) for options in machine.launch_options.values())
+
+
+def check_wpf(machine):
+    keys = user_registry(machine)
+    if keys is None:
+        return None
+    if registry.value(keys, WPF_KEY, "DisableHWAcceleration") == 1:
+        return Check("wpf", "ok", "WPF programs in the prefix draw in software (Avalon.Graphics DisableHWAcceleration is 1)")
+    status = "warn" if wayland_in_options(machine) else "info"
+    return Check("wpf", status, "WPF programs in the prefix draw with Direct3D 9: HKCU\\Software\\Microsoft\\Avalon.Graphics has no DisableHWAcceleration=1",
+                 f"Under Wine's Wayland driver, {WPF_APPS} crash when their window opens. With the simulator closed, run: {WPF_COMMAND}")
+
+
+def installed_font_families():
+    if not shutil.which("fc-list"):
+        return None
+    listing = subprocess.run(["fc-list", ":", "family"], capture_output=True, text=True).stdout
+    return {name.strip().lower() for line in listing.splitlines() for name in line.split(",") if name.strip()}
+
+
+def font_problem(current, families):
+    if not current:
+        return "has no replacement"
+    if current.lower() == FALLBACK_FONT:
+        return "is replaced by Times New Roman"
+    if families is not None and current.lower() not in families:
+        return f"is replaced by {current}, which this system doesn't have"
+    return None
+
+
+def font_command(fixes):
+    adds = " && ".join(f'wine reg add "HKCU\\Software\\Wine\\Fonts\\Replacements" /v "{windows}" /d "{target}" /f' for windows, target in fixes)
+    return f"protontricks -c '{adds}' 2537590"
+
+
+def check_fonts(machine):
+    keys = user_registry(machine)
+    if keys is None:
+        return None
+    families = installed_font_families()
+    problems = []
+    fixes = []
+    for windows, target in FONT_REPLACEMENTS:
+        problem = font_problem(registry.value(keys, FONTS_KEY, windows), families)
+        if problem:
+            problems.append(f"{windows} {problem}")
+            fixes.append((windows, target))
+    if not problems:
+        return Check("fonts", "ok", f"The {len(FONT_REPLACEMENTS)} Windows fonts add-ons ask for most have a replacement this system has")
+    missing = sorted({target for _, target in fixes if families is not None and target.lower() not in families})
+    install = f" Install {', '.join(missing)} first." if missing else ""
+    return Check("fonts", "warn", "Text in add-on windows can come out thin and jagged: " + "; ".join(problems),
+                 f"With the simulator closed, run: {font_command(fixes)}{install}")
+
+
+def content_files(machine):
+    return sorted(machine.base.glob("*/Content.xml")) if machine.base else []
+
+
+def check_community_disabled(machine):
+    files = content_files(machine)
+    if not files:
+        return None
+    disabled = {path: len(SYSTEM_DISABLED.findall(path.read_text(errors="replace"))) for path in files}
+    total = sum(disabled.values())
+    if not total:
+        return Check("community-disabled", "ok", "The simulator has not switched off any Community package")
+    paths = " ".join(shlex.quote(str(path)) for path, count in disabled.items() if count)
+    return Check("community-disabled", "warn", f"The simulator switched off {total} Community package{'s' if total > 1 else ''} (SystemDisabled in Content.xml)",
+                 f"It does this when it is killed while loading. With the simulator closed, turn them back on with: sed -i -E {shlex.quote(REACTIVATE)} {paths}")
+
+
+CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_library_paths, check_community, check_community_disabled, check_wpf, check_fonts, check_running, check_build_tools)
 
 
 def run(machine):
     if not machine.steam:
         return [check_steam(machine)]
-    return [check(machine) for check in CHECKS]
+    return [found for found in (check(machine) for check in CHECKS) if found]

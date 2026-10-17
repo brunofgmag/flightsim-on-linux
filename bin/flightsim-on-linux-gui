@@ -30,26 +30,92 @@ show_text() {
 choose() {
   case "$DIALOG" in
     zenity)
-      zenity --list --radiolist --width=620 --height=320 --title="$TITLE" \
+      zenity --list --radiolist --width=620 --height=380 --title="$TITLE" \
         --text="What do you want to do?" --column=" " --column=Action --column=Task --hide-column=3 --print-column=3 \
-        TRUE "Check the Proton the simulator uses" check \
+        TRUE "Set up add-ons" addons \
+        FALSE "Check the Proton the simulator uses" check \
         FALSE "Build Proton Fenix A320 (takes a few minutes)" build \
         FALSE "Run the setup check again" doctor
       ;;
     kdialog)
-      kdialog --title "$TITLE" --radiolist "What do you want to do?" \
-        check "Check the Proton the simulator uses" on \
+      kdialog --title "$TITLE" --geometry 620x320 --radiolist "What do you want to do?" \
+        addons "Set up add-ons" on \
+        check "Check the Proton the simulator uses" off \
         build "Build Proton Fenix A320 (takes a few minutes)" off \
         doctor "Run the setup check again" off
       ;;
     *)
-      echo "1) Check the Proton the simulator uses" >&2
-      echo "2) Build Proton Fenix A320" >&2
-      echo "3) Run the setup check again" >&2
+      echo "1) Set up add-ons" >&2
+      echo "2) Check the Proton the simulator uses" >&2
+      echo "3) Build Proton Fenix A320" >&2
+      echo "4) Run the setup check again" >&2
       read -r -p "Choice: " answer
-      case "$answer" in 1) echo check ;; 2) echo build ;; 3) echo doctor ;; esac
+      case "$answer" in 1) echo addons ;; 2) echo check ;; 3) echo build ;; 4) echo doctor ;; esac
       ;;
   esac
+}
+
+ADDON_TEXT="Pick the add-ons you have installed, or want to install now. Each one gets its fix, then a check that it works."
+
+addon_rows() {
+  "$CLI" addon list --json | python3 -I -c 'import json, sys
+for row in json.load(sys.stdin):
+    print("\t".join((row["id"], row["name"], row["status"])))'
+}
+
+pick_addons() {
+  local id name status rows=() number=0
+  local -a ids=()
+  while IFS=$'\t' read -r id name status; do
+    ids+=("$id")
+    case "$DIALOG" in
+      zenity) rows+=("$([ "$status" = "installed, not fixed" ] && echo TRUE || echo FALSE)" "$name" "$status" "$id") ;;
+      kdialog) rows+=("$id" "$name: $status" "$([ "$status" = "installed, not fixed" ] && echo on || echo off)") ;;
+      *) number=$((number + 1)); printf '%2d) %-32s %s\n' "$number" "$name" "$status" >&2 ;;
+    esac
+  done < <(addon_rows)
+  [ "${#ids[@]}" -gt 0 ] || return 2
+  case "$DIALOG" in
+    zenity)
+      zenity --list --checklist --width=720 --height=460 --title="$TITLE" --text="$ADDON_TEXT" \
+        --column=" " --column=Add-on --column=Status --column=id --hide-column=4 --print-column=4 --separator=$'\n' "${rows[@]}"
+      ;;
+    kdialog)
+      kdialog --title "$TITLE" --separate-output --checklist "$ADDON_TEXT" "${rows[@]}"
+      ;;
+    *)
+      local answer choice
+      read -r -p "Numbers to set up, separated by spaces: " answer
+      for choice in $answer; do
+        [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#ids[@]}" ] && echo "${ids[$((choice - 1))]}"
+      done
+      ;;
+  esac
+}
+
+set_up_addons() {
+  local chosen id name results status
+  local -A names=()
+  while IFS=$'\t' read -r id name status; do
+    names[$id]="$name"
+  done < <(addon_rows)
+  chosen="$(pick_addons)"
+  status=$?
+  if [ "$status" -eq 2 ]; then
+    echo "No add-on fixes are in this version yet. The add-on list on the website says what is coming." > "$LOG"
+    show_text "add-ons" "$LOG"
+    return
+  fi
+  [ -n "$chosen" ] || return
+  results="$LOG.results"
+  : > "$results"
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    run_with_progress "Setting up ${names[$id]:-$id}" "$CLI" addon apply "$id"
+    { cat "$LOG"; echo; } >> "$results"
+  done <<< "$chosen"
+  show_text "results" "$results"
+  rm -f "$results"
 }
 
 run_with_progress() {
@@ -58,10 +124,11 @@ run_with_progress() {
   case "$DIALOG" in
     zenity)
       "$@" > "$LOG" 2>&1 &
-      local pid=$!
+      local pid=$! line
       {
         while kill -0 "$pid" 2> /dev/null; do
-          echo "# $(tail -n 1 "$LOG" | cut -c1-90)"
+          line="$(tail -n 1 "$LOG" | cut -c1-90)"
+          [ -z "$line" ] || echo "# $line"
           sleep 1
         done
         echo 100
@@ -88,6 +155,9 @@ show_text "your machine" "$LOG"
 
 while task="$(choose)" && [ -n "$task" ]; do
   case "$task" in
+    addons)
+      set_up_addons
+      ;;
     check)
       run_with_progress "Testing Proton in a throwaway prefix" "$CLI" proton check
       { tail -n 1 "$LOG"; echo; cat "$LOG"; } > "$LOG.view"

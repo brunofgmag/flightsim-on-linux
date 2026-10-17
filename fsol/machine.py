@@ -27,9 +27,11 @@ class Machine:
     proton: Path | None = None
     compat_tool: str | None = None
     launch_options: dict = field(default_factory=dict)
+    base: Path | None = None
     packages: Path | None = None
     community: Path | None = None
     sim_running: bool = False
+    sim_pid: int | None = None
     ntsync_device: bool = False
     ntsync_handles: int | None = None
 
@@ -41,7 +43,17 @@ class Machine:
     def as_dict(self):
         result = {name: getattr(self, name) for name in self.__dataclass_fields__}
         result["proton_is_fenix"] = self.proton_is_fenix
-        return {key: str(value) if isinstance(value, Path) else value for key, value in result.items()}
+        return plain(result)
+
+
+def plain(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [plain(item) for item in value]
+    return value
 
 
 def find_steam(home, override=None):
@@ -127,15 +139,15 @@ def packages_folder(prefix):
     return windows_to_linux(prefix, match.group(1)) if match else None
 
 
-def sim_running(proc=Path("/proc")):
-    for cmdline in proc.glob("[0-9]*/cmdline"):
+def sim_pid(proc=Path("/proc")):
+    for cmdline in sorted(proc.glob("[0-9]*/cmdline"), key=lambda path: int(path.parent.name)):
         try:
             first = cmdline.read_bytes().split(b"\0", 1)[0]
         except OSError:
             continue
         if first.lower().endswith(SIM_EXE.lower().encode()) and first[1:3] == b":\\":
-            return True
-    return False
+            return int(cmdline.parent.name)
+    return None
 
 
 def process_environ(pid_dir):
@@ -182,11 +194,13 @@ def discover(home=None, steam_override=None, proc=Path("/proc"), dev=Path("/dev"
     if machine.compatdata:
         machine.prefix = machine.compatdata / "pfx"
         machine.proton = proton_from_config_info(machine.compatdata)
+        machine.base = (machine.prefix / USERCFG).parent if (machine.prefix / USERCFG).is_file() else None
         machine.packages = packages_folder(machine.prefix)
         machine.community = machine.packages / "Community" if machine.packages else None
     machine.compat_tool = compat_tool_name(machine.steam)
     machine.launch_options = launch_options(machine.steam)
-    machine.sim_running = sim_running(proc)
+    machine.sim_pid = sim_pid(proc)
+    machine.sim_running = machine.sim_pid is not None
     machine.ntsync_device = (dev / "ntsync").exists()
     server = sim_wineserver(machine.prefix, proc) if machine.prefix and machine.sim_running else None
     machine.ntsync_handles = ntsync_handles(server) if server else None

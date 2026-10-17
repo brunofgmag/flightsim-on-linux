@@ -6,4 +6,5 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 from fsol.cli import main
 
+sys.stdout.reconfigure(line_buffering=True)
 sys.exit(main())

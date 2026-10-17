@@ -13,6 +13,8 @@ bin/flightsim-on-linux doctor --json
 
 `machine` reports the Steam folder, every library, where the simulator is installed, its compatdata and prefix, the Proton it last ran with (the third line of `compatdata/2537590/config_info`), the compatibility tool Steam has selected, the launch options per Steam user, the packages and Community folders (from `InstalledPackagesPath` in `UserCfg.opt`) and whether the simulator is running. `doctor` turns that into ok, warn, fail or info lines, each with a fix.
 
+Add-on fixes live in `addons/<id>/`, in the format `addons/README.md` describes. `bin/flightsim-on-linux addon list --json` says which add-ons are installed and fixed, and `addon check <id>` proves a fix still works.
+
 Also worth knowing, read-only:
 
 - Proton in use: `cat "$(bin/flightsim-on-linux machine --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["proton"])')/user_settings.py"`.
@@ -24,7 +26,7 @@ Also worth knowing, read-only:
 - Fix the environment, not the add-on: Proton, the prefix registry, DLL overrides, launch options, environment variables, small stand-in DLLs. Analysing an add-on to understand a failure is fine. Editing or replacing an add-on's own files is a last resort: say so plainly first, back up the original, and give the command that restores it.
 - Never touch licensing or activation. Never run the FSDT universal installer again on a machine where GSX is already activated; it spends an activation.
 - Never read out, print or send licence keys, account tokens or logs that contain them. The FSLabs `CCLog.txt` stores the activation key in plain text. If a log is needed, read only the lines you need and redact keys.
-- Installers and updaters run with the simulator and every other program of the prefix closed, one at a time. Programs that talk to the simulator are started inside the simulator's own container, not with a fresh `protontricks-launch` while it runs.
+- Installers and updaters run with the simulator and every other program of the prefix closed, one at a time. Programs that talk to the simulator are started inside the simulator's own container with `bin/flightsim-on-linux run <program.exe>`, not with a fresh `protontricks-launch` while it runs.
 - Don't force-quit the simulator during its loading screen: it can switch off the whole Community folder (see `site/pages/rules.html`).
 - In scripts, `pgrep -f` and `pkill -f` also match the shell that runs them. Write patterns like `'Fenix[.]exe'`.
 

@@ -314,7 +314,9 @@ check_runtime() {
     timeout 300 "$runtime/run" -- "$STAGE/files/bin/wine" cmd.exe /c echo "container start OK" 2>&1)" || status=$?
   env -u DISPLAY -u WAYLAND_DISPLAY WINEPREFIX="$prefix" timeout 60 "$runtime/run" -- "$STAGE/files/bin/wineserver" -k > /dev/null 2>&1 || true
   echo "$output" | tail -n 5
-  [ "$status" -eq 0 ] && grep -q "container start OK" <<< "$output" || die "the rebuilt Proton cannot start a process inside $(basename "$runtime")"
+  if [ "$status" -ne 0 ] || ! grep -q "container start OK" <<< "$output"; then
+    die "the rebuilt Proton cannot start a process inside $(basename "$runtime")"
+  fi
 }
 
 write_record() {
