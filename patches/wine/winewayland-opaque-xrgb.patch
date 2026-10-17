@@ -1,0 +1,17 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine winewayland: send the unused fourth byte of XRGB8888 window buffers as 0xFF. KWin 6.8 reads that byte as transparency on some outputs, and Wine windows showed up black or see-through there.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/winewayland.drv/window_surface.c b/dlls/winewayland.drv/window_surface.c
+index 98cf8123fea..e5b3286c053 100644
+--- a/dlls/winewayland.drv/window_surface.c
++++ b/dlls/winewayland.drv/window_surface.c
+@@ -450,7 +450,7 @@ static BOOL wayland_window_surface_flush(struct window_surface *window_surface,
+     }
+ 
+     wayland_shm_buffer_copy_data(shm_buffer, color_bits, &surface_rect, copy_from_window_region,
+-                                 shape_bits && !wws->layered);
++                                 !wws->layered);
+     if (shape_bits) wayland_shm_buffer_copy_shape(shm_buffer, rect, shape_info, shape_bits);
+ 
+     NtGdiSetRectRgn(shm_buffer->damage_region, 0, 0, 0, 0);

@@ -13,7 +13,7 @@ The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if 
 | `proton/build-proton-fenix.sh` | Builds Proton Fenix A320 from a Proton-CachyOS release |
 | `checks/` | Tests a Proton in a throwaway prefix |
 | `addons/` | One folder per add-on fix, with its apply, check and undo scripts; `addons/README.md` has the format |
-| `patches/wine/` | The two Wine patches this project adds |
+| `patches/wine/` | The Wine patches this project adds |
 | `site/` | Source of the website; `tools/build_site.py` writes it to `docs/` |
 | `AGENTS.md` | Instructions for AI coding agents working on a user's machine |
 

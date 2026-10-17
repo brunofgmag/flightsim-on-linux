@@ -20,6 +20,8 @@ PATCHES=(
   "$DOWNLOADS/fenix-a320-linux-patch-$OVERLAY_TAG-$OVERLAY_VARIANT.patch"
   "$ROOT/patches/wine/gdiplus-path-gradient-and-centered-text.patch"
   "$ROOT/patches/wine/shell32-notifyicon-guid.patch"
+  "$ROOT/patches/wine/win32u-cross-process-child-windows.patch"
+  "$ROOT/patches/wine/winewayland-opaque-xrgb.patch"
 )
 
 MODULES=(
@@ -27,6 +29,7 @@ MODULES=(
   "dlls/ntdll/ntdll.so:lib/wine/x86_64-unix/ntdll.so"
   "dlls/win32u/win32u.so:lib/wine/x86_64-unix/win32u.so"
   "dlls/winex11.drv/winex11.so:lib/wine/x86_64-unix/winex11.so"
+  "dlls/winewayland.drv/winewayland.so:lib/wine/x86_64-unix/winewayland.so"
   "dlls/dwrite/dwrite.so:lib/wine/x86_64-unix/dwrite.so"
   "dlls/ntdll/x86_64-windows/ntdll.dll:lib/wine/x86_64-windows/ntdll.dll"
   "dlls/kernelbase/x86_64-windows/kernelbase.dll:lib/wine/x86_64-windows/kernelbase.dll"

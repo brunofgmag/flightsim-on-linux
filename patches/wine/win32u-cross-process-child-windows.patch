@@ -1,0 +1,484 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine win32u: draw a child window whose top-level window belongs to another process (the WebView2 area of SayIntentions, GSX and REX) on drivers that cannot draw into another process's window, such as winewayland. The drawing process paints into a shared section and the process that owns the top-level window copies it into the child's DC.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/win32u/dce.c b/dlls/win32u/dce.c
+index eccbcca2aa4..04d55436e0f 100644
+--- a/dlls/win32u/dce.c
++++ b/dlls/win32u/dce.c
+@@ -44,6 +44,7 @@ struct dce
+     UINT        flags;
+     LONG        count;         /* usage count; 0 or 1 for cache DCEs, always 1 for window DCEs,
+                                   always >= 1 for class DCEs */
++    struct window_surface *remote;
+ };
+ 
+ static struct list dce_list = LIST_INIT(dce_list);
+@@ -783,6 +784,370 @@ done:
+     pthread_mutex_unlock( &surfaces_lock );
+ }
+ 
++#define REMOTE_SURFACE_MAGIC 0x52535257
++#define REMOTE_SURFACE_BITS_OFFSET 0x10000
++#define REMOTE_SURFACE_DC_FLAGS (DCX_WINDOW | DCX_CLIPCHILDREN | DCX_CLIPSIBLINGS | DCX_PARENTCLIP)
++#define REMOTE_SURFACE_LOCK_SPINS 100000
++
++struct remote_surface_shared
++{
++    UINT magic;
++    UINT hwnd;
++    UINT dc_flags;
++    UINT width;
++    UINT height;
++    LONG lock;
++    LONG pending;
++    RECT dirty;
++};
++
++struct remote_surface
++{
++    struct window_surface header;
++    struct list entry;
++    HWND owner;
++    UINT dc_flags;
++    HANDLE section;
++    HANDLE owner_section;
++    struct remote_surface_shared *shared;
++};
++
++struct remote_contents
++{
++    struct list entry;
++    HWND hwnd;
++    HANDLE section;
++    struct remote_surface_shared *shared;
++    HBITMAP bitmap;
++};
++
++static struct list remote_surfaces = LIST_INIT( remote_surfaces );
++static pthread_mutex_t remote_surfaces_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct list remote_contents_list = LIST_INIT( remote_contents_list );
++static pthread_mutex_t remote_contents_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static void lock_remote_shared( struct remote_surface_shared *shared )
++{
++    UINT spins;
++
++    for (spins = 0; spins < REMOTE_SURFACE_LOCK_SPINS; spins++)
++    {
++        if (!InterlockedCompareExchange( &shared->lock, 1, 0 )) return;
++        YieldProcessor();
++    }
++    WARN( "taking over the shared lock of hwnd %#x\n", shared->hwnd );
++}
++
++static void unlock_remote_shared( struct remote_surface_shared *shared )
++{
++    InterlockedExchange( &shared->lock, 0 );
++}
++
++static void fill_remote_surface_info( BITMAPINFO *info, UINT width, UINT height )
++{
++    memset( info, 0, sizeof(*info) );
++    info->bmiHeader.biSize        = sizeof(info->bmiHeader);
++    info->bmiHeader.biWidth       = width;
++    info->bmiHeader.biHeight      = -(int)height;
++    info->bmiHeader.biPlanes      = 1;
++    info->bmiHeader.biBitCount    = 32;
++    info->bmiHeader.biSizeImage   = get_dib_image_size( info );
++    info->bmiHeader.biCompression = BI_RGB;
++}
++
++static struct remote_surface_shared *map_remote_shared( HANDLE section )
++{
++    SIZE_T view_size = sizeof(struct remote_surface_shared);
++    void *view = NULL;
++
++    if (NtMapViewOfSection( section, NtCurrentProcess(), &view, 0, 0, NULL, &view_size, ViewShare, 0, PAGE_READWRITE ))
++        return NULL;
++    return view;
++}
++
++static struct remote_surface *get_remote_surface( struct window_surface *window_surface )
++{
++    return CONTAINING_RECORD( window_surface, struct remote_surface, header );
++}
++
++static BOOL share_remote_section_with_owner( struct remote_surface *surface )
++{
++    OBJECT_ATTRIBUTES attr = {sizeof(attr)};
++    CLIENT_ID cid = {0};
++    HANDLE process;
++    NTSTATUS status;
++    DWORD pid;
++
++    if (surface->owner_section) return TRUE;
++    if (!NtUserGetWindowThread( surface->owner, &pid )) return FALSE;
++
++    cid.UniqueProcess = ULongToHandle( pid );
++    if (NtOpenProcess( &process, PROCESS_DUP_HANDLE, &attr, &cid )) return FALSE;
++    status = NtDuplicateObject( NtCurrentProcess(), surface->section, process, &surface->owner_section,
++                                0, 0, DUPLICATE_SAME_ACCESS );
++    NtClose( process );
++    if (status) surface->owner_section = 0;
++    return !status;
++}
++
++static void remote_surface_set_clip( struct window_surface *window_surface, const RECT *rects, UINT count )
++{
++}
++
++static BOOL remote_surface_flush( struct window_surface *window_surface, const RECT *rect, const RECT *dirty,
++                                  const BITMAPINFO *color_info, const void *color_bits, BOOL shape_changed,
++                                  const BITMAPINFO *shape_info, const void *shape_bits )
++{
++    struct remote_surface *surface = get_remote_surface( window_surface );
++    struct remote_surface_shared *shared = surface->shared;
++    BOOL post;
++
++    lock_remote_shared( shared );
++    union_rect( &shared->dirty, &shared->dirty, dirty );
++    post = !shared->pending;
++    shared->pending = TRUE;
++    unlock_remote_shared( shared );
++
++    if (post && (!share_remote_section_with_owner( surface ) ||
++                 !NtUserPostMessage( surface->owner, WM_WINE_UPDATE_REMOTE_SURFACE,
++                                     (WPARAM)window_surface->hwnd, (LPARAM)surface->owner_section )))
++    {
++        WARN( "hwnd %p, cannot notify owner %p\n", window_surface->hwnd, surface->owner );
++        lock_remote_shared( shared );
++        shared->pending = FALSE;
++        unlock_remote_shared( shared );
++    }
++    return TRUE;
++}
++
++static void remote_surface_destroy( struct window_surface *window_surface )
++{
++    struct remote_surface *surface = get_remote_surface( window_surface );
++
++    NtUnmapViewOfSection( NtCurrentProcess(), surface->shared );
++    NtClose( surface->section );
++}
++
++static const struct window_surface_funcs remote_surface_funcs =
++{
++    remote_surface_set_clip,
++    remote_surface_flush,
++    remote_surface_destroy
++};
++
++static struct remote_surface *create_remote_surface( HWND hwnd, HWND owner, UINT dc_flags, const RECT *rect )
++{
++    char buffer[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
++    BITMAPINFO *info = (BITMAPINFO *)buffer;
++    struct window_surface *window_surface;
++    struct remote_surface_shared *shared;
++    struct remote_surface *surface;
++    LARGE_INTEGER size;
++    HANDLE section;
++    HBITMAP bitmap;
++
++    fill_remote_surface_info( info, rect->right, rect->bottom );
++    size.QuadPart = REMOTE_SURFACE_BITS_OFFSET + info->bmiHeader.biSizeImage;
++    if (NtCreateSection( &section, SECTION_ALL_ACCESS, NULL, &size, PAGE_READWRITE, SEC_COMMIT, 0 )) return NULL;
++
++    if (!(shared = map_remote_shared( section ))) goto failed;
++    if (!(bitmap = NtGdiCreateDIBSection( 0, section, REMOTE_SURFACE_BITS_OFFSET, info, DIB_RGB_COLORS, 0, 0, 0, NULL )))
++        goto failed;
++    if (!(window_surface = window_surface_create( sizeof(*surface), &remote_surface_funcs, hwnd, rect, info, bitmap )))
++    {
++        NtGdiDeleteObjectApp( bitmap );
++        goto failed;
++    }
++
++    shared->magic = REMOTE_SURFACE_MAGIC;
++    shared->hwnd = HandleToULong( hwnd );
++    shared->dc_flags = dc_flags;
++    shared->width = rect->right;
++    shared->height = rect->bottom;
++    SetRectEmpty( &shared->dirty );
++
++    surface = get_remote_surface( window_surface );
++    surface->owner = owner;
++    surface->dc_flags = dc_flags;
++    surface->section = section;
++    surface->shared = shared;
++
++    TRACE( "hwnd %p, owner %p, flags %#x, rect %s\n", hwnd, owner, dc_flags, wine_dbgstr_rect( rect ) );
++    return surface;
++
++failed:
++    if (shared) NtUnmapViewOfSection( NtCurrentProcess(), shared );
++    NtClose( section );
++    return NULL;
++}
++
++static BOOL is_remote_surface_stale( const struct remote_surface *surface, HWND hwnd, UINT dc_flags )
++{
++    if (!is_window( surface->header.hwnd )) return TRUE;
++    return surface->header.hwnd == hwnd && surface->dc_flags == dc_flags;
++}
++
++static struct window_surface *get_remote_window_surface( HWND hwnd, HWND owner, UINT dc_flags, const RECT *win_rect )
++{
++    RECT rect = {0, 0, win_rect->right - win_rect->left, win_rect->bottom - win_rect->top};
++    struct remote_surface *surface, *next, *found = NULL;
++    struct list stale = LIST_INIT( stale );
++
++    if (IsRectEmpty( &rect )) return NULL;
++
++    pthread_mutex_lock( &remote_surfaces_lock );
++    LIST_FOR_EACH_ENTRY_SAFE( surface, next, &remote_surfaces, struct remote_surface, entry )
++    {
++        if (surface->header.hwnd == hwnd && surface->dc_flags == dc_flags && surface->owner == owner &&
++            EqualRect( &surface->header.rect, &rect ))
++            found = surface;
++        else if (is_remote_surface_stale( surface, hwnd, dc_flags ))
++        {
++            list_remove( &surface->entry );
++            list_add_tail( &stale, &surface->entry );
++        }
++    }
++    if (!found && (found = create_remote_surface( hwnd, owner, dc_flags, &rect )))
++    {
++        list_add_tail( &remote_surfaces, &found->entry );
++        register_window_surface( NULL, &found->header );
++    }
++    if (found) window_surface_add_ref( &found->header );
++    pthread_mutex_unlock( &remote_surfaces_lock );
++
++    LIST_FOR_EACH_ENTRY_SAFE( surface, next, &stale, struct remote_surface, entry )
++    {
++        list_remove( &surface->entry );
++        register_window_surface( &surface->header, NULL );
++        window_surface_release( &surface->header );
++    }
++
++    return found ? &found->header : NULL;
++}
++
++static void set_dce_remote_surface( struct dce *dce, struct window_surface *surface )
++{
++    if (surface && surface->funcs != &remote_surface_funcs) surface = NULL;
++    if (surface) window_surface_add_ref( surface );
++    if (dce->remote) window_surface_release( dce->remote );
++    dce->remote = surface;
++}
++
++static void free_remote_contents( struct remote_contents *contents )
++{
++    NtGdiDeleteObjectApp( contents->bitmap );
++    NtUnmapViewOfSection( NtCurrentProcess(), contents->shared );
++    NtClose( contents->section );
++    free( contents );
++}
++
++static struct remote_contents *map_remote_contents( HWND hwnd, HANDLE section )
++{
++    char buffer[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
++    BITMAPINFO *info = (BITMAPINFO *)buffer;
++    struct remote_surface_shared *shared;
++    struct remote_contents *contents;
++    HBITMAP bitmap;
++
++    if (!(shared = map_remote_shared( section ))) return NULL;
++    if (shared->magic != REMOTE_SURFACE_MAGIC || shared->hwnd != HandleToULong( hwnd ) ||
++        !shared->width || !shared->height)
++    {
++        WARN( "hwnd %p, section %p is not a remote surface of this window\n", hwnd, section );
++        NtUnmapViewOfSection( NtCurrentProcess(), shared );
++        return NULL;
++    }
++
++    fill_remote_surface_info( info, shared->width, shared->height );
++    if (!(bitmap = NtGdiCreateDIBSection( 0, section, REMOTE_SURFACE_BITS_OFFSET, info, DIB_RGB_COLORS, 0, 0, 0, NULL )) ||
++        !(contents = calloc( 1, sizeof(*contents) )))
++    {
++        if (bitmap) NtGdiDeleteObjectApp( bitmap );
++        NtUnmapViewOfSection( NtCurrentProcess(), shared );
++        return NULL;
++    }
++
++    contents->hwnd = hwnd;
++    contents->section = section;
++    contents->shared = shared;
++    contents->bitmap = bitmap;
++    return contents;
++}
++
++static BOOL is_remote_contents_stale( const struct remote_contents *contents, HWND hwnd, UINT dc_flags )
++{
++    if (!is_window( contents->hwnd )) return TRUE;
++    return contents->hwnd == hwnd && contents->shared->dc_flags == dc_flags;
++}
++
++static struct remote_contents *find_remote_contents( HWND hwnd, HANDLE section, struct list *stale )
++{
++    struct remote_contents *contents, *next, *found = NULL;
++
++    LIST_FOR_EACH_ENTRY( contents, &remote_contents_list, struct remote_contents, entry )
++        if (contents->section == section && contents->hwnd == hwnd) found = contents;
++
++    if (!found)
++    {
++        if (!(found = map_remote_contents( hwnd, section ))) return NULL;
++        list_add_tail( &remote_contents_list, &found->entry );
++    }
++
++    LIST_FOR_EACH_ENTRY_SAFE( contents, next, &remote_contents_list, struct remote_contents, entry )
++    {
++        if (contents == found || !is_remote_contents_stale( contents, hwnd, found->shared->dc_flags )) continue;
++        list_remove( &contents->entry );
++        list_add_tail( stale, &contents->entry );
++    }
++    return found;
++}
++
++static void draw_remote_contents( struct remote_contents *contents )
++{
++    struct remote_surface_shared *shared = contents->shared;
++    HGDIOBJ previous;
++    HDC hdc, mem;
++    RECT dirty;
++
++    lock_remote_shared( shared );
++    dirty = shared->dirty;
++    SetRectEmpty( &shared->dirty );
++    shared->pending = FALSE;
++    unlock_remote_shared( shared );
++
++    if (IsRectEmpty( &dirty )) return;
++    if (!(hdc = NtUserGetDCEx( contents->hwnd, 0, DCX_CACHE | shared->dc_flags ))) return;
++
++    if ((mem = NtGdiCreateCompatibleDC( hdc )))
++    {
++        previous = NtGdiSelectBitmap( mem, contents->bitmap );
++        NtGdiBitBlt( hdc, dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top,
++                     mem, dirty.left, dirty.top, SRCCOPY, 0, 0 );
++        NtGdiSelectBitmap( mem, previous );
++        NtGdiDeleteObjectApp( mem );
++    }
++    NtUserReleaseDC( contents->hwnd, hdc );
++
++    TRACE( "hwnd %p, drew %s\n", contents->hwnd, wine_dbgstr_rect( &dirty ) );
++}
++
++LRESULT update_remote_surface( HWND hwnd, HANDLE section )
++{
++    struct list stale = LIST_INIT( stale );
++    struct remote_contents *contents, *next;
++
++    pthread_mutex_lock( &remote_contents_lock );
++    if ((contents = find_remote_contents( hwnd, section, &stale ))) draw_remote_contents( contents );
++    pthread_mutex_unlock( &remote_contents_lock );
++
++    LIST_FOR_EACH_ENTRY_SAFE( contents, next, &stale, struct remote_contents, entry )
++    {
++        list_remove( &contents->entry );
++        free_remote_contents( contents );
++    }
++    return 0;
++}
++
+ /***********************************************************************
+  *           dump_rdw_flags
+  */
+@@ -909,8 +1274,15 @@ static void update_visible_region( struct dce *dce )
+             if (surface) window_surface_add_ref( surface );
+             release_win_ptr( win );
+         }
++        else if (win == WND_OTHER_PROCESS && !user_driver->dc_funcs.pPutImage && is_current_process_window( dce->hwnd ) &&
++                 (surface = get_remote_window_surface( dce->hwnd, top_win, dce->flags & REMOTE_SURFACE_DC_FLAGS, &win_rect )))
++        {
++            top_rect = win_rect;
++        }
+     }
+ 
++    set_dce_remote_surface( dce, surface );
++
+     if (surface)
+     {
+         user_driver->pGetDC( dce->hdc, dce->hwnd, top_win, &win_rect, &top_rect, flags );
+@@ -942,6 +1314,7 @@ static void release_dce( struct dce *dce )
+     if (!dce->hwnd) return;  /* already released */
+ 
+     set_visible_region( dce->hdc, 0, &dummy_surface.rect, &dummy_surface.rect, &dummy_surface, 0, 0 );
++    set_dce_remote_surface( dce, NULL );
+     user_driver->pReleaseDC( dce->hwnd, dce->hdc );
+ 
+     if (dce->clip_rgn) NtGdiDeleteObjectApp( dce->clip_rgn );
+@@ -1028,6 +1401,7 @@ static struct dce *alloc_dce(void)
+     dce->clip_rgn  = 0;
+     dce->flags     = 0;
+     dce->count     = 1;
++    dce->remote    = NULL;
+ 
+     set_dc_dce( dce->hdc, dce );
+     return dce;
+@@ -1281,6 +1655,7 @@ void invalidate_dce( WND *win, const RECT *old_rect )
+ static INT release_dc( HWND hwnd, HDC hdc, BOOL end_paint )
+ {
+     struct list drawables = LIST_INIT( drawables );
++    struct window_surface *remote = NULL;
+     struct dce *dce;
+     BOOL ret = FALSE;
+ 
+@@ -1290,6 +1665,7 @@ static INT release_dc( HWND hwnd, HDC hdc, BOOL end_paint )
+     dce = get_dc_dce( hdc );
+     if (dce && dce->count && dce->hwnd)
+     {
++        if ((remote = dce->remote)) window_surface_add_ref( remote );
+         if (!(dce->flags & DCX_NORESETATTRS)) set_dce_flags( dce->hdc, DCHF_RESETDC );
+         if (end_paint || (dce->flags & DCX_CACHE)) delete_clip_rgn( dce );
+         if (dce->flags & DCX_CACHE)
+@@ -1302,6 +1678,11 @@ static INT release_dc( HWND hwnd, HDC hdc, BOOL end_paint )
+     }
+     user_unlock();
+ 
++    if (remote)
++    {
++        window_surface_flush( remote );
++        window_surface_release( remote );
++    }
+     release_opengl_drawables( &drawables );
+     return ret;
+ }
+diff --git a/dlls/win32u/message.c b/dlls/win32u/message.c
+index 138b5531b6c..db9916f3a10 100644
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -2301,6 +2301,8 @@ done:
+     case WM_WINE_SETPIXELFORMAT:
+         set_window_pixel_format( hwnd, wparam, lparam );
+         return 0;
++    case WM_WINE_UPDATE_REMOTE_SURFACE:
++        return update_remote_surface( (HWND)wparam, (HANDLE)lparam );
+     case WM_WINE_TRACKMOUSEEVENT:
+     {
+         TRACKMOUSEEVENT info;
+diff --git a/dlls/win32u/win32u_private.h b/dlls/win32u/win32u_private.h
+index 31a0edb09b0..b5765f4961a 100644
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -49,6 +49,7 @@ extern void create_window_surface( HWND hwnd, BOOL create_layered, const RECT *s
+ extern struct window_surface *get_driver_window_surface( struct window_surface *surface, UINT monitor_dpi );
+ extern void erase_now( HWND hwnd, UINT rdw_flags );
+ extern void flush_window_surfaces( BOOL idle );
++extern LRESULT update_remote_surface( HWND hwnd, HANDLE section );
+ extern void move_window_bits( HWND hwnd, const struct window_rects *rects, const RECT *valid_rects );
+ extern void move_window_bits_surface( HWND hwnd, const RECT *window_rect, struct window_surface *old_surface,
+                                       const RECT *old_visible_rect, const RECT *valid_rects );
+diff --git a/include/ntuser.h b/include/ntuser.h
+index 5f0a0b04fe9..240aab1398f 100644
+--- a/include/ntuser.h
++++ b/include/ntuser.h
+@@ -655,6 +655,7 @@ enum wine_internal_message
+     WM_WINE_GETSCROLLBARINFO,
+     WM_WINE_GETSCROLLINFO,
+     WM_WINE_SETSCROLLINFO,
++    WM_WINE_UPDATE_REMOTE_SURFACE,
+     WM_WINE_FIRST_DRIVER_MSG = 0x80001000,  /* range of messages reserved for the USER driver */
+     WM_WINE_CLIPCURSOR = 0x80001ff0, /* internal driver notification messages */
+     WM_WINE_SETCURSOR,

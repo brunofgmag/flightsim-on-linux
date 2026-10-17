@@ -76,6 +76,18 @@ run_wine() {
   timeout 120 "${RUNNER[@]}" "$TOOL/files/bin/wine" "$@" 2> /dev/null | tr -d '\r'
 }
 
+run_wine_wayland() {
+  timeout 120 env -u DISPLAY "${RUNNER[@]}" sh -c 'LD_LIBRARY_PATH="$1${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"; shift; export LD_LIBRARY_PATH; exec "$@"' sh \
+    "$TOOL/files/lib/x86_64-linux-gnu:$TOOL/files/lib/i386-linux-gnu" "$TOOL/files/bin/wine" "$@" 2> /dev/null | tr -d '\r'
+}
+
+wayland_socket() {
+  local socket="${WAYLAND_DISPLAY:-}"
+  [ -n "$socket" ] || return 1
+  [[ "$socket" == /* ]] || socket="${XDG_RUNTIME_DIR:-/nonexistent}/$socket"
+  [ -S "$socket" ]
+}
+
 stop_prefix() {
   timeout 60 "${RUNNER[@]}" "$TOOL/files/bin/wineserver" -k > /dev/null 2>&1 || true
 }
@@ -111,8 +123,10 @@ run_wine wineboot -i > /dev/null || true
 
 failures=0
 skipped=0
+total=0
 report() {
   local name="$1" status="$2" detail="$3" line
+  total=$((total + 1))
   echo
   echo "== $name: $status"
   while IFS= read -r line; do
@@ -152,12 +166,24 @@ output="$(run_wine "$(windows_path "$WORK/centered-point-test.exe")" "$(windows_
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "gdiplus text centred on a point (FSLabs MCDU letters)" "$verdict" "$output"
 
+name="win32u child window drawn by another process (WebView2 in SayIntentions, GSX, REX)"
+if wayland_socket; then
+  run_wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland /f > /dev/null || true
+  stop_prefix
+  status=0
+  output="$(run_wine_wayland "$(windows_path "$WORK/cross-process-child-test.exe")")" || status=$?
+  [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+  report "$name" "$verdict" "${output:-no output}"
+else
+  report "$name" skipped "This check needs the Wayland driver, and WAYLAND_DISPLAY is '${WAYLAND_DISPLAY:-unset}'. Run the check from your desktop session."
+fi
+
 echo
 if [ "$failures" -eq 0 ] && [ "$skipped" -eq 0 ]; then
-  echo "All 4 checks passed."
+  echo "All $total checks passed."
 elif [ "$failures" -eq 0 ]; then
-  echo "$((4 - skipped)) checks passed, $skipped could not run here."
+  echo "$((total - skipped)) checks passed, $skipped could not run here."
 else
-  echo "$failures of 4 checks failed."
+  echo "$failures of $total checks failed."
 fi
 [ "$failures" -eq 0 ]

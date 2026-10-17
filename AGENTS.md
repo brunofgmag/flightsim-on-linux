@@ -37,7 +37,7 @@ Go from cheap to expensive, and name a cause only after an observation that tell
 1. Reproduce once, with a timestamped trace from the very start of the program, not from the click that fails:
    `WINEDEBUG=+timestamp,+pid,+seh,+loaddll protontricks-launch --no-term --appid 2537590 <program.exe> 2> trace.log`
 2. For .NET Framework programs running on wine-mono, add `WINE_MONO_TRACE=E:all` and read the first exception that isn't routine. On the test machine, the FSDT updater whose Install button "did nothing" had already failed at startup, with a `NotImplementedException` from wine-mono, long before the click.
-3. For windows that never appear or appear empty, compare the X11 and Wayland drivers, and try `WINEDLLOVERRIDES=d3d9=d` for WPF programs.
+3. For windows that never appear or appear empty, compare the X11 and Wayland drivers, and try `WINEDLLOVERRIDES=d3d9=d` for WPF programs. A WebView2 area that stays grey or white under the Wayland driver needs Proton Fenix A320 and the WebView2 policy in `site/pages/proton-fenix.html`. Read the browser's command line (`/proc/<pid>/cmdline` of `msedgewebview2.exe --embedded-browser-webview=1`) to see whether the policy's options arrived. If the WebView2 dies a few seconds after it starts, check whether it can see a Vulkan driver. On the test machine it couldn't, and `--disable-software-rasterizer` in the policy stopped the crash.
 4. For Electron and Chromium-based apps, try `--disable-gpu-sandbox`, then `--disable-gpu`.
 5. If the simulator itself freezes in the menu or while loading an aircraft, check ntsync before anything else. `doctor` reports it; with the simulator running it counts the `/dev/ntsync` handles of the simulator's wineserver, which opens the device only when `PROTON_NO_NTSYNC` is unset or zero. The remedy is `PROTON_NO_NTSYNC=1` before `%command%` in the launch options. `PROTON_USE_NTSYNC=0` is ignored.
 6. Watch a process for about 30 seconds, sampling at 10, 20 and 30 s (alive, CPU, memory, windows). Extend only if something is still changing.
@@ -46,11 +46,11 @@ Go from cheap to expensive, and name a cause only after an observation that tell
 
 A fix is proven when its check passes with the fix and fails without it. Run the check, revert the fix, run the check again and see it fail, then restore the fix. A check that stays green either way proves nothing.
 
-For Proton Fenix A320 the check already exists: `bin/flightsim-on-linux proton check [<Proton folder>]` runs four tests in a throwaway prefix. A stock Proton-CachyOS fails all four. A tray check that reports "skipped" means no X11 display was available, not a failure.
+For Proton Fenix A320 the check already exists: `bin/flightsim-on-linux proton check [<Proton folder>]` runs five tests in a throwaway prefix. A stock Proton-CachyOS fails all five. The tray check needs an X11 display and the child-window check a Wayland session; "skipped" means that display wasn't available, not a failure.
 
 ## 5. Where the knowledge lives
 
 - `site/pages/*.html`: the guides, the ground rules and the add-on list, written for people.
-- `proton/build-proton-fenix.sh`: builds Proton Fenix A320 from a Proton-CachyOS release, the fenix-a320-linux-patch overlay patch and the two patches in `patches/wine/`.
+- `proton/build-proton-fenix.sh`: builds Proton Fenix A320 from a Proton-CachyOS release, the fenix-a320-linux-patch overlay patch and the patches in `patches/wine/`.
 - `checks/`: the Proton checks and their C sources.
 - `fsol/`: the discovery and doctor code behind the CLI.
