@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ground rules · Flightsim on Linux</title>
-  <meta name="description" content="Rules that apply to every Windows add-on in the MSFS 2024 Proton prefix: installers, running next to the simulator, Community links, fonts and WPF.">
+  <meta name="description" content="Rules that apply to every Windows add-on in the MSFS 2024 Proton prefix: installers, running next to the simulator, freezes and ntsync, Community links, fonts and WPF.">
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -34,6 +34,12 @@
 <h2>Programs that run next to the simulator join its container</h2>
 <p>Steam starts the simulator inside the Steam Linux Runtime container. A Windows program started some other way while the simulator runs ends up in a different container and gets the same "Access denied" as above. Programs that talk to the simulator (AutoFPS, SayIntentions, Active Sky, vRAAS, Lorby AAO) have to be started inside the simulator's own container. The add-on guides give a launcher for each.</p>
 <p>A program left open in that container keeps Steam showing the simulator as running after you quit it. Close your add-ons before you quit the simulator.</p>
+
+<h2>If the simulator freezes, turn ntsync off first</h2>
+<p>Proton can use ntsync, a Linux kernel driver for Windows-style synchronization, and it does whenever the kernel has <code>/dev/ntsync</code>. With plain Proton-CachyOS in July 2026, the test machine froze in the main menu or while loading an aircraft, and turning ntsync off fixed it. Not every freeze is ntsync: on 14 October 2026 the simulator froze twice right after the Fenix runner started and quit, once with ntsync already off. On 17 October 2026 it flew with ntsync on and didn't freeze. The fenix-a320-linux-patch overlay was only verified with ntsync off.</p>
+<p>So ntsync can stay on. If the simulator freezes in the menu or during an aircraft load, turn it off first: in Steam, right-click Microsoft Flight Simulator 2024, choose Properties, and put this at the start of <em>Launch Options</em>:</p>
+<pre><code>PROTON_NO_NTSYNC=1 %command%</code></pre>
+<p>If you already have launch options, add <code>PROTON_NO_NTSYNC=1</code> before <code>%command%</code>. <code>PROTON_USE_NTSYNC=0</code> looks like it should do the same, but Proton ignores it. <code>bin/flightsim-on-linux doctor</code> says whether ntsync is on. With the simulator running, it counts the <code>/dev/ntsync</code> handles its wineserver holds, so it reports what the simulator really uses, not just what the launch options say.</p>
 
 <h2>Don't kill the simulator while it loads</h2>
 <p>On the test machine, a simulator force-quit during its loading screen came back with every Community package switched off. It gave no warning; the aircraft were gone from the list. It had marked each Community package <code>SystemDisabled</code> in <code>Content.xml</code>, in your profile folder inside the simulator's base folder. Force-quits after the main menu didn't do this.</p>

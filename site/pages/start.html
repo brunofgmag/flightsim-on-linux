@@ -27,12 +27,6 @@ description: Step-by-step setup of Microsoft Flight Simulator 2024 on Linux for 
     <p>The first window lists what it found: Steam, the simulator, its prefix, the Proton it uses and your launch options. Lines marked <code>ok</code> are fine. Lines marked <code>WARN</code> or <code>FAIL</code> say what to do next. If you prefer the terminal, <code>bin/flightsim-on-linux doctor</code> prints the same list.</p>
   </li>
   <li>
-    <h3>Set the launch option</h3>
-    <p>In Steam, right-click Microsoft Flight Simulator 2024, choose Properties, and under <em>Launch Options</em> put:</p>
-    <pre><code>PROTON_NO_NTSYNC=1 %command%</code></pre>
-    <p>The overlay this setup builds on was tested with ntsync off, and with plain Proton-CachyOS the simulator froze in the menu or while loading an aircraft with ntsync on. <code>PROTON_USE_NTSYNC=0</code> looks similar, but Proton ignores it.</p>
-  </li>
-  <li>
     <h3>Build Proton Fenix A320</h3>
     <p>In the helper app, pick <em>Build Proton Fenix A320</em>. In the terminal it is:</p>
     <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux proton build</code></pre>
@@ -51,5 +45,5 @@ description: Step-by-step setup of Microsoft Flight Simulator 2024 on Linux for 
 </ol>
 
 <h2>Next</h2>
-<p>Read the <a href="rules.html">ground rules</a> before installing anything, then go to the <a href="addons.html">add-on list</a>.</p>
+<p>Read the <a href="rules.html">ground rules</a> before installing anything, then go to the <a href="addons.html">add-on list</a>. If the simulator itself freezes in the menu or while loading an aircraft, the ground rules have the first thing to try.</p>
 <p>To undo everything: pick another Proton in the simulator's Compatibility tab and delete the <code>Proton-Fenix-A320-…</code> folder from <code>~/.local/share/Steam/compatibilitytools.d/</code>.</p>

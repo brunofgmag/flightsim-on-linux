@@ -1,3 +1,4 @@
+import re
 import shutil
 from dataclasses import dataclass
 
@@ -42,16 +43,25 @@ def check_proton(machine):
                  "The Fenix A320, the FSLabs displays and the AutoFPS tray icon need Proton Fenix A320. Build it with: flightsim-on-linux proton build, then pick it under Compatibility > Select compatibility tool in the simulator's Properties.")
 
 
+NTSYNC_REMEDY = ("If the simulator freezes in the menu or while loading an aircraft, turn ntsync off first: put "
+                 "PROTON_NO_NTSYNC=1 before %command% under Launch Options in the simulator's Properties in Steam. "
+                 "PROTON_USE_NTSYNC=0 does nothing here. The fenix-a320-linux-patch overlay was only verified with ntsync off.")
+
+
+def ntsync_off_by_options(machine):
+    return bool(machine.launch_options) and all(re.search(r"\bPROTON_NO_NTSYNC=0*[1-9]", options) for options in machine.launch_options.values())
+
+
 def check_ntsync(machine):
-    if not machine.launch_options:
-        return Check("ntsync", "warn", "No launch options found for the simulator", "Add PROTON_NO_NTSYNC=1 %command% under Launch Options in the simulator's Properties in Steam.")
-    missing = [user for user, options in machine.launch_options.items() if "PROTON_NO_NTSYNC=1" not in options]
-    if not missing:
-        return Check("ntsync", "ok", "Launch options have PROTON_NO_NTSYNC=1")
-    return Check("ntsync", "warn", f"Launch options lack PROTON_NO_NTSYNC=1 (Steam user {', '.join(missing)})",
-                 "The fenix-a320-linux-patch overlay was only checked with ntsync off, and with Proton-CachyOS the simulator "
-                 "froze in the menu or while loading an aircraft with it on. Add PROTON_NO_NTSYNC=1 before %command% in "
-                 "Steam > Microsoft Flight Simulator 2024 > Properties > Launch Options. PROTON_USE_NTSYNC=0 is ignored.")
+    if machine.ntsync_handles is not None:
+        if machine.ntsync_handles:
+            return Check("ntsync", "info", f"ntsync is on in the running simulator: its wineserver holds {machine.ntsync_handles} /dev/ntsync handle{'s' if machine.ntsync_handles > 1 else ''}", NTSYNC_REMEDY)
+        return Check("ntsync", "info", "ntsync is off in the running simulator: its wineserver holds no /dev/ntsync handle")
+    if not machine.ntsync_device:
+        return Check("ntsync", "info", "This kernel has no /dev/ntsync, so Proton synchronizes another way")
+    if ntsync_off_by_options(machine):
+        return Check("ntsync", "info", "ntsync is off: the launch options set PROTON_NO_NTSYNC=1")
+    return Check("ntsync", "info", "ntsync will be on when the simulator starts", NTSYNC_REMEDY)
 
 
 def check_library_paths(machine):

@@ -51,6 +51,7 @@ class FakeMachine:
         self.prefix = self.compatdata / "pfx"
         self.packages = root / "packages"
         self.proc = root / "proc"
+        self.dev = root / "dev"
 
     def build(self, launch_options=LOCALCONFIG, fenix=True):
         write(self.steam / "steamapps/libraryfolders.vdf", LIBRARYFOLDERS.replace("{steam}", str(self.steam)).replace("{games}", str(self.games)))
@@ -66,13 +67,24 @@ class FakeMachine:
         write(self.prefix / machine.USERCFG, f'Version 1\nInstalledPackagesPath "Z:{str(self.packages).replace("/", chr(92))}"\n')
         (self.packages / "Community").mkdir(parents=True)
         self.proc.mkdir()
+        self.dev.mkdir()
+        write(self.dev / "ntsync", "")
         return self
 
     def run_sim(self):
         write(self.proc / "4242/cmdline", "S:\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe\0-FastLaunch\0")
 
+    def run_wineserver(self, prefix, handles):
+        server = self.proc / "4300"
+        write(server / "comm", "wineserver\n")
+        write(server / "environ", f"HOME=/home/pilot\0WINEPREFIX={prefix}/\0")
+        (server / "fd").mkdir()
+        os.symlink("/dev/null", server / "fd/0")
+        for number in range(handles):
+            os.symlink("/dev/ntsync", server / f"fd/{number + 10}")
+
     def discover(self):
-        return machine.discover(home=self.home, steam_override="", proc=self.proc)
+        return machine.discover(home=self.home, steam_override="", proc=self.proc, dev=self.dev)
 
 
 class VdfTest(unittest.TestCase):
@@ -120,7 +132,7 @@ class DiscoverTest(unittest.TestCase):
         self.assertTrue(self.fake.discover().sim_running)
 
     def test_no_steam_gives_an_empty_machine(self):
-        found = machine.discover(home=Path(self.temp.name) / "nobody", steam_override="", proc=self.fake.proc)
+        found = machine.discover(home=Path(self.temp.name) / "nobody", steam_override="", proc=self.fake.proc, dev=self.fake.proc)
         self.assertIsNone(found.steam)
 
 
@@ -135,22 +147,66 @@ class DoctorTest(unittest.TestCase):
     def statuses(self, found):
         return {check.name: check.status for check in doctor.run(found)}
 
+    def ntsync(self, found):
+        return next(check for check in doctor.run(found) if check.name == "ntsync")
+
     def test_a_complete_setup_has_no_warning_or_failure(self):
         statuses = self.statuses(self.fake.build().discover())
         self.assertNotIn("fail", statuses.values())
-        self.assertEqual(statuses["ntsync"], "ok")
+        self.assertNotIn("warn", statuses.values())
         self.assertEqual(statuses["proton"], "ok")
 
-    def test_missing_ntsync_option_warns(self):
+    def test_ntsync_is_only_information(self):
         found = self.fake.build(launch_options=LOCALCONFIG.replace("PROTON_NO_NTSYNC=1 ", "")).discover()
-        self.assertEqual(self.statuses(found)["ntsync"], "warn")
+        self.assertEqual(self.ntsync(found).status, "info")
+
+    def test_ntsync_off_by_launch_options_needs_no_remedy(self):
+        check = self.ntsync(self.fake.build().discover())
+        self.assertIn("off", check.detail)
+        self.assertEqual(check.fix, "")
+
+    def test_ntsync_on_by_default_offers_the_remedy(self):
+        check = self.ntsync(self.fake.build(launch_options=LOCALCONFIG.replace("PROTON_NO_NTSYNC=1 ", "")).discover())
+        self.assertIn("will be on", check.detail)
+        self.assertIn("PROTON_NO_NTSYNC=1", check.fix)
+
+    def test_ntsync_zero_in_launch_options_does_not_turn_it_off(self):
+        check = self.ntsync(self.fake.build(launch_options=LOCALCONFIG.replace("PROTON_NO_NTSYNC=1", "PROTON_NO_NTSYNC=0")).discover())
+        self.assertIn("will be on", check.detail)
+
+    def test_without_the_device_ntsync_cannot_be_on(self):
+        self.fake.build(launch_options=LOCALCONFIG.replace("PROTON_NO_NTSYNC=1 ", ""))
+        os.remove(self.fake.dev / "ntsync")
+        check = self.ntsync(self.fake.discover())
+        self.assertIn("no /dev/ntsync", check.detail)
+
+    def test_a_running_simulator_is_judged_by_its_wineserver_handles(self):
+        self.fake.build()
+        self.fake.run_sim()
+        self.fake.run_wineserver(self.fake.prefix, 3)
+        found = self.fake.discover()
+        self.assertEqual(found.ntsync_handles, 3)
+        self.assertIn("holds 3 /dev/ntsync handles", self.ntsync(found).detail)
+
+    def test_a_running_simulator_without_handles_has_ntsync_off(self):
+        self.fake.build(launch_options=LOCALCONFIG.replace("PROTON_NO_NTSYNC=1 ", ""))
+        self.fake.run_sim()
+        self.fake.run_wineserver(self.fake.prefix, 0)
+        check = self.ntsync(self.fake.discover())
+        self.assertIn("off in the running simulator", check.detail)
+
+    def test_a_wineserver_of_another_prefix_is_ignored(self):
+        self.fake.build()
+        self.fake.run_sim()
+        self.fake.run_wineserver(self.fake.home / "other-prefix", 5)
+        self.assertIsNone(self.fake.discover().ntsync_handles)
 
     def test_a_proton_that_is_not_fenix_warns(self):
         found = self.fake.build(fenix=False).discover()
         self.assertEqual(self.statuses(found)["proton"], "warn")
 
     def test_no_steam_stops_at_the_first_check(self):
-        found = machine.discover(home=Path(self.temp.name) / "nobody", steam_override="", proc=self.fake.proc)
+        found = machine.discover(home=Path(self.temp.name) / "nobody", steam_override="", proc=self.fake.proc, dev=self.fake.proc)
         self.assertEqual([check.name for check in doctor.run(found)], ["steam"])
         self.assertEqual(doctor.run(found)[0].status, "fail")
 

@@ -30,6 +30,8 @@ class Machine:
     packages: Path | None = None
     community: Path | None = None
     sim_running: bool = False
+    ntsync_device: bool = False
+    ntsync_handles: int | None = None
 
     @property
     def proton_is_fenix(self):
@@ -136,7 +138,40 @@ def sim_running(proc=Path("/proc")):
     return False
 
 
-def discover(home=None, steam_override=None, proc=Path("/proc")):
+def process_environ(pid_dir):
+    try:
+        items = (pid_dir / "environ").read_bytes().split(b"\0")
+    except OSError:
+        return {}
+    return dict(item.decode(errors="replace").split("=", 1) for item in items if b"=" in item)
+
+
+def sim_wineserver(prefix, proc):
+    wanted = os.path.realpath(prefix)
+    for comm in proc.glob("[0-9]*/comm"):
+        try:
+            if comm.read_text().strip() != "wineserver":
+                continue
+        except OSError:
+            continue
+        winepfx = process_environ(comm.parent).get("WINEPREFIX", "")
+        if winepfx and os.path.realpath(winepfx) == wanted:
+            return comm.parent
+    return None
+
+
+def ntsync_handles(pid_dir):
+    count = 0
+    for fd in (pid_dir / "fd").glob("*"):
+        try:
+            if os.readlink(fd) == "/dev/ntsync":
+                count += 1
+        except OSError:
+            continue
+    return count
+
+
+def discover(home=None, steam_override=None, proc=Path("/proc"), dev=Path("/dev")):
     machine = Machine()
     machine.steam = find_steam(home or Path.home(), steam_override or os.environ.get("STEAM_DIR"))
     if not machine.steam:
@@ -152,4 +187,7 @@ def discover(home=None, steam_override=None, proc=Path("/proc")):
     machine.compat_tool = compat_tool_name(machine.steam)
     machine.launch_options = launch_options(machine.steam)
     machine.sim_running = sim_running(proc)
+    machine.ntsync_device = (dev / "ntsync").exists()
+    server = sim_wineserver(machine.prefix, proc) if machine.prefix and machine.sim_running else None
+    machine.ntsync_handles = ntsync_handles(server) if server else None
     return machine

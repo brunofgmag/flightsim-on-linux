@@ -8,7 +8,7 @@ When helping someone, ask them to run `~/flightsim-on-linux/bin/flightsim-on-lin
 
 - [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html): setup from a working simulator to a checked Proton Fenix A320.
 - [Proton Fenix A320](https://brunofgmag.github.io/flightsim-on-linux/proton-fenix.html): what it contains, how it is built and checked, how to undo it.
-- [Ground rules](https://brunofgmag.github.io/flightsim-on-linux/rules.html): installers run alone, programs next to the simulator join its container, Community junctions, WPF in software, fonts, secrets.
+- [Ground rules](https://brunofgmag.github.io/flightsim-on-linux/rules.html): installers run alone, programs next to the simulator join its container, PROTON_NO_NTSYNC=1 as the first remedy for freezes, Community junctions, WPF in software, fonts, secrets.
 - [Add-ons](https://brunofgmag.github.io/flightsim-on-linux/addons.html): what each add-on needs and the state of its guide.
 - [With an AI assistant](https://brunofgmag.github.io/flightsim-on-linux/ai.html): a starting prompt for chat assistants and notes for coding agents.
 

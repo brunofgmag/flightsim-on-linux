@@ -37,7 +37,8 @@ Go from cheap to expensive, and name a cause only after an observation that tell
 2. For .NET Framework programs running on wine-mono, add `WINE_MONO_TRACE=E:all` and read the first exception that isn't routine. On the test machine, the FSDT updater whose Install button "did nothing" had already failed at startup, with a `NotImplementedException` from wine-mono, long before the click.
 3. For windows that never appear or appear empty, compare the X11 and Wayland drivers, and try `WINEDLLOVERRIDES=d3d9=d` for WPF programs.
 4. For Electron and Chromium-based apps, try `--disable-gpu-sandbox`, then `--disable-gpu`.
-5. Watch a process for about 30 seconds, sampling at 10, 20 and 30 s (alive, CPU, memory, windows). Extend only if something is still changing.
+5. If the simulator itself freezes in the menu or while loading an aircraft, check ntsync before anything else. `doctor` reports it; with the simulator running it counts the `/dev/ntsync` handles of the simulator's wineserver, which opens the device only when `PROTON_NO_NTSYNC` is unset or zero. The remedy is `PROTON_NO_NTSYNC=1` before `%command%` in the launch options. `PROTON_USE_NTSYNC=0` is ignored.
+6. Watch a process for about 30 seconds, sampling at 10, 20 and 30 s (alive, CPU, memory, windows). Extend only if something is still changing.
 
 ## 4. How to prove a fix
 
