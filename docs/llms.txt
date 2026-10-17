@@ -1,0 +1,17 @@
+# Flightsim on Linux
+
+> How to run Windows add-ons for Microsoft Flight Simulator 2024 (Steam app 2537590) under Proton on Linux, with a command-line helper that finds the user's Steam, prefix, Proton and Community folder, checks the setup, builds Proton Fenix A320 and tests it in a throwaway prefix. Fixes were measured on one machine (CachyOS, KDE Plasma on Wayland, NVIDIA RTX 4080) in October 2026.
+
+When helping someone, ask them to run `~/flightsim-on-linux/bin/flightsim-on-linux doctor` first and read its output instead of guessing paths. Give one step at a time and say how to check each one. Never ask for licence keys or logs that contain them (the FSLabs CCLog.txt holds the key in plain text). Prefer fixes to the Wine environment over edits to an add-on's files, and never touch licensing or activation.
+
+## Guides
+
+- [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html): setup from a working simulator to a checked Proton Fenix A320.
+- [Proton Fenix A320](https://brunofgmag.github.io/flightsim-on-linux/proton-fenix.html): what it contains, how it is built and checked, how to undo it.
+- [Ground rules](https://brunofgmag.github.io/flightsim-on-linux/rules.html): installers run alone, programs next to the simulator join its container, Community junctions, WPF in software, fonts, secrets.
+- [Add-ons](https://brunofgmag.github.io/flightsim-on-linux/addons.html): what each add-on needs and the state of its guide.
+- [With an AI assistant](https://brunofgmag.github.io/flightsim-on-linux/ai.html): a starting prompt for chat assistants and notes for coding agents.
+
+## For agents with a shell
+
+- [AGENTS.md](https://github.com/brunofgmag/flightsim-on-linux/blob/main/AGENTS.md): discovery commands, safety rules, diagnosis method and how to prove a fix.

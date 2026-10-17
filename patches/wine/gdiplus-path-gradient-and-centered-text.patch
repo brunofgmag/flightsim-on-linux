@@ -1,0 +1,198 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine gdiplus: path gradients honour focus scales, blend, preset blend and gamma; text centred on a zero-width box is centred. Fixes the FSLabs display glow and the MCDU and clock letters.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/gdiplus/graphics.c b/dlls/gdiplus/graphics.c
+index 79f26cd..e39a8aa 100644
+--- a/dlls/gdiplus/graphics.c
++++ b/dlls/gdiplus/graphics.c
+@@ -757,6 +757,94 @@ static ARGB blend_colors(ARGB start, ARGB end, REAL position)
+         (((start & 0xff) * start_a + ((end & 0xff) * end_a)) / final_a);
+ }
+ 
++static BYTE gamma_to_linear(BYTE value)
++{
++    return gdip_round(powf(value / 255.0f, 2.2f) * 255.0f);
++}
++
++static BYTE linear_to_gamma(BYTE value)
++{
++    return gdip_round(powf(value / 255.0f, 1.0f / 2.2f) * 255.0f);
++}
++
++static ARGB argb_to_linear(ARGB color)
++{
++    return (color & 0xff000000) | gamma_to_linear((color >> 16) & 0xff) << 16 |
++        gamma_to_linear((color >> 8) & 0xff) << 8 | gamma_to_linear(color & 0xff);
++}
++
++static ARGB argb_to_gamma(ARGB color)
++{
++    return (color & 0xff000000) | linear_to_gamma((color >> 16) & 0xff) << 16 |
++        linear_to_gamma((color >> 8) & 0xff) << 8 | linear_to_gamma(color & 0xff);
++}
++
++static ARGB blend_colors_gamma(ARGB start, ARGB end, REAL position, BOOL gamma)
++{
++    if (!gamma)
++        return blend_colors(start, end, position);
++    return argb_to_gamma(blend_colors(argb_to_linear(start), argb_to_linear(end), position));
++}
++
++static REAL interpolate_blend_factor(const REAL *positions, const REAL *factors, INT count, REAL position)
++{
++    INT i = 1;
++
++    if (count < 2)
++        return position;
++
++    while (i < count - 1 && position > positions[i])
++        i++;
++
++    if (positions[i] == positions[i-1])
++        return factors[i];
++
++    return factors[i-1] + (factors[i] - factors[i-1]) *
++        (position - positions[i-1]) / (positions[i] - positions[i-1]);
++}
++
++static REAL path_gradient_position(const GpPathGradient *fill, REAL distance, REAL dx, REAL dy)
++{
++    REAL focus, weight;
++
++    if (distance <= 0.0f)
++        return 0.0f;
++    if (distance >= 1.0f)
++        return 1.0f;
++
++    weight = fabsf(dx) + fabsf(dy);
++    if (fill->focus.X == fill->focus.Y || weight == 0.0f)
++        focus = fill->focus.X;
++    else
++        focus = (fabsf(dx) * fill->focus.X + fabsf(dy) * fill->focus.Y) / weight;
++
++    if (focus <= 0.0f)
++        return distance;
++    if (focus >= 1.0f || 1.0f - distance <= focus)
++        return 1.0f;
++    return distance / (1.0f - focus);
++}
++
++static ARGB path_gradient_color(const GpPathGradient *fill, ARGB outer_color, REAL position)
++{
++    INT i = 1;
++
++    if (fill->pblendcount >= 2)
++    {
++        while (i < fill->pblendcount - 1 && position > fill->pblendpos[i])
++            i++;
++
++        if (fill->pblendpos[i] == fill->pblendpos[i-1])
++            return fill->pblendcolor[i];
++
++        return blend_colors_gamma(fill->pblendcolor[i-1], fill->pblendcolor[i],
++            (position - fill->pblendpos[i-1]) / (fill->pblendpos[i] - fill->pblendpos[i-1]), fill->gamma);
++    }
++
++    return blend_colors_gamma(outer_color, fill->centercolor,
++        interpolate_blend_factor(fill->blendpos, fill->blendfac, fill->blendcount, position), fill->gamma);
++}
++
+ static ARGB blend_line_gradient(GpLineGradient* brush, REAL position)
+ {
+     REAL blendfac;
+@@ -1552,34 +1640,6 @@ static GpStatus brush_fill_pixels(GpGraphics *graphics, GpBrush *brush,
+         ARGB outer_color;
+         static BOOL transform_fixme_once;
+ 
+-        if (fill->focus.X != 0.0 || fill->focus.Y != 0.0)
+-        {
+-            static int once;
+-            if (!once++)
+-                FIXME("path gradient focus not implemented\n");
+-        }
+-
+-        if (fill->gamma)
+-        {
+-            static int once;
+-            if (!once++)
+-                FIXME("path gradient gamma correction not implemented\n");
+-        }
+-
+-        if (fill->blendcount)
+-        {
+-            static int once;
+-            if (!once++)
+-                FIXME("path gradient blend not implemented\n");
+-        }
+-
+-        if (fill->pblendcount)
+-        {
+-            static int once;
+-            if (!once++)
+-                FIXME("path gradient preset blend not implemented\n");
+-        }
+-
+         if (!transform_fixme_once)
+         {
+             BOOL is_identity=TRUE;
+@@ -1751,7 +1811,8 @@ static GpStatus brush_fill_pixels(GpGraphics *graphics, GpBrush *brush,
+                     distance = distance / center_distance;
+ 
+                     argb_pixels[(x-fill_area->X) + (y-fill_area->Y)*cdwStride] =
+-                        blend_colors(outer_color, fill->centercolor, distance);
++                        path_gradient_color(fill, outer_color,
++                            path_gradient_position(fill, distance, xf - center_point.X, yf - center_point.Y));
+                 }
+             }
+         }
+@@ -5962,6 +6023,19 @@ static GpStatus measure_ranges_callback(struct gdip_format_string_info *info)
+     return stat;
+ }
+ 
++static REAL unbounded_margin_offset(const GpStringFormat *format, REAL margin)
++{
++    switch (format ? format->align : StringAlignmentNear)
++    {
++    case StringAlignmentCenter:
++        return -margin;
++    case StringAlignmentFar:
++        return -2.0 * margin;
++    default:
++        return 0.0;
++    }
++}
++
+ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
+         GDIPCONST WCHAR* string, INT length, GDIPCONST GpFont* font,
+         GDIPCONST RectF* layoutRect, GDIPCONST GpStringFormat *stringFormat,
+@@ -6007,6 +6081,8 @@ GpStatus WINGDIPAPI GdipMeasureCharacterRanges(GpGraphics* graphics,
+     scaled_rect.Y = layoutRect->Y * args.rel_height;
+     scaled_rect.Width = layoutRect->Width * args.rel_width;
+     scaled_rect.Height = layoutRect->Height * args.rel_height;
++    if (scaled_rect.Width < 0.5)
++        scaled_rect.X += unbounded_margin_offset(stringFormat, margin_x) * args.rel_width;
+ 
+     if (scaled_rect.Width >= 1 << 23) scaled_rect.Width = 1 << 23;
+     if (scaled_rect.Height >= 1 << 23) scaled_rect.Height = 1 << 23;
+@@ -6180,7 +6256,11 @@ GpStatus WINGDIPAPI GdipMeasureString(GpGraphics *graphics,
+     if (codepointsfitted) *codepointsfitted = glyphs;
+ 
+     if (lines)
++    {
+         bounds->Width += margin_x * 2.0;
++        if (rect->Width * args.rel_width < 0.5)
++            bounds->X += unbounded_margin_offset(format, margin_x);
++    }
+ 
+     SelectObject(hdc, oldfont);
+     DeleteObject(gdifont);
+@@ -6333,6 +6413,8 @@ GpStatus WINGDIPAPI GdipDrawString(GpGraphics *graphics, GDIPCONST WCHAR *string
+     scaled_rect.Y = 0.0;
+     scaled_rect.Width = rel_width * rect->Width;
+     scaled_rect.Height = rel_height * rect->Height;
++    if (scaled_rect.Width < 0.5)
++        scaled_rect.X += unbounded_margin_offset(format, margin_x) * rel_width;
+     if (scaled_rect.Width >= 0.5)
+     {
+         scaled_rect.Width -= margin_x * 2.0 * rel_width;

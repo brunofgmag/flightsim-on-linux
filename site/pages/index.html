@@ -1,0 +1,21 @@
+title: Windows add-ons for MSFS 2024 on Linux
+description: How to get Fenix, FSLabs, PMDG, GSX, ChasePlane, SayIntentions and other Windows add-ons working with Microsoft Flight Simulator 2024 under Steam and Proton on Linux.
+---
+<h1>Windows add-ons for Microsoft Flight Simulator 2024 on Linux</h1>
+<p class="lead">The simulator itself runs fine under Proton. The add-ons are where it gets hard: installers that do nothing, apps that open and close, tray icons that crash the program, displays drawn wrong. This site collects the fixes that got about 28 of them working, and the checks that tell you whether a fix took.</p>
+
+<div class="paths">
+  <a href="start.html"><strong>Start here</strong><span>A step-by-step setup with a small helper app. No Wine knowledge needed.</span></a>
+  <a href="addons.html"><strong>Add-ons</strong><span>What each add-on needs and the state of its guide.</span></a>
+  <a href="ai.html"><strong>With an AI assistant</strong><span>How to hand this to ChatGPT, Claude or a coding agent so it checks your machine instead of guessing.</span></a>
+</div>
+
+<h2>Where this comes from</h2>
+<p>Every fix here was found and measured on one machine: CachyOS with KDE Plasma on Wayland, an NVIDIA RTX 4080, the Steam version of the simulator, in October 2026. Each guide says what was tested and when. Your distribution, GPU or add-on version may behave differently, and when they do, an <a href="https://github.com/brunofgmag/flightsim-on-linux/issues">issue</a> with the output of the checks helps everyone.</p>
+
+<h2>What the fixes change</h2>
+<p>Almost every fix changes the Windows environment the add-on runs in, never the add-on: a rebuilt Proton, a setting in the Wine prefix, a launch option, a small stand-in for a Windows component that Wine lacks. A few go further and replace or edit a file that belongs to the add-on. Their guides say so at the top, name the file and tell you how to put the original back.</p>
+<p>Nothing here asks for a licence key, cracks a protection or shares a paid file. You install each add-on from its own vendor, with your own account.</p>
+
+<h2>The foundation</h2>
+<p>Most of the hard add-ons need one thing first: <a href="proton-fenix.html">Proton Fenix A320</a>, a Proton-CachyOS build with the <a href="https://github.com/marselnenaj/fenix-a320-linux-patch">fenix-a320-linux-patch</a> overlay and two more Wine fixes. This project builds it on your machine from public sources and then tests it in a throwaway prefix.</p>

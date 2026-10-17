@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+CLI="$(dirname "$(readlink -f "$0")")/flightsim-on-linux"
+TITLE="Flightsim on Linux"
+LOG="$(mktemp "${TMPDIR:-/tmp}/flightsim-on-linux-gui.XXXXXX")"
+trap 'rm -f "$LOG"' EXIT
+
+if [ -n "${FSOL_DIALOG:-}" ]; then
+  DIALOG="$FSOL_DIALOG"
+elif [ "${XDG_CURRENT_DESKTOP:-}" = KDE ] && command -v kdialog > /dev/null; then
+  DIALOG=kdialog
+elif command -v zenity > /dev/null; then
+  DIALOG=zenity
+elif command -v kdialog > /dev/null; then
+  DIALOG=kdialog
+else
+  DIALOG=terminal
+fi
+
+show_text() {
+  local title="$1" file="$2"
+  case "$DIALOG" in
+    zenity) zenity --text-info --width=760 --height=520 --title="$TITLE: $title" --filename="$file" --font=monospace ;;
+    kdialog) kdialog --title "$TITLE: $title" --geometry 760x520 --textbox "$file" ;;
+    *) echo "== $title"; cat "$file" ;;
+  esac
+}
+
+choose() {
+  case "$DIALOG" in
+    zenity)
+      zenity --list --radiolist --width=620 --height=320 --title="$TITLE" \
+        --text="What do you want to do?" --column=" " --column=Action --column=Task --hide-column=3 --print-column=3 \
+        TRUE "Check the Proton the simulator uses" check \
+        FALSE "Build Proton Fenix A320 (takes a few minutes)" build \
+        FALSE "Run the setup check again" doctor
+      ;;
+    kdialog)
+      kdialog --title "$TITLE" --radiolist "What do you want to do?" \
+        check "Check the Proton the simulator uses" on \
+        build "Build Proton Fenix A320 (takes a few minutes)" off \
+        doctor "Run the setup check again" off
+      ;;
+    *)
+      echo "1) Check the Proton the simulator uses" >&2
+      echo "2) Build Proton Fenix A320" >&2
+      echo "3) Run the setup check again" >&2
+      read -r -p "Choice: " answer
+      case "$answer" in 1) echo check ;; 2) echo build ;; 3) echo doctor ;; esac
+      ;;
+  esac
+}
+
+run_with_progress() {
+  local text="$1"
+  shift
+  case "$DIALOG" in
+    zenity)
+      "$@" > "$LOG" 2>&1 &
+      local pid=$!
+      {
+        while kill -0 "$pid" 2> /dev/null; do
+          echo "# $(tail -n 1 "$LOG" | cut -c1-90)"
+          sleep 1
+        done
+        echo 100
+      } | zenity --progress --pulsate --auto-close --no-cancel --width=620 --title="$TITLE" --text="$text"
+      wait "$pid"
+      ;;
+    kdialog)
+      local ref status
+      ref="$(kdialog --title "$TITLE" --progressbar "$text" 0)"
+      "$@" > "$LOG" 2>&1
+      status=$?
+      dbus-send --session --dest="${ref%% *}" "${ref##* }" org.kde.kdialog.ProgressDialog.close 2> /dev/null
+      return "$status"
+      ;;
+    *)
+      "$@" 2>&1 | tee "$LOG"
+      return "${PIPESTATUS[0]}"
+      ;;
+  esac
+}
+
+"$CLI" doctor > "$LOG" 2>&1
+show_text "your machine" "$LOG"
+
+while task="$(choose)" && [ -n "$task" ]; do
+  case "$task" in
+    check)
+      run_with_progress "Testing Proton in a throwaway prefix" "$CLI" proton check
+      { tail -n 1 "$LOG"; echo; cat "$LOG"; } > "$LOG.view"
+      show_text "Proton check" "$LOG.view"
+      rm -f "$LOG.view"
+      ;;
+    build)
+      run_with_progress "Building Proton Fenix A320" "$CLI" proton build
+      show_text "Proton build" "$LOG"
+      ;;
+    doctor)
+      "$CLI" doctor > "$LOG" 2>&1
+      show_text "your machine" "$LOG"
+      ;;
+  esac
+done

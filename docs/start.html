@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Start here · Flightsim on Linux</title>
+  <meta name="description" content="Step-by-step setup of Microsoft Flight Simulator 2024 on Linux for Windows add-ons, with a helper app that checks your machine.">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html" aria-current="page">Start here</a>
+        <a href="proton-fenix.html">Proton Fenix</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Start here</h1>
+<p class="lead">This page takes you from a working simulator to the Proton that the hard add-ons need. Most of the time goes into one download and one compile.</p>
+
+<ol class="steps">
+  <li>
+    <h3>Start the simulator once</h3>
+    <p>Install Microsoft Flight Simulator 2024 from Steam, start it, finish the first setup and quit. Proton creates its Windows folder (the "prefix") on that first start, and the simulator writes where your Community folder lives. The helper app reads both.</p>
+    <p class="note">The Microsoft Store and Xbox app versions don't run on Linux, so this site covers only the Steam version.</p>
+  </li>
+  <li>
+    <h3>Install the programs the build needs</h3>
+    <p>On Arch, CachyOS, EndeavourOS and Manjaro:</p>
+    <pre><code>sudo pacman -S --needed git base-devel flex bison perl mingw-w64-gcc zenity</code></pre>
+    <p>On other distributions, install the same things under their names there: git, a C compiler with make and autoconf, flex, bison, perl, the MinGW-w64 cross compiler for x86_64, and zenity or kdialog. The setup check in step 4 lists whatever is still missing.</p>
+  </li>
+  <li>
+    <h3>Download this project</h3>
+    <pre><code>git clone https://github.com/brunofgmag/flightsim-on-linux.git ~/flightsim-on-linux</code></pre>
+    <p>Or download the ZIP from the <a href="https://github.com/brunofgmag/flightsim-on-linux">project page</a> and unpack it in your home folder.</p>
+  </li>
+  <li>
+    <h3>Run the setup check</h3>
+    <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux-gui</code></pre>
+    <p>The first window lists what it found: Steam, the simulator, its prefix, the Proton it uses and your launch options. Lines marked <code>ok</code> are fine. Lines marked <code>WARN</code> or <code>FAIL</code> say what to do next. If you prefer the terminal, <code>bin/flightsim-on-linux doctor</code> prints the same list.</p>
+  </li>
+  <li>
+    <h3>Set the launch option</h3>
+    <p>In Steam, right-click Microsoft Flight Simulator 2024, choose Properties, and under <em>Launch Options</em> put:</p>
+    <pre><code>PROTON_NO_NTSYNC=1 %command%</code></pre>
+    <p>The overlay this setup builds on was tested with ntsync off, and with plain Proton-CachyOS the simulator froze in the menu or while loading an aircraft with ntsync on. <code>PROTON_USE_NTSYNC=0</code> looks similar, but Proton ignores it.</p>
+  </li>
+  <li>
+    <h3>Build Proton Fenix A320</h3>
+    <p>In the helper app, pick <em>Build Proton Fenix A320</em>. In the terminal it is:</p>
+    <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux proton build</code></pre>
+    <p>It downloads Proton-CachyOS (about 350 MB) and the Wine source, applies the patches, compiles 13 Wine modules and installs the result as a new Steam compatibility tool. You need about 3 GB free in your home folder. On a 16-thread CPU the compile took about a minute; slower machines take longer. Your current Proton stays untouched.</p>
+  </li>
+  <li>
+    <h3>Pick it in Steam</h3>
+    <p>Restart Steam. Right-click the simulator, choose Properties, open <em>Compatibility</em>, and under <em>Select compatibility tool</em> choose <em>Proton Fenix A320 (cachyos-11.0-20261005-slr)</em>.</p>
+  </li>
+  <li>
+    <h3>Check it</h3>
+    <p>Run the helper again and pick <em>Check the Proton the simulator uses</em>, or:</p>
+    <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux proton check</code></pre>
+    <p>It creates a throwaway prefix, runs four small test programs and deletes the prefix. You should see <code>All 4 checks passed.</code> Each check names the add-on it protects, so a failure tells you what will break.</p>
+  </li>
+</ol>
+
+<h2>Next</h2>
+<p>Read the <a href="rules.html">ground rules</a> before installing anything. They save a lot of confusion. Then go to the <a href="addons.html">add-on list</a>.</p>
+<p>To undo everything: pick another Proton in the simulator's Compatibility tab and delete the <code>Proton-Fenix-A320-…</code> folder from <code>~/.local/share/Steam/compatibilitytools.d/</code>.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,131 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine shell32: find a tray icon by its GUID alone, as H.NotifyIcon does after creating it. Fixes AutoFPS with Close to Tray and other H.NotifyIcon programs.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/shell32/systray.c b/dlls/shell32/systray.c
+index c74d017..b2cf232 100644
+--- a/dlls/shell32/systray.c
++++ b/dlls/shell32/systray.c
+@@ -31,9 +31,83 @@
+ #include "shell32_main.h"
+ 
+ #include "wine/debug.h"
++#include "wine/list.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(systray);
+ 
++struct guid_icon
++{
++    struct list entry;
++    GUID        guid;
++    HWND        hwnd;
++    UINT        id;
++};
++
++static struct list guid_icons = LIST_INIT( guid_icons );
++
++static CRITICAL_SECTION guid_icons_section;
++static CRITICAL_SECTION_DEBUG guid_icons_section_debug =
++{
++    0, 0, &guid_icons_section,
++    { &guid_icons_section_debug.ProcessLocksList, &guid_icons_section_debug.ProcessLocksList },
++      0, 0, { (DWORD_PTR)(__FILE__ ": guid_icons_section") }
++};
++static CRITICAL_SECTION guid_icons_section = { &guid_icons_section_debug, -1, 0, 0, 0, 0 };
++
++static struct guid_icon *find_guid_icon( const GUID *guid )
++{
++    struct guid_icon *icon;
++
++    LIST_FOR_EACH_ENTRY( icon, &guid_icons, struct guid_icon, entry )
++        if (IsEqualGUID( &icon->guid, guid )) return icon;
++    return NULL;
++}
++
++static BOOL lookup_guid_icon( const GUID *guid, HWND *hwnd, UINT *id )
++{
++    struct guid_icon *icon;
++
++    EnterCriticalSection( &guid_icons_section );
++    if ((icon = find_guid_icon( guid )))
++    {
++        *hwnd = icon->hwnd;
++        *id = icon->id;
++    }
++    LeaveCriticalSection( &guid_icons_section );
++    return icon != NULL;
++}
++
++static void remember_guid_icon( const GUID *guid, HWND hwnd, UINT id )
++{
++    struct guid_icon *icon;
++
++    EnterCriticalSection( &guid_icons_section );
++    if (!(icon = find_guid_icon( guid )) && (icon = malloc( sizeof(*icon) )))
++    {
++        icon->guid = *guid;
++        list_add_tail( &guid_icons, &icon->entry );
++    }
++    if (icon)
++    {
++        icon->hwnd = hwnd;
++        icon->id = id;
++    }
++    LeaveCriticalSection( &guid_icons_section );
++}
++
++static void forget_guid_icon( const GUID *guid )
++{
++    struct guid_icon *icon;
++
++    EnterCriticalSection( &guid_icons_section );
++    if ((icon = find_guid_icon( guid )))
++    {
++        list_remove( &icon->entry );
++        free( icon );
++    }
++    LeaveCriticalSection( &guid_icons_section );
++}
++
+ struct notify_data_icon
+ {
+     /* data for the icon bitmap */
+@@ -185,6 +259,8 @@ BOOL WINAPI Shell_NotifyIconW(DWORD dwMessage, PNOTIFYICONDATAW nid)
+     ICONINFO icon_info = { 0 }, balloon_icon_info = { 0 };
+     BITMAP mask, color, balloon_mask, balloon_color;
+     LONG mask_size = 0, color_size = 0, balloon_mask_size = 0, balloon_color_size = 0;
++    HWND owner;
++    UINT id;
+     BOOL ret;
+ 
+     TRACE("dwMessage = %ld, nid->cbSize=%ld\n", dwMessage, nid->cbSize);
+@@ -261,8 +337,13 @@ BOOL WINAPI Shell_NotifyIconW(DWORD dwMessage, PNOTIFYICONDATAW nid)
+         }
+     }
+ 
+-    data->hWnd   = HandleToLong( nid->hWnd );
+-    data->uID    = nid->uID;
++    owner = nid->hWnd;
++    id = nid->uID;
++    if ((nid->uFlags & NIF_GUID) && dwMessage != NIM_ADD)
++        lookup_guid_icon( &nid->guidItem, &owner, &id );
++
++    data->hWnd   = HandleToLong( owner );
++    data->uID    = id;
+     data->uFlags = nid->uFlags;
+     if (data->uFlags & NIF_MESSAGE)
+         data->uCallbackMessage = nid->uCallbackMessage;
+@@ -287,7 +368,12 @@ BOOL WINAPI Shell_NotifyIconW(DWORD dwMessage, PNOTIFYICONDATAW nid)
+     /* FIXME: balloon icon */
+ 
+     cds.lpData = data;
+-    ret = SendMessageW(tray, WM_COPYDATA, (WPARAM)nid->hWnd, (LPARAM)&cds);
++    ret = SendMessageW(tray, WM_COPYDATA, (WPARAM)owner, (LPARAM)&cds);
++    if (ret && (nid->uFlags & NIF_GUID))
++    {
++        if (dwMessage == NIM_ADD) remember_guid_icon( &nid->guidItem, owner, id );
++        else if (dwMessage == NIM_DELETE) forget_guid_icon( &nid->guidItem );
++    }
+     if (data != &data_buffer) free(data);
+     SetLastError(ret ? S_OK : E_FAIL);
+     return ret;

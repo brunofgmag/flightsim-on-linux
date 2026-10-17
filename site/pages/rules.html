@@ -1,0 +1,41 @@
+title: Ground rules
+description: Rules that apply to every Windows add-on in the MSFS 2024 Proton prefix - installers, running next to the simulator, Community links, fonts and WPF.
+---
+<h1>Ground rules</h1>
+<p class="lead">These apply to every add-on. Each one took hours to find on the test machine, and each looks like an add-on bug until you know it.</p>
+
+<h2>Run installers alone</h2>
+<p>Close the simulator and every other program of its prefix before you run an installer or an updater, and run one at a time. Store apps count: Contrail, simMarket, Orbx Central, the FSDT installer. With another program open, .NET installers fail with "Access denied" while reading their own modules, usually at the very end ("Registering installed application").</p>
+<p>Contrail and simMarket download an installer <code>.exe</code> into the prefix's <code>Downloads</code> folder and stop there. Close the store, then run that installer yourself.</p>
+<p>To install into the prefix from a terminal:</p>
+<pre><code>protontricks-launch --no-term --appid 2537590 /path/to/Setup.exe</code></pre>
+
+<h2>Programs that run next to the simulator join its container</h2>
+<p>Steam starts the simulator inside the Steam Linux Runtime container. A Windows program started some other way while the simulator runs ends up in a different container and gets the same "Access denied" as above. Programs that talk to the simulator (AutoFPS, SayIntentions, Active Sky, vRAAS, Lorby AAO) have to be started inside the simulator's own container. The add-on guides give a launcher for each.</p>
+<p>A program left open in that container keeps Steam showing the simulator as running after you quit it. Close your add-ons before you quit the simulator.</p>
+
+<h2>Don't kill the simulator while it loads</h2>
+<p>On the test machine, a simulator force-quit during its loading screen came back with every Community package switched off. It gave no warning; the aircraft were gone from the list. It had marked each Community package <code>SystemDisabled</code> in <code>Content.xml</code>, in your profile folder inside the simulator's base folder. Force-quits after the main menu didn't do this.</p>
+<p>With the simulator closed, this turns back on only the Community packages the simulator switched off, and leaves the ones you switched off yourself (<code>UserDisabled</code>) alone:</p>
+<pre><code>find ~/.local/share/Steam/steamapps/compatdata/2537590/pfx/drive_c/users/steamuser/AppData/Roaming/"Microsoft Flight Simulator 2024" -maxdepth 2 -name Content.xml -exec sed -i -E 's/(&lt;Package name="community[^"]*" active=")SystemDisabled(")/\1Activated\2/' {} +</code></pre>
+<p>If your simulator is in another Steam library, use that library's <code>steamapps/compatdata/2537590</code>; <code>bin/flightsim-on-linux machine</code> prints it.</p>
+
+<h2>Junctions in Community look broken from Linux</h2>
+<p>GSX, SayIntentions and the FSDT sceneries put Windows junctions in Community. From Linux they look like empty folders with a <code>?</code> at the end of the name. That is normal: inside Wine they point to the right place.</p>
+<p>Don't move or rename them from Linux, and don't let an add-on organiser replace them with symlinks. A junction moved from Linux loses its target and the add-on disappears from the simulator. To repair one, delete the link and the empty folder, then let the add-on recreate it: Relink in the FSDT installer for GSX, or the add-on's own installer.</p>
+<p>The same goes the other way: a Windows installer can't update a package that an organiser turned into a Linux symlink. Wine can't delete a Linux symlink through Windows calls, and the installer stops halfway. Remove the link first.</p>
+
+<h2>WPF programs draw in software</h2>
+<p>Several add-on apps are WPF programs (Lorby AAO, AutoFPS, vRAAS, the FSLabs Control Center, the Fenix runner). On the test machine, under Wine's Wayland driver, they crashed the moment their window should appear, with <code>importing the supplied dmabufs failed</code> in the log. Started with Direct3D 9 turned off, or with this one setting in the prefix, they draw in software, as WPF does on a Windows PC without graphics acceleration:</p>
+<pre><code>protontricks -c 'wine reg add "HKCU\Software\Microsoft\Avalon.Graphics" /v DisableHWAcceleration /t REG_DWORD /d 1 /f' 2537590</code></pre>
+<p>It applies to every WPF program in the prefix. To undo it, run the same command with <code>reg delete "HKCU\Software\Microsoft\Avalon.Graphics" /v DisableHWAcceleration /f</code>.</p>
+
+<h2>Missing Windows fonts</h2>
+<p>A prefix has no Segoe UI or Consolas, so text in add-on windows falls back to a thin, jagged Times New Roman. Map them to free fonts under <code>HKCU\Software\Wine\Fonts\Replacements</code>. The test machine uses Noto Sans for Segoe UI and Segoe UI Bold, Noto Sans SemiBold for Segoe UI Semibold, DejaVu Sans Mono for Consolas, DejaVu Sans for Verdana and Noto Serif for Palatino Linotype. <code>winecfg</code> has no option for this.</p>
+<p>Calibri is the exception: Wine's GDI+ only finds a font whose full name matches its family name, so Active Sky needs a real file named Calibri, built from Carlito. Its guide has the script.</p>
+
+<h2>The first load of a heavy aircraft is slow</h2>
+<p>The first time you load an aircraft with a large WASM module, such as the MD-11, the simulator compiles it for several minutes. It is cached afterwards. Don't kill the simulator thinking it froze, for the reason above.</p>
+
+<h2>Never share these</h2>
+<p>Some add-ons write licence keys into plain-text logs. The FSLabs <code>CCLog.txt</code> is one. Don't paste such files into an issue, a forum post or an AI chat. When a guide asks for a log, it says which one and what to remove first.</p>

@@ -1,0 +1,51 @@
+title: Proton Fenix A320
+description: What Proton Fenix A320 is, why the Fenix, FSLabs and AutoFPS need it, how this project builds and tests it, and how to undo it.
+---
+<h1>Proton Fenix A320</h1>
+<p class="lead">A Proton-CachyOS release with 13 Wine modules rebuilt: eleven from the fenix-a320-linux-patch overlay and two fixes from this project. It runs the simulator and every other add-on in the prefix, so the fixes reach all of them.</p>
+
+<h2>Why the simulator needs a special Proton</h2>
+<p>Most add-on problems can be fixed inside the prefix. A few are bugs in Wine itself, and those need a rebuilt Wine:</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Module</th><th>What goes wrong without it</th><th>Source</th></tr>
+  <tr><td>11 modules, among them <code>ntdll</code>, <code>kernelbase</code>, <code>crypt32</code>, <code>d2d1</code>, <code>dwrite</code></td><td>The Fenix runner spins at full CPU without opening a window, the aircraft won't power up, and the Fenix displays draw wrong.</td><td><a href="https://github.com/marselnenaj/fenix-a320-linux-patch">fenix-a320-linux-patch</a> v0.1.0-preview.7, by its own authors</td></tr>
+  <tr><td><code>gdiplus</code></td><td>FSLabs displays are covered in glow, and the MCDU and clock letters lose their right side.</td><td>this project</td></tr>
+  <tr><td><code>shell32</code></td><td>Programs built on H.NotifyIcon, such as AutoFPS with "Close to Tray", crash on start.</td><td>this project</td></tr>
+</table>
+</div>
+<p>The Proton also carries a <code>user_settings.py</code> with the nine settings the overlay's installer writes, plus <code>cef_browser.exe</code> in <code>WINE_TRACK_WRITECOPY</code>. Without that last one the FSLabs EFB browser crashes when it starts.</p>
+
+<h2>How it is built</h2>
+<p><code>bin/flightsim-on-linux proton build</code> runs <code>proton/build-proton-fenix.sh</code>, which:</p>
+<ol>
+  <li>downloads the Proton-CachyOS release and checks it against the release's own sha512;</li>
+  <li>downloads the overlay patch from the overlay's tagged source and checks a pinned sha256;</li>
+  <li>asks GitHub which wine-cachyos commit the release was built from, and fetches only that commit;</li>
+  <li>applies the three patches and stops at the first one that doesn't apply cleanly;</li>
+  <li>refuses to continue if the wineserver protocol changed, because the release's 32-bit parts would stop talking to it;</li>
+  <li>compiles the 13 modules, checks that none needs a system library the original didn't, and swaps them into a copy of the release;</li>
+  <li>starts a Windows process inside the Steam Linux Runtime the release asks for;</li>
+  <li>only then moves the result into <code>compatibilitytools.d</code>, under a new name. It never overwrites an existing folder.</li>
+</ol>
+<p>The built Proton has a <code>fenix-rebuild.txt</code> listing the release hash, the Wine commit and a hash for every patch and module, so you can tell exactly what you are running.</p>
+<p class="note">Only <code>cachyos-11.0-20261005-slr</code> has been verified. You can pass another cachyos-11 release, <code>proton build cachyos-11.0-…</code>, and the script stops if a patch no longer applies. The overlay's authors publish a new variant when CachyOS moves to a Wine the patch doesn't fit.</p>
+
+<h2>How it is checked</h2>
+<p><code>bin/flightsim-on-linux proton check</code> creates a throwaway prefix, compiles four small Windows programs and runs them with the Proton the simulator uses:</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Check</th><th>Passes when</th></tr>
+  <tr><td>Overlay loader</td><td>A program named <code>Fenix.exe</code> sees <code>KERNEL32.DLL</code> and <code>KERNELBASE.dll</code> spelled as on Windows. The probe is the overlay's own <code>loader-case-probe.c</code>.</td></tr>
+  <tr><td>Tray icon by GUID</td><td>A tray icon can be changed and removed by its GUID alone. Needs an X11 display; without one the check says it could not run.</td></tr>
+  <tr><td>GDI+ path gradient</td><td>Focus, blend and preset colours land where Windows puts them.</td></tr>
+  <tr><td>GDI+ centred text</td><td>An "M" centred on x = 100 is centred within 1.5 pixels. Stock Wine draws it about 4 pixels to the right.</td></tr>
+</table>
+</div>
+<p>Run against stock Proton-CachyOS, all four fail. Built without the <code>shell32</code> patch, only the tray check fails. That is how we know each check catches what it claims to.</p>
+
+<h2>What has not been measured</h2>
+<p>The Proton this script builds passes the four checks and starts the Fenix runner. Flights so far used a Proton put together by hand from the same release and the same patches. A full flight with the scripted build hasn't been logged yet.</p>
+
+<h2>Undo</h2>
+<p>Pick another Proton under <em>Compatibility</em> in the simulator's Properties, then delete the <code>Proton-Fenix-A320-…</code> folder from <code>~/.local/share/Steam/compatibilitytools.d/</code>. The build cache lives in <code>~/.cache/flightsim-on-linux</code> and can go too.</p>
