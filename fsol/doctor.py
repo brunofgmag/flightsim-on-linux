@@ -58,7 +58,7 @@ def check_library_paths(machine):
     if any("STEAM_COMPAT_LIBRARY_PATHS=" in options for options in machine.launch_options.values()):
         return Check("library-paths", "ok", "Launch options set STEAM_COMPAT_LIBRARY_PATHS")
     return Check("library-paths", "info", "Launch options do not set STEAM_COMPAT_LIBRARY_PATHS",
-                 "Only the ChasePlane bridge needs it: add STEAM_COMPAT_LIBRARY_PATHS=<the folder that contains your SteamLibrary> before %command%.")
+                 "Only the ChasePlane bridge needs it: add STEAM_COMPAT_LIBRARY_PATHS=<the Steam library folder that holds the simulator, the one with steamapps inside> before %command%.")
 
 
 def check_community(machine):

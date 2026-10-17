@@ -34,7 +34,7 @@ Go from cheap to expensive, and name a cause only after an observation that tell
 
 1. Reproduce once, with a timestamped trace from the very start of the program, not from the click that fails:
    `WINEDEBUG=+timestamp,+pid,+seh,+loaddll protontricks-launch --no-term --appid 2537590 <program.exe> 2> trace.log`
-2. For .NET Framework programs running on wine-mono, add `WINE_MONO_TRACE=E:all` and read the first exception that isn't routine. Most "does nothing" installers end at a `NotImplementedException` early in startup.
+2. For .NET Framework programs running on wine-mono, add `WINE_MONO_TRACE=E:all` and read the first exception that isn't routine. On the test machine, the FSDT updater whose Install button "did nothing" had already failed at startup, with a `NotImplementedException` from wine-mono, long before the click.
 3. For windows that never appear or appear empty, compare the X11 and Wayland drivers, and try `WINEDLLOVERRIDES=d3d9=d` for WPF programs.
 4. For Electron and Chromium-based apps, try `--disable-gpu-sandbox`, then `--disable-gpu`.
 5. Watch a process for about 30 seconds, sampling at 10, 20 and 30 s (alive, CPU, memory, windows). Extend only if something is still changing.

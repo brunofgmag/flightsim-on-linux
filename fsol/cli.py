@@ -49,7 +49,7 @@ def proton_check(args):
 
 
 def parser():
-    top = argparse.ArgumentParser(prog="flightsim-on-linux", description="Set up Windows add-ons for Microsoft Flight Simulator 2024 under Proton.")
+    top = argparse.ArgumentParser(prog="flightsim-on-linux", description="Check Microsoft Flight Simulator 2024 under Proton and prepare it for Windows add-ons.")
     commands = top.add_subparsers(dest="command", required=True)
 
     found = commands.add_parser("machine", help="show what was found: Steam, libraries, prefix, Proton, launch options")

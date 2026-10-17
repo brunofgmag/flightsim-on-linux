@@ -47,7 +47,7 @@ Rules for you:
 <p>If your assistant can't open web pages, paste the page you are working from, for example <a href="start.html">Start here</a>, after the rules.</p>
 
 <h2>Coding agents that run commands</h2>
-<p>This covers agents like Claude Code, Codex or Gemini CLI that work in a terminal on your machine. Open them inside the project folder. The repository has an <a href="https://github.com/brunofgmag/flightsim-on-linux/blob/main/AGENTS.md"><code>AGENTS.md</code></a> that these tools read on their own. It tells them to:</p>
+<p>This covers agents like Claude Code, Codex or Gemini CLI that work in a terminal on your machine. Open them inside the project folder. The repository has an <a href="https://github.com/brunofgmag/flightsim-on-linux/blob/main/AGENTS.md"><code>AGENTS.md</code></a> that these tools read on their own; Claude Code and Gemini CLI reach it through the <code>CLAUDE.md</code> and <code>GEMINI.md</code> next to it. It tells them to:</p>
 <ul>
   <li>learn the machine first with <code>bin/flightsim-on-linux machine --json</code> and <code>doctor --json</code>;</li>
   <li>fix the environment rather than the add-on, and say so before touching any add-on file;</li>
@@ -56,7 +56,7 @@ Rules for you:
   <li>prove each fix by reverting it and watching its check fail.</li>
 </ul>
 <p>A good first request: <em>"Read AGENTS.md, run the doctor, and tell me what is missing before changing anything."</em></p>
-<p>Agents still ask before running commands, and you should read what they propose. Anything that installs, deletes or edits files in the prefix deserves a second look, and so does anything outside your home folder.</p>
+<p>Whether an agent asks before running a command depends on how you set it up. Keep it asking, and read what it proposes. Anything that installs, deletes or edits files in the prefix deserves a second look, and so does anything outside your home folder.</p>
 
 <h2>When the assistant is stuck</h2>
 <p>Open an <a href="https://github.com/brunofgmag/flightsim-on-linux/issues">issue</a> with the output of <code>bin/flightsim-on-linux doctor</code>, the add-on and its version, and what you tried. Remove licence keys and account names first.</p>

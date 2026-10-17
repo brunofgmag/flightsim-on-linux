@@ -2,7 +2,7 @@
 
 Guides and tools for running Windows add-ons for Microsoft Flight Simulator 2024 (Steam) under Proton on Linux: Fenix, FSLabs, PMDG, GSX, ChasePlane, SayIntentions, Active Sky and about twenty more.
 
-The site is at **https://brunofgmag.github.io/flightsim-on-linux/**. Start there if you just want your add-ons working.
+The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if you just want your add-ons working.
 
 ## What is in here
 
@@ -37,7 +37,7 @@ python3 -m http.server -d docs 8000
 
 The last command serves the site at http://127.0.0.1:8000/.
 
-Fixes were found and measured on one machine: CachyOS, KDE Plasma on Wayland, an NVIDIA RTX 4080, October 2026. Reports from other machines are welcome as issues; include the output of `bin/flightsim-on-linux doctor` with licence keys and account names removed.
+Fixes were found and measured on one machine: CachyOS, KDE Plasma on Wayland, an NVIDIA RTX 4080, October 2026. If you try it on another machine, open an issue with the output of `bin/flightsim-on-linux doctor`, after removing licence keys and account names.
 
 ## Credits
 
