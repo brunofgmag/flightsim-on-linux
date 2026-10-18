@@ -1,0 +1,14 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine d2d1: free a figure's vertex_types array when the figure is destroyed, as upstream Wine does. wine-cachyos leaks it, and the Fenix displays, which build and destroy geometries every frame, grow by about 4.6 MB/s until they slow down and freeze.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/d2d1/geometry.c
++++ b/dlls/d2d1/geometry.c
+@@ -1445,6 +1445,7 @@
+     free(figure->original_bezier_controls);
+     free(figure->bezier_controls);
+     free(figure->vertices);
++    free(figure->vertex_types);
+     free(figure->segments.data);
+     memset(figure, 0, sizeof(*figure));
+ }

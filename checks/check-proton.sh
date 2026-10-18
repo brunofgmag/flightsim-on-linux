@@ -77,7 +77,8 @@ run_wine() {
 }
 
 run_wine_wayland() {
-  timeout 120 env -u DISPLAY "${RUNNER[@]}" sh -c 'LD_LIBRARY_PATH="$1${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"; shift; export LD_LIBRARY_PATH; exec "$@"' sh \
+  local inner="LD_LIBRARY_PATH=\"\$1\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"; shift; export LD_LIBRARY_PATH; exec \"\$@\""
+  timeout 120 env -u DISPLAY "${RUNNER[@]}" sh -c "$inner" sh \
     "$TOOL/files/lib/x86_64-linux-gnu:$TOOL/files/lib/i386-linux-gnu" "$TOOL/files/bin/wine" "$@" 2> /dev/null | tr -d '\r'
 }
 
@@ -111,6 +112,7 @@ export WINEDEBUG=-all
 export WINEDLLOVERRIDES="winemenubuilder.exe=d;mscoree,mshtml="
 export WINEESYNC=0
 export WINEFSYNC=0
+export WINEDLLPATH="$TOOL/files/lib/vkd3d:$TOOL/files/lib/wine"
 export_settings
 
 "$HERE/build-checks.sh" "$WORK"
@@ -165,6 +167,16 @@ status=0
 output="$(run_wine "$(windows_path "$WORK/centered-point-test.exe")" "$(windows_path "$TOOL/files/share/fonts/arial.ttf")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "gdiplus text centred on a point (FSLabs MCDU letters)" "$verdict" "$output"
+
+status=0
+output="$(run_wine "$(windows_path "$WORK/d2d1-geometry-leak-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "d2d1 path geometry gives its memory back (Fenix displays slowing down and freezing)" "$verdict" "${output:-no output}"
+
+status=0
+output="$(run_wine "$(windows_path "$WORK/d2d1-non-finite-close-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "d2d1 geometry with NaN coordinates closes (Fenix displays freezing)" "$verdict" "${output:-no output}"
 
 name="win32u child window drawn by another process (WebView2 in SayIntentions, GSX, REX)"
 if wayland_socket; then

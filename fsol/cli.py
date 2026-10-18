@@ -38,7 +38,7 @@ def run_script(script, extra):
 
 
 def proton_build(args):
-    run_script(ROOT / "proton" / "build-proton-fenix.sh", [args.release] if args.release else [])
+    run_script(ROOT / "proton" / "build-proton-fs2024.sh", [args.release] if args.release else [])
 
 
 def proton_check(args):
@@ -154,8 +154,8 @@ def parser():
     health.add_argument("--json", action="store_true")
     health.set_defaults(run=show_doctor)
 
-    proton = commands.add_parser("proton", help="build or check Proton Fenix A320").add_subparsers(dest="action", required=True)
-    build = proton.add_parser("build", help="build Proton Fenix A320 from a proton-cachyos release")
+    proton = commands.add_parser("proton", help="build or check Proton FS2024").add_subparsers(dest="action", required=True)
+    build = proton.add_parser("build", help="build Proton FS2024 from a proton-cachyos release and swap it in")
     build.add_argument("release", nargs="?", help="proton-cachyos release tag, default the verified one")
     build.set_defaults(run=proton_build)
     check = proton.add_parser("check", help="test a Proton in a throwaway prefix")

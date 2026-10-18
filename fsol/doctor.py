@@ -40,11 +40,11 @@ def check_prefix(machine):
 
 def check_proton(machine):
     name = machine.compat_tool or "Steam default"
-    if machine.proton_is_fenix:
-        return Check("proton", "ok", f"Proton in use: {name} ({machine.proton}), a Proton Fenix A320 build")
+    if machine.proton_is_fs2024:
+        return Check("proton", "ok", f"Proton in use: {name} ({machine.proton}), a Proton FS2024 build")
     where = f" ({machine.proton})" if machine.proton else ""
-    return Check("proton", "warn", f"Proton in use: {name}{where}, not a Proton Fenix A320 build",
-                 "The Fenix A320, the FSLabs displays and the AutoFPS tray icon need Proton Fenix A320. Build it with: flightsim-on-linux proton build, then pick it under Compatibility > Select compatibility tool in the simulator's Properties.")
+    return Check("proton", "warn", f"Proton in use: {name}{where}, not a Proton FS2024 build",
+                 "The Fenix A320, the FSLabs displays and the AutoFPS tray icon need Proton FS2024. Build it with: flightsim-on-linux proton build, then pick it under Compatibility > Select compatibility tool in the simulator's Properties.")
 
 
 NTSYNC_REMEDY = ("If the simulator freezes in the menu or while loading an aircraft, turn ntsync off first: put "
@@ -92,8 +92,8 @@ def check_running(machine):
 def check_build_tools(machine):
     missing = [tool for tool in BUILD_TOOLS if not shutil.which(tool)]
     if not missing:
-        return Check("build-tools", "ok", "Every program needed to build Proton Fenix A320 is installed")
-    return Check("build-tools", "info", f"Missing for building Proton Fenix A320: {', '.join(missing)}", "Install them with your distribution's package manager before running the build.")
+        return Check("build-tools", "ok", "Every program needed to build Proton FS2024 is installed")
+    return Check("build-tools", "info", f"Missing for building Proton FS2024: {', '.join(missing)}", "Install them with your distribution's package manager before running the build.")
 
 
 WPF_KEY = r"Software\Microsoft\Avalon.Graphics"

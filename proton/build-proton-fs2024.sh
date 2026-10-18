@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 CACHE="${FSOL_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/flightsim-on-linux}"
 DOWNLOADS="$CACHE/downloads"
-WORK="${WORK:-$CACHE/build-$RELEASE}"
+WORK="${WORK:-$CACHE/build-$RELEASE-$(date +%Y%m%d-%H%M%S)}"
 JOBS="${JOBS:-$(nproc)}"
 
 OVERLAY_TAG="v0.1.0-preview.7"
@@ -22,6 +22,10 @@ PATCHES=(
   "$ROOT/patches/wine/shell32-notifyicon-guid.patch"
   "$ROOT/patches/wine/win32u-cross-process-child-windows.patch"
   "$ROOT/patches/wine/winewayland-opaque-xrgb.patch"
+  "$ROOT/patches/wine/gdiplus-font-family-after-substitution.patch"
+  "$ROOT/patches/wine/win32u-cross-process-d3d12-fence.patch"
+  "$ROOT/patches/wine/d2d1-non-finite-geometry.patch"
+  "$ROOT/patches/wine/d2d1-free-figure-vertex-types.patch"
 )
 
 MODULES=(
@@ -58,8 +62,12 @@ USER_SETTINGS=(
 RUNTIME_LIBRARIES=(libgcc_s.so.1)
 
 die() {
-  echo "build-proton-fenix: $*" >&2
+  echo "build-proton-fs2024: $*" >&2
   exit 1
+}
+
+simulator_running() {
+  python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from fsol.machine import sim_pid; sys.exit(0 if sim_pid() else 1)' "$ROOT"
 }
 
 step() {
@@ -69,7 +77,7 @@ step() {
 
 usage() {
   echo "usage: $(basename "$0") [proton-cachyos release, default $VERIFIED_RELEASE]" >&2
-  echo "Environment: STEAM_DIR, DEST, WORK, JOBS, FSOL_CACHE." >&2
+  echo "Environment: STEAM_DIR, DEST, DISPLAY_NAME, PREVIOUS, WORK, JOBS, FSOL_CACHE." >&2
   exit 2
 }
 
@@ -118,9 +126,10 @@ check_preconditions() {
   STEAM="$(find_steam)"
   [ -n "$STEAM" ] || die "no Steam installation found; set STEAM_DIR to the folder that has steamapps/libraryfolders.vdf"
   echo "Steam: $STEAM"
-  DEST="${DEST:-$STEAM/compatibilitytools.d/Proton-Fenix-A320-$RELEASE}"
-  DISPLAY_NAME="${DISPLAY_NAME:-Proton Fenix A320 ($RELEASE)}"
-  [ ! -e "$DEST" ] || die "$DEST already exists; nothing is overwritten"
+  DEST="${DEST:-$STEAM/compatibilitytools.d/Proton-FS2024}"
+  DISPLAY_NAME="${DISPLAY_NAME:-Proton FS2024}"
+  PREVIOUS="${PREVIOUS:-$CACHE/previous/$(basename "$DEST")}"
+  ! simulator_running || die "the simulator is running; close it first, because the build ends by swapping the Proton it uses"
   [ ! -e "$WORK" ] || die "$WORK already exists; remove it or set WORK to a new folder"
 }
 
@@ -323,7 +332,7 @@ check_runtime() {
 }
 
 write_record() {
-  local record="$STAGE/fenix-rebuild.txt" patch module
+  local record="$STAGE/fs2024-build.txt" patch module
   {
     echo "release $RELEASE $ARCH"
     echo "sha512 $TARBALL_SHA512"
@@ -339,13 +348,31 @@ write_record() {
   } > "$record"
 }
 
+run_checks() {
+  step "Running the checks on the built Proton"
+  "$ROOT/checks/check-proton.sh" "$STAGE" || die "a check failed; the built Proton is in $STAGE and $DEST did not change"
+}
+
 publish() {
   step "Installing into $DEST"
-  [ ! -e "$DEST" ] || die "$DEST appeared during the build; nothing is overwritten"
+  ! simulator_running || die "the simulator started during the build; the built Proton is in $STAGE and $DEST did not change"
+  local first=1
+  if [ -e "$DEST" ]; then
+    first=
+    rm -rf "$PREVIOUS"
+    mkdir -p "$(dirname "$PREVIOUS")"
+    mv "$DEST" "$PREVIOUS"
+    echo "previous build: $PREVIOUS"
+  fi
   mkdir -p "$(dirname "$DEST")"
   mv "$STAGE" "$DEST"
   echo "done: $DEST"
-  echo "Restart Steam, then pick \"$DISPLAY_NAME\" in Microsoft Flight Simulator 2024 > Properties > Compatibility."
+  if [ -n "$first" ]; then
+    echo "Restart Steam, then pick \"$DISPLAY_NAME\" in Microsoft Flight Simulator 2024 > Properties > Compatibility."
+  else
+    echo "Steam keeps using \"$DISPLAY_NAME\"; the next start of the simulator runs the new build."
+    echo "To go back, close the simulator and swap $DEST with $PREVIOUS."
+  fi
 }
 
 case "${1:-}" in
@@ -368,4 +395,5 @@ install_modules
 write_settings
 check_runtime
 write_record
+run_checks
 publish

@@ -142,12 +142,12 @@ class ApplyTest(AddonTestCase):
         self.assertIn("close the simulator", output)
         self.assertFalse((self.fake.prefix / "fixed").exists())
 
-    def test_an_addon_that_needs_proton_fenix_refuses_another_proton(self):
+    def test_an_addon_that_needs_proton_fs2024_refuses_another_proton(self):
         (self.fake.tool / "user_settings.py").write_text("user_settings = {}\n")
-        self.addon(spec=dict(SPEC, needs=["proton-fenix"]))
+        self.addon(spec=dict(SPEC, needs=["proton-fs2024"]))
         code, output = self.cli("addon", "apply", "demo")
         self.assertEqual(code, 1)
-        self.assertIn("Proton Fenix A320", output)
+        self.assertIn("Proton FS2024", output)
 
     def test_a_fix_that_touches_addon_files_says_so_and_how_to_undo(self):
         self.addon(spec=dict(SPEC, touches_addon_files=True))

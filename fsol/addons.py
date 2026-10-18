@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 ACTIONS = ("apply", "check", "undo")
-NEEDS = ("proton-fenix", "simulator-closed", "simulator-running")
+NEEDS = ("proton-fs2024", "simulator-closed", "simulator-running")
 PLACES = ("prefix", "base", "community", "sim")
 ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FIELDS = {"name": str, "tested_version": str, "tested_on": str, "needs": list, "touches_addon_files": bool, "installed": dict}
@@ -110,8 +110,8 @@ def is_installed(addon, found):
 
 def unmet_needs(addon, found):
     unmet = []
-    if "proton-fenix" in addon.needs and not found.proton_is_fenix:
-        unmet.append("it needs Proton Fenix A320 selected for the simulator (flightsim-on-linux proton build)")
+    if "proton-fs2024" in addon.needs and not found.proton_is_fs2024:
+        unmet.append("it needs Proton FS2024 selected for the simulator (flightsim-on-linux proton build)")
     if "simulator-closed" in addon.needs and found.sim_running:
         unmet.append("close the simulator and every program of its prefix first")
     if "simulator-running" in addon.needs and not found.sim_running:

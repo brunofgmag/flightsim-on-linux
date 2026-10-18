@@ -1,0 +1,53 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine d2d1: when a path geometry with NaN or infinite coordinates is closed, leave its fill empty instead of triangulating it. Triangulating such a figure never ends, and the display that drew it freezes.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/d2d1/geometry.c
++++ b/dlls/d2d1/geometry.c
+@@ -3969,8 +3969,30 @@
+     return S_OK;
+ }
+ 
++static BOOL d2d_point_is_finite(const D2D1_POINT_2F *point)
++{
++    return fabsf(point->x) <= FLT_MAX && fabsf(point->y) <= FLT_MAX;
++}
++
++static BOOL d2d_geometry_is_finite(const struct d2d_geometry *geometry)
++{
++    const struct d2d_figure *figure;
++    size_t i, j;
++
++    for (i = 0; i < geometry->u.path.figure_count; ++i)
++    {
++        figure = &geometry->u.path.figures[i];
++        for (j = 0; j < figure->vertex_count; ++j)
++            if (!d2d_point_is_finite(&figure->vertices[j])) return FALSE;
++        for (j = 0; j < figure->bezier_control_count; ++j)
++            if (!d2d_point_is_finite(&figure->bezier_controls[j])) return FALSE;
++    }
++    return TRUE;
++}
++
+ static HRESULT STDMETHODCALLTYPE d2d_geometry_sink_Close(ID2D1GeometrySink *iface)
+ {
++    static LONG non_finite_count;
+     struct d2d_geometry *geometry = impl_from_ID2D1GeometrySink(iface);
+     HRESULT hr = E_FAIL;
+ 
+@@ -3987,6 +4009,15 @@
+ 
+     geometry->u.path.state = D2D_GEOMETRY_STATE_CLOSED;
+ 
++    if (!d2d_geometry_is_finite(geometry))
++    {
++        if (InterlockedIncrement(&non_finite_count) <= 10)
++            ERR("Geometry %p has non-finite coordinates; leaving its fill empty.\n", geometry);
++        else
++            WARN("Geometry %p has non-finite coordinates; leaving its fill empty.\n", geometry);
++        return S_OK;
++    }
++
+     if (!d2d_geometry_intersect_self(geometry))
+         goto done;
+     if (FAILED(hr = d2d_geometry_resolve_beziers(geometry)))

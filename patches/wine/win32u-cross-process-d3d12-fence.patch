@@ -1,0 +1,181 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine win32u: keep the timeline of a shared D3D12 fence in shared memory, so another process can open the fence and wait on it. The Fenix displays in GPU mode open a fence the simulator shares; without this the display process exits a few seconds after it starts.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/win32u/vulkan.c
++++ b/dlls/win32u/vulkan.c
+@@ -28,6 +28,10 @@
+ #include <dlfcn.h>
+ #include <pthread.h>
+ #include <unistd.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
+ #include <assert.h>
+ 
+ #include "ntstatus.h"
+@@ -255,8 +259,41 @@
+     reset_backlog[16];
+     uint32_t reset_backlog_count;
+     volatile LONG ref;
++    pid_t pid;
++    int fd;
+ };
+ 
++static struct d3d12_fence_timeline *d3d12_fence_timeline_create(void)
++{
++    struct d3d12_fence_timeline *t = MAP_FAILED;
++    pthread_mutexattr_t attr;
++    int fd = -1;
++
++#ifdef HAVE_MEMFD_CREATE
++    if ((fd = memfd_create( "wine-d3d12-fence", MFD_CLOEXEC )) != -1)
++    {
++        if (!ftruncate( fd, sizeof(*t) ))
++            t = mmap( NULL, sizeof(*t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0 );
++        if (t == MAP_FAILED)
++        {
++            close( fd );
++            fd = -1;
++        }
++    }
++#endif
++    if (t == MAP_FAILED && !(t = calloc( 1, sizeof(*t) ))) return NULL;
++
++    t->pid = getpid();
++    t->fd = fd;
++    t->ref = 1;
++    pthread_mutexattr_init( &attr );
++    pthread_mutexattr_setpshared( &attr, PTHREAD_PROCESS_SHARED );
++    pthread_mutexattr_setrobust( &attr, PTHREAD_MUTEX_ROBUST );
++    pthread_mutex_init( &t->mutex, &attr );
++    pthread_mutexattr_destroy( &attr );
++    return t;
++}
++
+ static void d3d12_fence_timeline_addref( struct d3d12_fence_timeline *t )
+ {
+     if (t) InterlockedIncrement( &t->ref );
+@@ -268,7 +305,13 @@
+     if (t && !InterlockedDecrement( &t->ref ))
+     {
+         pthread_mutex_destroy( &t->mutex );
+-        free( t );
++        if (t->fd == -1)
++        {
++            free( t );
++            return;
++        }
++        if (t->pid == getpid()) close( t->fd );
++        munmap( t, sizeof(*t) );
+     }
+ }
+ 
+@@ -293,8 +336,44 @@
+         struct d3d12_fence_timeline *t;
+         uint64_t pad;
+     };
++    uint32_t unix_pid;
++    int32_t fd;
++    uint64_t dev;
++    uint64_t ino;
+ };
+ 
++static void d3d12_fence_info_init( struct d3d12_fence_info *info, struct d3d12_fence_timeline *t )
++{
++    struct stat st;
++
++    info->type = 1;
++    info->pid = GetCurrentProcessId();
++    info->t = t;
++    info->unix_pid = t->pid;
++    info->fd = t->fd;
++    if (t->fd != -1 && !fstat( t->fd, &st ))
++    {
++        info->dev = st.st_dev;
++        info->ino = st.st_ino;
++    }
++}
++
++static struct d3d12_fence_timeline *d3d12_fence_timeline_open( const struct d3d12_fence_info *info )
++{
++    struct d3d12_fence_timeline *t = MAP_FAILED;
++    char path[64];
++    struct stat st;
++    int fd;
++
++    if (info->fd == -1 || !info->ino) return NULL;
++    snprintf( path, sizeof(path), "/proc/%u/fd/%d", info->unix_pid, info->fd );
++    if ((fd = open( path, O_RDWR | O_CLOEXEC )) == -1) return NULL;
++    if (!fstat( fd, &st ) && st.st_dev == info->dev && st.st_ino == info->ino && st.st_size >= sizeof(*t))
++        t = mmap( NULL, sizeof(*t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0 );
++    close( fd );
++    return t == MAP_FAILED ? NULL : t;
++}
++
+ struct semaphore
+ {
+     struct vulkan_semaphore obj;
+@@ -470,7 +549,8 @@
+ /* shared d3d12 fences helpers. */
+ static void d3d12_semaphore_lock( struct semaphore *semaphore )
+ {
+-    if (semaphore->info.t) pthread_mutex_lock( &semaphore->info.t->mutex );
++    if (semaphore->info.t && pthread_mutex_lock( &semaphore->info.t->mutex ) == EOWNERDEAD)
++        pthread_mutex_consistent( &semaphore->info.t->mutex );
+ }
+ 
+ static void d3d12_semaphore_unlock( struct semaphore *semaphore )
+@@ -4624,11 +4704,8 @@
+                 if (export_info->handleTypes & VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT)
+                 {
+                     WARN( "Creating d3d12 shared fence.\n" );
+-                    semaphore->info.type = 1;
+-                    semaphore->info.pid = GetCurrentProcessId();
+-                    semaphore->info.t = calloc( 1, sizeof(*semaphore->info.t) );
+-                    semaphore->info.t->ref = 1;
+-                    pthread_mutex_init( &semaphore->info.t->mutex, NULL );
++                    if ((semaphore->info.t = d3d12_fence_timeline_create()))
++                        d3d12_fence_info_init( &semaphore->info, semaphore->info.t );
+                 }
+                 export_info->handleTypes = get_host_external_semaphore_type();
+             }
+@@ -4748,6 +4825,7 @@
+     struct semaphore *semaphore = semaphore_from_handle( handle_info->semaphore );
+     struct vulkan_instance *instance = device->physical_device->instance;
+     struct d3d12_fence_info fence_info = { 0 };
++    struct d3d12_fence_timeline *mapped = NULL;
+     D3DKMT_HANDLE local, global = 0;
+     VkResult res = VK_SUCCESS;
+     HANDLE shared = NULL;
+@@ -4782,11 +4860,17 @@
+     TRACE( "fence_info type %d, pid %04x.\n", fence_info.type, fence_info.pid );
+     if (fence_info.type && fence_info.pid != GetCurrentProcessId())
+     {
+-        FIXME( "d3d12 fence from other process.\n" );
+-        memset( &semaphore->info, 0, sizeof(semaphore->info) );
++        if ((mapped = d3d12_fence_timeline_open( &fence_info )))
++            fence_info.t = mapped;
++        else
++        {
++            ERR( "Failed to map d3d12 fence from process %04x, fd %d.\n", fence_info.pid, fence_info.fd );
++            memset( &fence_info, 0, sizeof(fence_info) );
++            res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
++        }
+     }
+ 
+-    if ((fd_info.fd = d3dkmt_object_get_fd( local )) < 0) res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
++    if (!res && (fd_info.fd = d3dkmt_object_get_fd( local )) < 0) res = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+     if (!res && handle_info->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_D3D12_FENCE_BIT)
+     {
+         /* Recreate semaphore to make sure it has timeline type. */
+@@ -4836,6 +4920,8 @@
+         }
+     }
+ 
++    if (res && mapped) munmap( mapped, sizeof(*mapped) );
++
+     if (res || handle_info->flags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT)
+     {
+         /* FIXME: Should we still keep the temporary handles for vkGetSemaphoreWin32HandleKHR? */

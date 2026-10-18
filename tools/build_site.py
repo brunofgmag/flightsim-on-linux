@@ -10,7 +10,7 @@ OUT = ROOT / "docs"
 NAV = (
     ("index.html", "Home"),
     ("start.html", "Start here"),
-    ("proton-fenix.html", "Proton Fenix"),
+    ("proton-fs2024.html", "Proton FS2024"),
     ("rules.html", "Ground rules"),
     ("addons.html", "Add-ons"),
     ("ai.html", "With an AI"),

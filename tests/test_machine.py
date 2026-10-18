@@ -25,7 +25,7 @@ APPMANIFEST = '"AppState"\n{\n\t"appid"\t\t"2537590"\n\t"installdir"\t\t"MSFS202
 
 CONFIG = """
 "InstallConfigStore" { "Software" { "Valve" { "Steam" { "CompatToolMapping" {
-  "2537590" { "name" "Proton-Fenix-A320-test" "config" "" "priority" "250" }
+  "2537590" { "name" "Proton-FS2024-test" "config" "" "priority" "250" }
 } } } } }
 """
 
@@ -46,7 +46,7 @@ class FakeMachine:
         self.home = root / "home"
         self.steam = self.home / ".local/share/Steam"
         self.games = root / "games"
-        self.tool = self.steam / "compatibilitytools.d/Proton-Fenix-A320-test"
+        self.tool = self.steam / "compatibilitytools.d/Proton-FS2024-test"
         self.compatdata = self.games / "steamapps/compatdata/2537590"
         self.prefix = self.compatdata / "pfx"
         self.packages = root / "packages"
@@ -114,8 +114,8 @@ class DiscoverTest(unittest.TestCase):
     def test_proton_comes_from_config_info_and_its_name_from_config_vdf(self):
         found = self.fake.build().discover()
         self.assertEqual(found.proton, self.fake.tool)
-        self.assertEqual(found.compat_tool, "Proton-Fenix-A320-test")
-        self.assertTrue(found.proton_is_fenix)
+        self.assertEqual(found.compat_tool, "Proton-FS2024-test")
+        self.assertTrue(found.proton_is_fs2024)
 
     def test_community_follows_installed_packages_path_through_the_drive_letter(self):
         found = self.fake.build().discover()

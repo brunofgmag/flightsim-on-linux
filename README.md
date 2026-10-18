@@ -10,7 +10,7 @@ The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if 
 |---|---|
 | `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check`, `run`, `addon list`, `addon apply`, `addon check`, `addon undo` |
 | `bin/flightsim-on-linux-gui` | The same, through zenity or kdialog dialogs |
-| `proton/build-proton-fenix.sh` | Builds Proton Fenix A320 from a Proton-CachyOS release |
+| `proton/build-proton-fs2024.sh` | Builds Proton FS2024 from a Proton-CachyOS release, checks it and swaps it in |
 | `checks/` | Tests a Proton in a throwaway prefix |
 | `addons/` | One folder per add-on fix, with its apply, check and undo scripts; `addons/README.md` has the format |
 | `patches/wine/` | The Wine patches this project adds |
@@ -42,7 +42,7 @@ Fixes were found and measured on one machine: CachyOS, KDE Plasma on Wayland, an
 
 ## Credits
 
-Proton Fenix A320 is built on the [fenix-a320-linux-patch](https://github.com/marselnenaj/fenix-a320-linux-patch) overlay by its authors, on [Proton-CachyOS](https://github.com/CachyOS/proton-cachyos) and on [Wine](https://www.winehq.org/). This project downloads them from their own releases and doesn't redistribute them.
+Proton FS2024 is built on the [fenix-a320-linux-patch](https://github.com/marselnenaj/fenix-a320-linux-patch) overlay by its authors, on [Proton-CachyOS](https://github.com/CachyOS/proton-cachyos) and on [Wine](https://www.winehq.org/). This project downloads them from their own releases and doesn't redistribute them.
 
 Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.
 

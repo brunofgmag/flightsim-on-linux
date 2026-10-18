@@ -36,13 +36,13 @@ class Machine:
     ntsync_handles: int | None = None
 
     @property
-    def proton_is_fenix(self):
+    def proton_is_fs2024(self):
         settings = self.proton / "user_settings.py" if self.proton else None
         return bool(settings and settings.is_file() and "WINE_FENIX_HELPER_WINDOWS" in settings.read_text(errors="replace"))
 
     def as_dict(self):
         result = {name: getattr(self, name) for name in self.__dataclass_fields__}
-        result["proton_is_fenix"] = self.proton_is_fenix
+        result["proton_is_fs2024"] = self.proton_is_fs2024
         return plain(result)
 
 

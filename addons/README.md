@@ -9,7 +9,7 @@ A folder holds `addon.json` and three executable scripts: `apply`, `check` and `
 - `name`: what the reader sees.
 - `tested_version`: the add-on version the fix was measured with.
 - `tested_on`: the date of that measurement, like `2026-10-17`.
-- `needs`: any of `proton-fenix`, `simulator-closed` and `simulator-running`. `apply` and `undo` won't run until these hold.
+- `needs`: any of `proton-fs2024`, `simulator-closed` and `simulator-running`. `apply` and `undo` won't run until these hold.
 - `touches_addon_files`: `true` when the fix changes the add-on's own files. The CLI says so before it runs the fix, and `undo` has to restore those files.
 - `installed`: where to look for the add-on, as lists of relative globs under `prefix`, `base` (the folder that holds `UserCfg.opt`), `community` or `sim` (the simulator's install folder). The add-on counts as installed when any glob matches.
 
