@@ -1,0 +1,12 @@
+diff --git a/src/d3d11/d3d11_resource.cpp b/src/d3d11/d3d11_resource.cpp
+index 8f2bc99..88ff21a 100644
+--- a/src/d3d11/d3d11_resource.cpp
++++ b/src/d3d11/d3d11_resource.cpp
+@@ -123,6 +123,7 @@ namespace dxvk {
+         Logger::warn("D3D11DXGIKeyedMutex::ReleaseSync: Called without context locking enabled.");
+ 
+       D3D10DeviceLock lock = context->LockContext();
++      context->ExecuteFlush(GpuFlushType::ExplicitFlush, nullptr, false);
+       context->WaitForResource(*texture->GetImage(), DxvkCsThread::SynchronizeAll, D3D11_MAP_READ_WRITE, 0);
+     }
+ 

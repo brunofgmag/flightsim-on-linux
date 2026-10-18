@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+PARTS=(dotnet48 geometry dxvk exe_xml)
+for part in "${PARTS[@]}"; do
+  # shellcheck source=/dev/null
+  . "$HERE/parts/$part.sh"
+done
+
+failed=0
+for part in "${PARTS[@]}"; do
+  "${part}_check" || failed=1
+done
+exit "$failed"

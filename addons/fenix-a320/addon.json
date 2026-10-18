@@ -1,0 +1,10 @@
+{
+  "name": "Fenix A320, A319 and A321",
+  "tested_version": "2.4.1.0",
+  "tested_on": "2026-10-18",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/Program Files/FenixSim A320/deps/FenixBootstrapper.exe"]
+  }
+}

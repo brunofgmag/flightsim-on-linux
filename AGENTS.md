@@ -48,11 +48,12 @@ Go from cheap to expensive, and name a cause only after an observation that tell
 
 A fix is proven when its check passes with the fix and fails without it. Run the check, revert the fix, run the check again and see it fail, then restore the fix. A check that stays green either way proves nothing.
 
-For Proton FS2024 the check already exists: `bin/flightsim-on-linux proton check [<Proton folder>]` runs seven tests in a throwaway prefix, and `proton build` runs them before it swaps a new build in. A stock Proton-CachyOS fails all seven. The tray check needs an X11 display and the child-window check a Wayland session; "skipped" means that display wasn't available, not a failure.
+For Proton FS2024 the check already exists: `bin/flightsim-on-linux proton check [<Proton folder>]` runs ten tests in a throwaway prefix, and `proton build` runs them before it swaps a new build in. On the test machine (NVIDIA GPU, systemd-coredump) a stock Proton-CachyOS fails all ten; the fence check needs a GPU that `tools/discrete-gpu.py` can choose and the exit check also needs systemd-coredump, and both show as skipped without them. The tray check needs an X11 display and the child-window check a Wayland session; "skipped" means that display wasn't available, not a failure.
 
 ## 5. Where the knowledge lives
 
 - `site/pages/*.html`: the guides, the ground rules and the add-on list, written for people.
 - `proton/build-proton-fs2024.sh`: builds Proton FS2024 from a Proton-CachyOS release, the fenix-a320-linux-patch overlay patch and the patches in `patches/wine/`, runs the checks and installs it as `compatibilitytools.d/Proton-FS2024`, keeping the previous build in `~/.cache/flightsim-on-linux/previous`.
-- `checks/`: the Proton checks and their C sources.
+- `dxvk/build-dxvk-fenix.sh`: builds the `d3d11.dll` and `dxgi.dll` the Fenix A320 displays in GPU mode need from DXVK 6853015 and the patches in `patches/dxvk/`, runs `checks/check-dxvk.sh` and keeps the result in `~/.cache/flightsim-on-linux/dxvk-fenix`, with the previous build in `previous/`. `bin/flightsim-on-linux dxvk build` and `dxvk check [<folder>]` run them.
+- `checks/`: the Proton and DXVK checks and their C sources.
 - `fsol/`: the discovery and doctor code behind the CLI.

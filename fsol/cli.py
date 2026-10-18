@@ -49,6 +49,18 @@ def proton_check(args):
     run_script(ROOT / "checks" / "check-proton.sh", [str(target)])
 
 
+def dxvk_build(args):
+    run_script(ROOT / "dxvk" / "build-dxvk-fenix.sh", [])
+
+
+def dxvk_check(args):
+    run_script(ROOT / "checks" / "check-dxvk.sh", [str(args.dxvk or dxvk_output())])
+
+
+def dxvk_output():
+    return addons.cache_folder(os.environ) / "dxvk-fenix"
+
+
 def run_in_container(args):
     try:
         command, env = container.plan(machine.discover(), args.program, os.environ)
@@ -161,6 +173,13 @@ def parser():
     check = proton.add_parser("check", help="test a Proton in a throwaway prefix")
     check.add_argument("proton", nargs="?", type=Path, help="Proton folder, default the one the simulator uses")
     check.set_defaults(run=proton_check)
+
+    dxvk = commands.add_parser("dxvk", help="build or check the DXVK the Fenix A320 displays use in GPU mode").add_subparsers(dest="action", required=True)
+    dxvk_builder = dxvk.add_parser("build", help="build DXVK with the three Fenix patches, check it and keep it in the cache")
+    dxvk_builder.set_defaults(run=dxvk_build)
+    dxvk_checker = dxvk.add_parser("check", help="test a DXVK folder in a throwaway prefix")
+    dxvk_checker.add_argument("dxvk", nargs="?", type=Path, help="folder with d3d11.dll and dxgi.dll, default the last build")
+    dxvk_checker.set_defaults(run=dxvk_check)
 
     inside = commands.add_parser("run", help="run a Windows program inside the running simulator's container, with its environment")
     inside.add_argument("program", nargs=argparse.REMAINDER, help="[NAME=value ...] program.exe [arguments]")

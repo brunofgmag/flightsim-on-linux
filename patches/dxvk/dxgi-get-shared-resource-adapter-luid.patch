@@ -1,0 +1,64 @@
+diff --git a/src/dxgi/dxgi_factory.cpp b/src/dxgi/dxgi_factory.cpp
+index d89409e..5a328a1 100644
+--- a/src/dxgi/dxgi_factory.cpp
++++ b/src/dxgi/dxgi_factory.cpp
+@@ -15,6 +15,29 @@ namespace dxvk {
+   static dxvk::mutex               s_globalHDRStateMutex;
+   static DXVK_VK_GLOBAL_HDR_STATE  s_globalHDRState{};
+ 
++  static bool CanQuerySharedResource(
++    const Rc<DxvkAdapter>&      Adapter,
++          HANDLE                hResource) {
++    if (!Adapter->kmtLocal())
++      return false;
++
++    D3DKMT_CREATEDEVICE create = { };
++    create.hAdapter = Adapter->kmtLocal();
++
++    if (D3DKMTCreateDevice(&create))
++      return false;
++
++    D3DKMT_QUERYRESOURCEINFOFROMNTHANDLE query = { };
++    query.hDevice = create.hDevice;
++    query.hNtHandle = hResource;
++    bool found = !D3DKMTQueryResourceInfoFromNtHandle(&query);
++
++    D3DKMT_DESTROYDEVICE destroy = { };
++    destroy.hDevice = create.hDevice;
++    D3DKMTDestroyDevice(&destroy);
++    return found;
++  }
++
+   DxgiVkFactory::DxgiVkFactory(DxgiFactory* pFactory)
+   : m_factory(pFactory) {
+ 
+@@ -418,8 +441,27 @@ namespace dxvk {
+   HRESULT STDMETHODCALLTYPE DxgiFactory::GetSharedResourceAdapterLuid(
+           HANDLE                hResource,
+           LUID*                 pLuid) {
+-    Logger::err("DxgiFactory::GetSharedResourceAdapterLuid: Not implemented");
+-    return E_NOTIMPL;
++    if (pLuid == nullptr)
++      return DXGI_ERROR_INVALID_CALL;
++
++    for (uint32_t adapterId = 0; adapterId < m_instance->adapterCount(); adapterId++) {
++      if (!CanQuerySharedResource(m_instance->enumAdapters(adapterId), hResource))
++        continue;
++
++      Com<IDXGIAdapter> adapter;
++      HRESULT hr = EnumAdapters(adapterId, &adapter);
++
++      if (FAILED(hr))
++        return hr;
++
++      DXGI_ADAPTER_DESC desc;
++      adapter->GetDesc(&desc);
++      *pLuid = desc.AdapterLuid;
++      return S_OK;
++    }
++
++    Logger::warn(str::format("DxgiFactory::GetSharedResourceAdapterLuid: Failed to query resource: ", hResource));
++    return E_INVALIDARG;
+   }
+   
+   

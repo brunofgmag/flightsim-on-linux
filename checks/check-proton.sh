@@ -19,11 +19,6 @@ TOOL="$(readlink -f "$1")"
 [ -x "$TOOL/files/bin/wine" ] || die "$TOOL is not a Proton folder (no files/bin/wine)"
 command -v x86_64-w64-mingw32-gcc > /dev/null || die "missing program: x86_64-w64-mingw32-gcc (the MinGW cross compiler)"
 
-windows_path() {
-  local path="$1"
-  echo "Z:${path//\//\\}"
-}
-
 fetch_probe() {
   local target="$CACHE/downloads/loader-case-probe-$OVERLAY_TAG.c"
   mkdir -p "$CACHE/downloads"
@@ -33,10 +28,6 @@ fetch_probe() {
   fi
   [ "$(sha256sum "$target" | cut -d' ' -f1)" = "$PROBE_SHA256" ] || die "$target does not match the pinned sha256; delete it and run again"
   echo "$target"
-}
-
-run_wine() {
-  timeout 120 "${RUNNER[@]}" "$TOOL/files/bin/wine" "$@" 2> /dev/null | tr -d '\r'
 }
 
 run_wine_wayland() {
@@ -52,8 +43,35 @@ wayland_socket() {
   [ -S "$socket" ]
 }
 
-stop_prefix() {
-  timeout 60 "${RUNNER[@]}" "$TOOL/files/bin/wineserver" -k > /dev/null 2>&1 || true
+install_gpu_libraries() {
+  local system32="$WINEPREFIX/drive_c/windows/system32" dll
+  for dll in d3d10core d3d11 dxgi; do
+    cp "$TOOL/files/lib/wine/dxvk/x86_64-windows/$dll.dll" "$system32/$dll.dll"
+  done
+  for dll in d3d12 d3d12core; do
+    cp "$TOOL/files/lib/wine/vkd3d-proton/x86_64-windows/$dll.dll" "$system32/$dll.dll"
+  done
+}
+
+run_wine_gpu() {
+  local gpu="$1"
+  shift
+  local -x WINEDLLOVERRIDES="$WINEDLLOVERRIDES;d3d11,d3d10core,dxgi,d3d12,d3d12core=n"
+  local -x DXVK_LOG_PATH=none
+  if [ -n "$gpu" ]; then
+    local -x DXVK_FILTER_DEVICE_NAME="$gpu" VKD3D_FILTER_DEVICE_NAME="$gpu"
+  fi
+  run_wine "$@"
+}
+
+core_dumps_visible() {
+  command -v coredumpctl > /dev/null \
+    && grep -q systemd-coredump /proc/sys/kernel/core_pattern 2> /dev/null \
+    && [ "$(ulimit -H -c)" != 0 ]
+}
+
+count_core_dumps_since() {
+  coredumpctl list --since "$1" --no-legend --no-pager 2> /dev/null | grep -c -F "$TOOL/" || true
 }
 
 cleanup() {
@@ -62,12 +80,7 @@ cleanup() {
 }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/flightsim-on-linux-check.XXXXXX")"
-RUNTIME="$(find_runtime)"
-if [ -n "$RUNTIME" ]; then
-  RUNNER=("$RUNTIME" --)
-else
-  RUNNER=(env)
-fi
+set_runner
 trap cleanup EXIT
 
 export WINEPREFIX="$WORK/pfx"
@@ -140,6 +153,77 @@ status=0
 output="$(run_wine "$(windows_path "$WORK/d2d1-non-finite-close-test.exe")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "d2d1 geometry with NaN coordinates closes (Fenix displays freezing)" "$verdict" "${output:-no output}"
+
+status=0
+output="$(run_wine "$(windows_path "$WORK/d2d1-bezier-ceiling-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "d2d1 coincident Bezier curves close fast (Fenix displays freezing)" "$verdict" "${output:-no output}"
+
+FENCE_CHECK="D3D12 fence shared between processes (Fenix displays in GPU mode)"
+EXIT_CHECK="exit after sharing a D3D12 fence, without a crash (Fenix displays leaving core dumps)"
+FENCE_RUNS=3
+CORE_DUMP_DEADLINE_SECONDS=5
+
+report_fence_checks() {
+  report "$FENCE_CHECK" "$1" "$2"
+  report "$EXIT_CHECK" "$1" "$2"
+}
+
+wait_for_core_dumps() {
+  local since="$1" deadline=$((SECONDS + CORE_DUMP_DEADLINE_SECONDS)) dumps
+  while :; do
+    dumps="$(count_core_dumps_since "$since")"
+    if [ "$dumps" -gt 0 ] || [ "$SECONDS" -ge "$deadline" ]; then
+      break
+    fi
+    sleep 0.2
+  done
+  echo "$dumps"
+}
+
+report_exit_check() {
+  local failed_runs="$1" since="$2" output="$3" dumps verdict=FAIL clean
+  if ! core_dumps_visible; then
+    report "$EXIT_CHECK" skipped "A crash while a process exits leaves its exit status at 0 and shows up only as a core dump.
+This check reads them from coredumpctl, which needs systemd-coredump and a core size limit above 0."
+    return
+  fi
+  dumps="$(wait_for_core_dumps "$since")"
+  clean="$(grep -c 'child exit code .* ok$' <<< "$output" || true)"
+  [ "$failed_runs" -eq 0 ] && [ "$dumps" -eq 0 ] && [ "$clean" -eq "$FENCE_RUNS" ] && verdict=ok
+  report "$EXIT_CHECK" "$verdict" "$FENCE_RUNS runs, $failed_runs with a non-zero exit status, $dumps core dump(s) of this Proton since the first one started
+$output"
+}
+
+run_fence_test() {
+  local gpu="$1" status failed_runs=0 since output outputs="" run fence_verdict=ok
+  install_gpu_libraries
+  since="$(date '+%F %T')"
+  for run in $(seq "$FENCE_RUNS"); do
+    status=0
+    output="$(ulimit -c "$(ulimit -H -c)"; run_wine_gpu "$gpu" "$(windows_path "$WORK/d3d12-cross-process-fence-test.exe")")" || status=$?
+    output="${output:-no output}"
+    [ "$status" -eq 0 ] || failed_runs=$((failed_runs + 1))
+    grep -q 'fence at .* ok$' <<< "$output" || fence_verdict=FAIL
+    outputs+="run $run, exit status $status:
+$output
+"
+  done
+  outputs="${outputs%$'\n'}"
+  report "$FENCE_CHECK" "$fence_verdict" "$outputs"
+  report_exit_check "$failed_runs" "$since" "$outputs"
+}
+
+check_shared_fence() {
+  local gpu status=0
+  gpu="$(python3 -I "$HERE/../tools/discrete-gpu.py" 2>&1)" || status=$?
+  case "$status" in
+    0) run_fence_test "$gpu" ;;
+    2 | 3) report_fence_checks skipped "$gpu" ;;
+    *) report_fence_checks FAIL "$gpu" ;;
+  esac
+}
+check_shared_fence
 
 name="win32u child window drawn by another process (WebView2 in SayIntentions, GSX, REX)"
 if wayland_socket; then

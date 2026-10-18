@@ -1,0 +1,176 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine d2d1: stop splitting overlapping Bezier curves after 1500 splits per Close and leave the rest unresolved. Coincident curves took seconds to split and the Fenix displays stalled; the original geometry is saved to the temp folder for the first three cases.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/d2d1/geometry.c
++++ b/dlls/d2d1/geometry.c
+@@ -3879,6 +3879,141 @@
+     return TRUE;
+ }
+ 
++#define D2D_MAX_BEZIER_SPLITS           1500
++#define D2D_MAX_SPLIT_LIMIT_DUMPS       3
++#define D2D_SPLIT_LIMIT_DUMP_CHUNK      256
++
++struct d2d_dump_writer
++{
++    HANDLE file;
++    char buffer[4096];
++    size_t length;
++};
++
++static void d2d_dump_flush(struct d2d_dump_writer *writer)
++{
++    DWORD written;
++
++    if (writer->length)
++        WriteFile(writer->file, writer->buffer, writer->length, &written, NULL);
++    writer->length = 0;
++}
++
++static void d2d_dump_text(struct d2d_dump_writer *writer, const char *text)
++{
++    size_t length = strlen(text);
++
++    if (writer->length + length > sizeof(writer->buffer))
++        d2d_dump_flush(writer);
++    memcpy(writer->buffer + writer->length, text, length);
++    writer->length += length;
++}
++
++static void d2d_dump_word(struct d2d_dump_writer *writer, UINT32 word)
++{
++    static const char digits[] = "0123456789abcdef";
++    char text[10];
++    unsigned int i;
++
++    text[0] = ' ';
++    for (i = 0; i < 8; ++i)
++        text[1 + i] = digits[(word >> (28 - 4 * i)) & 0xf];
++    text[9] = 0;
++    d2d_dump_text(writer, text);
++}
++
++static void d2d_dump_number(struct d2d_dump_writer *writer, UINT32 number)
++{
++    char text[12];
++    unsigned int i = sizeof(text) - 1;
++
++    text[i] = 0;
++    do
++        text[--i] = '0' + number % 10;
++    while (number /= 10);
++    text[--i] = ' ';
++    d2d_dump_text(writer, &text[i]);
++}
++
++static void d2d_dump_figure_segments(struct d2d_dump_writer *writer, const struct d2d_figure *figure)
++{
++    const uint8_t *data = figure->segments.data;
++    const struct d2d_segment *segment;
++    size_t item_size, offset, count, i, j;
++    const UINT32 *words;
++
++    for (i = 0; i < figure->segments.count; ++i)
++    {
++        segment = (const struct d2d_segment *)data;
++        item_size = d2d_figure_get_segment_data_size(segment->type);
++        words = (const UINT32 *)(segment + 1);
++        for (offset = 0; offset < segment->count; offset += count)
++        {
++            count = min(segment->count - offset, D2D_SPLIT_LIMIT_DUMP_CHUNK);
++            d2d_dump_text(writer, "seg");
++            d2d_dump_number(writer, segment->type);
++            d2d_dump_number(writer, segment->flags);
++            d2d_dump_number(writer, count);
++            for (j = 0; j < count * item_size / sizeof(*words); ++j)
++                d2d_dump_word(writer, words[(offset * item_size) / sizeof(*words) + j]);
++            d2d_dump_text(writer, "\n");
++        }
++        data += sizeof(*segment) + segment->count * item_size;
++    }
++}
++
++static BOOL d2d_geometry_dump_original(const struct d2d_geometry *geometry, WCHAR *path)
++{
++    static LONG dump_count;
++    struct d2d_dump_writer writer;
++    const struct d2d_figure *figure;
++    LONG number;
++    DWORD length;
++    size_t i;
++
++    if ((number = InterlockedIncrement(&dump_count)) > D2D_MAX_SPLIT_LIMIT_DUMPS)
++        return FALSE;
++    if (!(length = GetTempPathW(MAX_PATH, path)) || length + 48 > MAX_PATH)
++        return FALSE;
++    wsprintfW(path + length, L"d2d1-teto-%lu-%ld.txt", GetCurrentProcessId(), number);
++    writer.file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
++    if (writer.file == INVALID_HANDLE_VALUE)
++        return FALSE;
++    writer.length = 0;
++
++    d2d_dump_text(&writer, "fill");
++    d2d_dump_number(&writer, geometry->u.path.fill_mode);
++    d2d_dump_text(&writer, "\n");
++    for (i = 0; i < geometry->u.path.figure_count; ++i)
++    {
++        figure = &geometry->u.path.figures[i];
++        d2d_dump_text(&writer, "figure");
++        d2d_dump_word(&writer, *(const UINT32 *)&figure->vertices[0].x);
++        d2d_dump_word(&writer, *(const UINT32 *)&figure->vertices[0].y);
++        d2d_dump_number(&writer, figure->flags);
++        d2d_dump_text(&writer, "\n");
++        d2d_dump_figure_segments(&writer, figure);
++    }
++    d2d_dump_flush(&writer);
++    CloseHandle(writer.file);
++    return TRUE;
++}
++
++static void d2d_geometry_report_split_limit(const struct d2d_geometry *geometry)
++{
++    static LONG report_count;
++    WCHAR path[MAX_PATH];
++
++    if (!d2d_geometry_dump_original(geometry, path))
++        path[0] = 0;
++    if (InterlockedIncrement(&report_count) <= 10)
++        ERR("Geometry %p needs more than %u Bezier splits; leaving the overlapping curves unresolved, original saved to %s.\n",
++                geometry, D2D_MAX_BEZIER_SPLITS, debugstr_w(path));
++    else
++        WARN("Geometry %p needs more than %u Bezier splits; leaving the overlapping curves unresolved, original saved to %s.\n",
++                geometry, D2D_MAX_BEZIER_SPLITS, debugstr_w(path));
++}
++
+ static HRESULT d2d_geometry_resolve_beziers(struct d2d_geometry *geometry)
+ {
+     struct d2d_segment_idx idx_p, idx_q;
+@@ -3886,6 +4021,7 @@
+     const D2D1_POINT_2F *p[3];
+     struct d2d_figure *figure;
+     size_t bezier_idx, i;
++    unsigned int split_count = 0;
+ 
+     if (!d2d_geometry_get_first_bezier_segment_idx(geometry, &idx_p))
+         return S_OK;
+@@ -3898,6 +4034,11 @@
+         {
+             while (d2d_geometry_check_bezier_overlap(geometry, &idx_p, &idx_q))
+             {
++                if (++split_count > D2D_MAX_BEZIER_SPLITS)
++                {
++                    d2d_geometry_report_split_limit(geometry);
++                    goto splits_done;
++                }
+                 if (fabsf(d2d_geometry_bezier_ccw(geometry, &idx_q)) > fabsf(d2d_geometry_bezier_ccw(geometry, &idx_p)))
+                 {
+                     if (!d2d_geometry_split_bezier(geometry, &idx_q))
+@@ -3918,6 +4059,7 @@
+         }
+     }
+ 
++splits_done:
+     for (i = 0; i < geometry->u.path.figure_count; ++i)
+     {
+         if (geometry->u.path.figures[i].flags & D2D_FIGURE_FLAG_HOLLOW)

@@ -38,3 +38,25 @@ for node in tree.body:
         for key, value in ast.literal_eval(node.value).items():
             print(f"{key}={value}")' "$TOOL/user_settings.py")
 }
+
+windows_path() {
+  local path="$1"
+  echo "Z:${path//\//\\}"
+}
+
+run_wine() {
+  timeout 120 "${RUNNER[@]}" "$TOOL/files/bin/wine" "$@" 2> /dev/null | tr -d '\r'
+}
+
+stop_prefix() {
+  timeout 60 "${RUNNER[@]}" "$TOOL/files/bin/wineserver" -k > /dev/null 2>&1 || true
+}
+
+set_runner() {
+  RUNTIME="$(find_runtime)"
+  if [ -n "$RUNTIME" ]; then
+    RUNNER=("$RUNTIME" --)
+  else
+    RUNNER=(env)
+  fi
+}

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fenix A320 · Flightsim on Linux</title>
+  <meta name="description" content="How to run the Fenix A320, A319 and A321 in MSFS 2024 under Proton: the installer inside gamescope, .NET Framework 4.8 for the Fenix programs only, the geometry library and the DXVK the displays need, and how to undo it all.">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Fenix A320, A319 and A321</h1>
+<p class="lead">Tested with Fenix 2.4.1.0 on 18 October 2026. One command sets up the prefix for the Fenix, and another proves it is set up. <span class="tag warn">touches add-on files</span>: it adds files to the Fenix <code>deps</code> folder and puts back what was there when you undo it.</p>
+
+<h2>Before you start</h2>
+<p>The Fenix needs <a href="proton-fs2024.html">Proton FS2024</a>. Without it the aircraft won't power up, and the displays leak memory, lose frame rate within minutes and freeze. Pick Proton FS2024 for the simulator in Steam, and start the simulator once with it before you go on.</p>
+<p>Close the simulator for every step on this page except the check and the last section.</p>
+
+<h2>Install the Fenix</h2>
+<p>The Fenix Installer is a WebView2 window, and under Wine it gets no mouse pointer or keyboard unless it runs inside gamescope. Download the Fenix Installer from <a href="https://fenixsim.com">fenixsim.com</a> and run its setup once in the simulator's prefix:</p>
+<pre><code>protontricks-launch --no-term --appid 2537590 ~/Downloads/FenixInstaller-Setup.exe</code></pre>
+<p>Use the name of the file you downloaded. The setup installs the installer and opens it, and that first window gets no mouse pointer. Close it. From then on, open the installer with:</p>
+<pre><code>~/flightsim-on-linux/addons/fenix-a320/installer</code></pre>
+<p>It needs <code>gamescope</code> and <code>protontricks</code>, refuses to start while the simulator runs, and opens the installer in a gamescope window the size of the installer. Each click takes a second or more to register. Sign in, install the aircraft, then close the installer. If your machine has two GPUs, the script asks gamescope for the dedicated one.</p>
+
+<h2>Choose how the displays draw</h2>
+<p>The Fenix draws its displays either on the GPU, its default, or on the CPU. On the test machine both work. The setup below reads the mode from the Fenix settings file, which exists once you have loaded a Fenix aircraft in the simulator. If the check says <code>fenixConfig.xml</code> is missing, load one, quit and run the setup again.</p>
+<p>GPU mode needs a DXVK with three fixes in the Fenix <code>deps</code> folder: the adapter of a shared texture, a keyed mutex that waits for what the other process drew, and a wait that gives up when its timeout runs out. Build it once. It takes about two minutes and needs <code>meson</code>, <code>ninja</code>, <code>glslang</code> and the MinGW-w64 cross compiler:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux dxvk build</code></pre>
+<p>It downloads DXVK, applies the fixes, compiles <code>d3d11.dll</code> and <code>dxgi.dll</code>, tests them in a throwaway prefix and keeps them in <code>~/.cache/flightsim-on-linux/dxvk-fenix</code>. If a test fails, or can't run on your machine, nothing is kept.</p>
+<p>CPU mode needs no DXVK. In the Fenix settings, tick <em>USE DISPLAY SAFE MODE</em> and <em>FORCE SAFE MODE CPU RENDERING</em> and apply. The fenix-a320-linux-patch project, which drew its displays on the CPU, says the weather radar doesn't work that way.</p>
+
+<h2>Set up the prefix</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply fenix-a320</code></pre>
+<p>It does four things, skips any that are already done, and then runs the check below:</p>
+<ol>
+  <li>It installs .NET Framework 4.8 for the Fenix programs only. The Fenix runner, the bootstrapper and the system, CDU and display programs need Microsoft's .NET. On Wine's own .NET replacement, wine-mono, they spin or quit within half a second. The command downloads the .NET 4.8 and 4.0 installers from Microsoft, checks them against pinned hashes, installs 4.8 and Microsoft's <code>mscoree.dll</code>, and tells Wine to use them for those five programs only. Every other .NET program in the prefix stays on wine-mono, which is also told to ignore the Microsoft libraries now in the prefix. Without that, Lorby AAO crashed when it started.</li>
+  <li>It builds the geometry library. Wine's Direct2D ignores line joins, so the route line escapes the navigation display. Proton FS2024 borrows only the geometry from Microsoft's own Direct2D, in the display program only. The command downloads the Windows 7 update that holds it and Microsoft's patching library, rebuilds <code>d2d1_geometry.dll</code> with a small helper from the fenix-a320-linux-patch project, checks every step against a known hash and puts the result in <code>system32</code>. Microsoft's files are never part of this repository.</li>
+  <li>It puts the DXVK in place. In GPU mode it copies the DXVK you built into <code>deps</code>. In CPU mode it copies nothing, and puts back the files it replaced if you used GPU mode before. With two GPUs, it also adds a line to <code>deps/dxvk.conf</code> naming the dedicated one. The display program creates Direct3D devices even in CPU mode, and on the test machine DXVK picked the integrated GPU and the displays stayed dark. With one GPU it adds no filter.</li>
+  <li>It makes sure the simulator starts the Fenix. The simulator opens the Fenix bootstrapper from <code>exe.xml</code>, and the bootstrapper refuses to run any other way. The Fenix installer writes that entry. The command adds it only if it is missing, and leaves every other line of the file as it was.</li>
+</ol>
+<p>Before changing anything it keeps a copy of what was there in <code>compatdata/2537590/flightsim-on-linux-backup/fenix-a320</code>. The Windows version of the prefix comes out the same as it went in.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fenix-a320</code></pre>
+<p>It prints one line per thing it looked at, each starting with <code>ok</code> or <code>FAIL</code>, and every <code>FAIL</code> says what to run. It changes nothing, so you can run it with the simulator open. A Fenix update can replace the files in <code>deps</code>. Run the check after one.</p>
+
+<h2>Undo it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo fenix-a320</code></pre>
+<p>It removes the bootstrapper entry if the command added it, puts back the <code>deps</code> files and <code>system32</code> files it replaced, and stops the Fenix programs from using Microsoft's .NET. .NET 4.8 stays installed, and wine-mono keeps ignoring the Microsoft libraries: with 4.8 in the prefix, letting wine-mono load them makes other add-ons crash.</p>
+
+<h2>Optional: less video memory for the displays</h2>
+<p>This isn't needed to fly, and it only helped because the test machine ran short of video memory in 4K. In CPU mode with <code>&lt;multithread&gt;true&lt;/multithread&gt;</code>, the display program created 13 Direct3D devices and used 622 MiB of the RTX 4080. With <code>false</code> it created 2 and used 208 MiB, and the displays didn't look any slower. No setting in the Fenix window was found for it. With the simulator closed, edit the value in <code>C:\ProgramData\Fenix\FenixSim A320\fenixConfig.xml</code> inside the prefix. Keep a copy of the file first.</p>
+
+<h2>If the aircraft has no systems after loading</h2>
+<p>Rarely, the Fenix runner quits a few seconds after it opens. On the test machine it happened once in 24 starts between 17 and 18 October 2026, and once before that, on 16 October, under gamescope with the X11 driver, so it isn't tied to Wine's Wayland driver. The bootstrapper keeps running without it, and the aircraft has no systems. The Fenix crash log shows an "invalid handle" error (<code>0xc0000008</code>) as the runner starts. Go back to the simulator's main menu and start the flight again in a Fenix. The bootstrapper then opens the runner again, without restarting the simulator. The cause hasn't been proven. It looks like a race inside the Fenix itself, and nothing in the Linux setup has been found to fix it.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

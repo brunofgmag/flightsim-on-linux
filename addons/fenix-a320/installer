@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+ROOT="${FSOL_ROOT:-$(cd "$HERE/../.." && pwd)}"
+CLI="${FSOL_CLI:-$ROOT/bin/flightsim-on-linux}"
+DISCRETE_GPU="${FSOL_DISCRETE_GPU:-$ROOT/tools/discrete-gpu.py}"
+APPID=2537590
+FENIX_DOWNLOADS="https://fenixsim.com"
+
+die() {
+  echo "fenix installer: $*" >&2
+  exit 1
+}
+
+require_programs() {
+  local missing=() program
+  for program in gamescope protontricks-launch; do
+    command -v "$program" > /dev/null || missing+=("$program")
+  done
+  [ "${#missing[@]}" -eq 0 ] || die "missing program: ${missing[*]} (install gamescope and protontricks from your distribution)"
+}
+
+require_closed() {
+  if pgrep -f 'FlightSimulator2024[.]exe' > /dev/null; then
+    die "close Microsoft Flight Simulator 2024 first; the Fenix Installer runs alone in the prefix"
+  fi
+  if pgrep -f 'FenixApp[.]exe' > /dev/null; then
+    die "the Fenix Installer is already open"
+  fi
+}
+
+prefix_path() {
+  "$CLI" machine --json | python3 -I -c 'import json, sys; print(json.load(sys.stdin).get("prefix") or "")'
+}
+
+preferred_device() {
+  local errors status=0 device message
+  errors="$(mktemp)"
+  device="$("$DISCRETE_GPU" --vk-device 2> "$errors")" || status=$?
+  message="$(tr '\n' ' ' < "$errors")"
+  rm -f "$errors"
+  [ "$status" -eq 0 ] || die "cannot choose the GPU for the installer: ${message:-$DISCRETE_GPU exited with $status}"
+  echo "$device"
+}
+
+require_programs
+require_closed
+
+prefix="$(prefix_path)"
+[ -n "$prefix" ] || die "$CLI machine finds no simulator prefix; run it and read what it reports"
+app_dir="$prefix/drive_c/users/steamuser/AppData/Local/FenixApp/current"
+[ -f "$app_dir/FenixApp.exe" ] || die "FenixApp.exe is not in $app_dir; download the Fenix Installer from $FENIX_DOWNLOADS and run it once"
+
+device="$(preferred_device)"
+options=()
+if [ -n "$device" ]; then
+  options=(--prefer-vk-device "$device")
+fi
+
+cd "$app_dir"
+exec env -u WAYLAND_DISPLAY gamescope "${options[@]}" -W 1333 -H 1000 -w 1200 -h 900 -- \
+  protontricks-launch --no-term --appid "$APPID" ./FenixApp.exe

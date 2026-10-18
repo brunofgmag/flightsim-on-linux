@@ -1,0 +1,114 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine win32u: stop the signaller thread of a shared D3D12 fence from an atexit handler, before the NVIDIA driver runs its destructors. Without it every process that used such a fence crashed with SIGSEGV while exiting, and the Fenix display left a core dump each time.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/win32u/vulkan.c
++++ b/dlls/win32u/vulkan.c
+@@ -824,6 +824,90 @@
+     return NULL;
+ }
+ 
++struct signaller_entry
++{
++    struct list entry;
++    struct vulkan_device *device;
++};
++
++#define SIGNALLER_EXIT_LOCK_TIMEOUT_SEC 1
++#define SIGNALLER_EXIT_JOIN_TIMEOUT_SEC 2
++
++static pthread_mutex_t signaller_entries_mutex = PTHREAD_MUTEX_INITIALIZER;
++static struct list signaller_entries = LIST_INIT( signaller_entries );
++static pthread_once_t signaller_atexit_once = PTHREAD_ONCE_INIT;
++
++static struct timespec deadline_after( time_t seconds )
++{
++    struct timespec deadline;
++
++    clock_gettime( CLOCK_REALTIME, &deadline );
++    deadline.tv_sec += seconds;
++    return deadline;
++}
++
++static BOOL signaller_stop_at_exit( struct vulkan_device *device )
++{
++    struct timespec deadline = deadline_after( SIGNALLER_EXIT_LOCK_TIMEOUT_SEC );
++
++    if (pthread_mutex_timedlock( &device->signaller_mutex, &deadline )) return FALSE;
++    device->stop = 1;
++    signal_timeline_sem( device, device->sem_poll_update.sem, &device->sem_poll_update.value );
++    pthread_mutex_unlock( &device->signaller_mutex );
++
++    deadline = deadline_after( SIGNALLER_EXIT_JOIN_TIMEOUT_SEC );
++    if (pthread_timedjoin_np( device->signaller_thread, NULL, &deadline )) return FALSE;
++    device->signaller_thread = 0;
++    return TRUE;
++}
++
++static void signaller_exit_handler(void)
++{
++    struct signaller_entry *entry, *next;
++    struct timespec deadline = deadline_after( SIGNALLER_EXIT_LOCK_TIMEOUT_SEC );
++
++    if (pthread_mutex_timedlock( &signaller_entries_mutex, &deadline )) return;
++    LIST_FOR_EACH_ENTRY_SAFE( entry, next, &signaller_entries, struct signaller_entry, entry )
++    {
++        if (!signaller_stop_at_exit( entry->device )) continue;
++        list_remove( &entry->entry );
++        free( entry );
++    }
++    pthread_mutex_unlock( &signaller_entries_mutex );
++}
++
++static void signaller_install_exit_handler(void)
++{
++    atexit( signaller_exit_handler );
++}
++
++static void signaller_track_device( struct vulkan_device *device )
++{
++    struct signaller_entry *entry;
++
++    if (!(entry = malloc( sizeof(*entry) ))) return;
++    entry->device = device;
++    pthread_once( &signaller_atexit_once, signaller_install_exit_handler );
++    pthread_mutex_lock( &signaller_entries_mutex );
++    list_add_tail( &signaller_entries, &entry->entry );
++    pthread_mutex_unlock( &signaller_entries_mutex );
++}
++
++static void signaller_untrack_device( struct vulkan_device *device )
++{
++    struct signaller_entry *entry;
++
++    pthread_mutex_lock( &signaller_entries_mutex );
++    LIST_FOR_EACH_ENTRY( entry, &signaller_entries, struct signaller_entry, entry )
++    {
++        if (entry->device != device) continue;
++        list_remove( &entry->entry );
++        free( entry );
++        break;
++    }
++    pthread_mutex_unlock( &signaller_entries_mutex );
++}
++
+ static void register_sem_poll( struct vulkan_device *device, struct semaphore *semaphore )
+ {
+     pthread_mutex_lock( &device->signaller_mutex );
+@@ -844,6 +928,8 @@
+             debug_level = 0;
+         if (pthread_create( &device->signaller_thread, NULL, signaller_worker, device ))
+             ERR( "Failed to create signaller_worker.\n" );
++        else
++            signaller_track_device( device );
+         WARN( "d3d12 fence used, created signaller worker.\n" );
+     }
+     assert( !semaphore->poll_entry.next );
+@@ -1621,6 +1707,7 @@
+ 
+     if (!device) return;
+ 
++    if (device->signaller_thread) signaller_untrack_device( device );
+     if (device->signaller_thread)
+     {
+         TRACE( "Shutting down signaller thread.\n" );

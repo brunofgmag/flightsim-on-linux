@@ -161,6 +161,12 @@ def describe(addon, found, state):
     }
 
 
+def cache_folder(environ):
+    if environ.get("FSOL_CACHE"):
+        return Path(environ["FSOL_CACHE"])
+    return Path(environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "flightsim-on-linux"
+
+
 def script_environment(addon, found, cli, base=os.environ):
     values = {
         "FSOL_ADDON": addon.id,
@@ -175,6 +181,7 @@ def script_environment(addon, found, cli, base=os.environ):
         "FSOL_PACKAGES": found.packages,
         "FSOL_COMMUNITY": found.community,
         "FSOL_SIM_RUNNING": "1" if found.sim_running else "0",
+        "FSOL_CACHE": cache_folder(base),
     }
     env = dict(base)
     env.update({key: str(value) for key, value in values.items() if value is not None})

@@ -160,6 +160,21 @@ class ApplyTest(AddonTestCase):
         found = self.fake.discover()
         self.assertIn(f"  {found.prefix}|{found.community}|{found.base}|{found.proton}|0|demo", output)
 
+    def test_scripts_get_the_cache_folder_from_fsol_cache_or_the_xdg_cache_home(self):
+        self.addon(apply='#!/bin/sh\necho "cache=$FSOL_CACHE"\ntouch "$FSOL_PREFIX/fixed"\n')
+        with mock.patch.dict(os.environ, {"FSOL_CACHE": "/somewhere/cache", "XDG_CACHE_HOME": "/xdg"}):
+            _, own = self.cli("addon", "apply", "demo")
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": "/xdg"}):
+            os.environ.pop("FSOL_CACHE", None)
+            _, xdg = self.cli("addon", "apply", "demo")
+        with mock.patch.dict(os.environ, {"HOME": "/home/someone"}):
+            os.environ.pop("FSOL_CACHE", None)
+            os.environ.pop("XDG_CACHE_HOME", None)
+            _, home = self.cli("addon", "apply", "demo")
+        self.assertIn("  cache=/somewhere/cache", own)
+        self.assertIn("  cache=/xdg/flightsim-on-linux", xdg)
+        self.assertIn("  cache=/home/someone/.cache/flightsim-on-linux", home)
+
     def test_an_unknown_addon_is_an_error(self):
         code, _ = self.cli("addon", "apply", "nothing")
         self.assertEqual(code, 2)

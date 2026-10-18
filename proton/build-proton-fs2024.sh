@@ -24,8 +24,10 @@ PATCHES=(
   "$ROOT/patches/wine/winewayland-opaque-xrgb.patch"
   "$ROOT/patches/wine/gdiplus-font-family-after-substitution.patch"
   "$ROOT/patches/wine/win32u-cross-process-d3d12-fence.patch"
+  "$ROOT/patches/wine/win32u-signaller-stops-at-exit.patch"
   "$ROOT/patches/wine/d2d1-non-finite-geometry.patch"
   "$ROOT/patches/wine/d2d1-free-figure-vertex-types.patch"
+  "$ROOT/patches/wine/d2d1-bezier-split-ceiling.patch"
 )
 
 MODULES=(

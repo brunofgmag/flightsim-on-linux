@@ -8,12 +8,14 @@ The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if 
 
 | Path | What it is |
 |---|---|
-| `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check`, `run`, `addon list`, `addon apply`, `addon check`, `addon undo` |
+| `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check`, `dxvk build`, `dxvk check`, `run`, `addon list`, `addon apply`, `addon check`, `addon undo` |
 | `bin/flightsim-on-linux-gui` | The same, through zenity or kdialog dialogs |
 | `proton/build-proton-fs2024.sh` | Builds Proton FS2024 from a Proton-CachyOS release, checks it and swaps it in |
-| `checks/` | Tests a Proton in a throwaway prefix |
+| `dxvk/build-dxvk-fenix.sh` | Builds the DXVK the Fenix displays need in GPU mode, checks it and keeps it in the cache |
+| `checks/` | Tests a Proton or that DXVK in a throwaway prefix |
 | `addons/` | One folder per add-on fix, with its apply, check and undo scripts; `addons/README.md` has the format |
 | `patches/wine/` | The Wine patches this project adds |
+| `patches/dxvk/` | The DXVK patches the Fenix displays need |
 | `site/` | Source of the website; `tools/build_site.py` writes it to `docs/` |
 | `AGENTS.md` | Instructions for AI coding agents working on a user's machine |
 
