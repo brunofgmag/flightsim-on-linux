@@ -68,6 +68,48 @@ def check_ntsync(machine):
     return Check("ntsync", "info", "ntsync will be on when the simulator starts", NTSYNC_REMEDY)
 
 
+SCREEN_SECTION = 'See "Your screen setup changes what works" in the ground rules (site/pages/rules.html).'
+SCREEN_RULES = f"Add-on windows, tray icons and WebView2 behave differently under each driver. {SCREEN_SECTION}"
+MONITOR_RULES = f"The simulator reads the screen once, when it starts: start it on the monitor you play on. {SCREEN_SECTION}"
+WAYLAND_DRIVER = "Wine's Wayland driver (winewayland.drv)"
+X11_DRIVER = "Wine's X11 driver (winex11.drv)"
+
+
+def check_wayland(machine):
+    if not machine.wayland_sockets:
+        warns = wayland_in_options(machine)
+        fix = "Remove PROTON_ENABLE_WAYLAND=1 from the launch options, or log in to a Wayland session." if warns else ""
+        return Check("wayland", "warn" if warns else "info", "This session has no Wayland socket, so Wine's Wayland driver can't start", fix)
+    detail = f"Wayland sockets in this session: {', '.join(machine.wayland_sockets)}. This shell uses {machine.session_wayland_display or 'none'}"
+    if machine.sim_running:
+        detail += f", the simulator {machine.sim_wayland_display or 'none'}"
+    return Check("wayland", "info", detail)
+
+
+def running_driver_detail(drivers):
+    if not drivers:
+        return "The simulator has not loaded a Wine display driver yet"
+    if len(drivers) > 1:
+        return f"The simulator has loaded both Wine display drivers: {WAYLAND_DRIVER} and {X11_DRIVER}"
+    return f"The simulator draws through {WAYLAND_DRIVER if drivers == ['winewayland'] else X11_DRIVER}"
+
+
+def check_graphics_driver(machine):
+    if machine.sim_running:
+        detail = running_driver_detail(machine.sim_display_drivers)
+        return Check("graphics-driver", "info", detail, SCREEN_RULES if machine.sim_display_drivers else "")
+    if wayland_in_options(machine):
+        return Check("graphics-driver", "info", "The simulator will start with Wine's Wayland driver: the launch options set PROTON_ENABLE_WAYLAND=1", SCREEN_RULES)
+    return Check("graphics-driver", "info", "The simulator will start with Wine's X11 driver, through XWayland in a Wayland session", SCREEN_RULES)
+
+
+def check_monitors(machine):
+    if machine.monitors is None:
+        return None
+    detail = "1 monitor is on" if machine.monitors == 1 else f"{machine.monitors} monitors are on"
+    return Check("monitors", "info", detail, MONITOR_RULES if machine.monitors > 1 else "")
+
+
 def check_library_paths(machine):
     if any("STEAM_COMPAT_LIBRARY_PATHS=" in options for options in machine.launch_options.values()):
         return Check("library-paths", "ok", "Launch options set STEAM_COMPAT_LIBRARY_PATHS")
@@ -192,7 +234,7 @@ def check_community_disabled(machine):
                  f"It does this when it is killed while loading. With the simulator closed, turn them back on with: sed -i -E {shlex.quote(REACTIVATE)} {paths}")
 
 
-CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_library_paths, check_community, check_community_disabled, check_wpf, check_fonts, check_running, check_build_tools)
+CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_wayland, check_graphics_driver, check_monitors, check_library_paths, check_community, check_community_disabled, check_wpf, check_fonts, check_running, check_build_tools)
 
 
 def run(machine):

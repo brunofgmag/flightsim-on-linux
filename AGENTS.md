@@ -11,7 +11,7 @@ bin/flightsim-on-linux machine --json
 bin/flightsim-on-linux doctor --json
 ```
 
-`machine` reports the Steam folder, every library, where the simulator is installed, its compatdata and prefix, the Proton it last ran with (the third line of `compatdata/2537590/config_info`), the compatibility tool Steam has selected, the launch options per Steam user, the packages and Community folders (from `InstalledPackagesPath` in `UserCfg.opt`) and whether the simulator is running. `doctor` turns that into ok, warn, fail or info lines, each with a fix.
+`machine` reports the Steam folder, every library, where the simulator is installed, its compatdata and prefix, the Proton it last ran with (the third line of `compatdata/2537590/config_info`), the compatibility tool Steam has selected, the launch options per Steam user, the packages and Community folders (from `InstalledPackagesPath` in `UserCfg.opt`) and whether the simulator is running. `doctor` turns that into ok, warn, fail or info lines, each with a fix. It also lists the Wayland sockets, the simulator's Wine display driver and how many monitors are on.
 
 Add-on fixes live in `addons/<id>/`, in the format `addons/README.md` describes. `bin/flightsim-on-linux addon list --json` says which add-ons are installed and fixed, and `addon check <id>` proves a fix still works.
 
@@ -27,6 +27,7 @@ Also worth knowing, read-only:
 - Never touch licensing or activation. Never run the FSDT universal installer again on a machine where GSX is already activated; it spends an activation.
 - Never read out, print or send licence keys, account tokens or logs that contain them. The FSLabs `CCLog.txt` stores the activation key in plain text. If a log is needed, read only the lines you need and redact keys.
 - Installers and updaters run with the simulator and every other program of the prefix closed, one at a time. Programs that talk to the simulator are started inside the simulator's own container with `bin/flightsim-on-linux run <program.exe>`, not with a fresh `protontricks-launch` while it runs.
+- Don't hard-code `WAYLAND_DISPLAY`, `DISPLAY` or `XAUTHORITY` in a script: the socket name changes between sessions (`wayland-0`, `wayland-1`). Anything that runs next to the simulator goes through `bin/flightsim-on-linux run`, which copies them from the simulator's process.
 - Don't force-quit the simulator during its loading screen: it can switch off the whole Community folder (see `site/pages/rules.html`).
 - In scripts, `pgrep -f` and `pkill -f` also match the shell that runs them. Write patterns like `'Fenix[.]exe'`.
 

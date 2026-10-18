@@ -1,5 +1,6 @@
 import json
 import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -180,6 +181,99 @@ class CommunityDisabledTest(RuleTestCase):
     def test_no_content_file_has_no_line(self):
         self.fake.build()
         self.assertIsNone(self.check("community-disabled"))
+
+
+class ScreenTest(RuleTestCase):
+    def test_the_sockets_and_the_shell_display_are_listed(self):
+        self.fake.build()
+        found = machine.discover(home=self.fake.home, steam_override="", proc=self.fake.proc, dev=self.fake.dev, runtime_dir=self.fake.runtime, drm=self.fake.drm, env={"WAYLAND_DISPLAY": "wayland-1"})
+        check = self.check("wayland", found)
+        self.assertEqual(check.status, "info")
+        self.assertEqual(check.detail, "Wayland sockets in this session: wayland-1. This shell uses wayland-1")
+
+    def test_the_simulator_display_is_added_when_it_runs(self):
+        self.fake.build()
+        self.fake.run_sim(environ={"WAYLAND_DISPLAY": "wayland-1", "DISPLAY": ":1"})
+        detail = self.check("wayland").detail
+        self.assertEqual(detail, "Wayland sockets in this session: wayland-1. This shell uses none, the simulator wayland-1")
+
+    def test_a_running_simulator_without_a_wayland_display_says_none(self):
+        self.fake.build()
+        self.fake.run_sim(environ={"DISPLAY": ":1"})
+        self.assertTrue(self.check("wayland").detail.endswith("the simulator none"))
+
+    def test_no_socket_with_the_wayland_driver_in_the_options_warns(self):
+        self.fake.build(launch_options=WAYLAND)
+        (self.fake.runtime / "wayland-1").unlink()
+        check = self.check("wayland")
+        self.assertEqual(check.status, "warn")
+        self.assertIn("no Wayland socket", check.detail)
+        self.assertIn("PROTON_ENABLE_WAYLAND=1", check.fix)
+
+    def test_no_socket_without_the_wayland_driver_in_the_options_is_information(self):
+        self.fake.build()
+        (self.fake.runtime / "wayland-1").unlink()
+        check = self.check("wayland")
+        self.assertEqual(check.status, "info")
+        self.assertEqual(check.fix, "")
+
+    def test_a_running_simulator_with_the_wayland_driver_is_named(self):
+        self.fake.build()
+        self.fake.run_sim(maps=["x86_64-windows/winewayland.drv"])
+        check = self.check("graphics-driver")
+        self.assertEqual(check.status, "info")
+        self.assertIn("Wayland driver (winewayland.drv)", check.detail)
+        self.assertIn("Your screen setup changes what works", check.fix)
+
+    def test_a_running_simulator_with_the_x11_driver_is_named(self):
+        self.fake.build()
+        self.fake.run_sim(maps=["x86_64-windows/winex11.drv"])
+        self.assertIn("X11 driver (winex11.drv)", self.check("graphics-driver").detail)
+
+    def test_a_running_simulator_with_both_drivers_says_both(self):
+        self.fake.build()
+        self.fake.run_sim(maps=["x86_64-windows/winewayland.drv", "x86_64-windows/winex11.drv"])
+        detail = self.check("graphics-driver").detail
+        self.assertIn("both", detail)
+        self.assertIn("winewayland.drv", detail)
+        self.assertIn("winex11.drv", detail)
+
+    def test_a_running_simulator_without_a_driver_says_so(self):
+        self.fake.build()
+        self.fake.run_sim(maps=["x86_64-windows/ntdll.dll"])
+        check = self.check("graphics-driver")
+        self.assertIn("has not loaded a Wine display driver yet", check.detail)
+        self.assertEqual(check.fix, "")
+
+    def test_a_stopped_simulator_with_the_wayland_option_is_predicted_on_wayland(self):
+        self.fake.build(launch_options=WAYLAND)
+        check = self.check("graphics-driver")
+        self.assertEqual(check.status, "info")
+        self.assertIn("will start with Wine's Wayland driver", check.detail)
+
+    def test_a_stopped_simulator_without_it_is_predicted_on_x11(self):
+        self.fake.build()
+        check = self.check("graphics-driver")
+        self.assertEqual(check.status, "info")
+        self.assertIn("will start with Wine's X11 driver", check.detail)
+
+    def test_monitors_are_counted(self):
+        self.fake.build()
+        self.fake.connector("card0-DP-4", "connected", "enabled")
+        self.assertEqual(self.check("monitors").detail, "1 monitor is on")
+        self.assertEqual(self.check("monitors").fix, "")
+        self.fake.connector("card1-HDMI-A-1", "connected", "enabled")
+        check = self.check("monitors")
+        self.assertEqual(check.detail, "2 monitors are on")
+        self.assertEqual(check.status, "info")
+        self.assertIn("start it on the monitor you play on", check.fix)
+        self.assertNotIn("driver", check.fix)
+        self.assertIn("Your screen setup changes what works", check.fix)
+
+    def test_without_a_drm_folder_there_is_no_monitors_line(self):
+        self.fake.build()
+        shutil.rmtree(self.fake.drm)
+        self.assertIsNone(self.check("monitors"))
 
 
 class MachineJsonTest(unittest.TestCase):

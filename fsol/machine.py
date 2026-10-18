@@ -13,6 +13,7 @@ STEAM_CANDIDATES = (
     ".var/app/com.valvesoftware.Steam/.local/share/Steam",
     "snap/steam/common/.local/share/Steam",
 )
+DISPLAY_DRIVERS = ("winewayland", "winex11")
 USERCFG = "drive_c/users/steamuser/AppData/Roaming/Microsoft Flight Simulator 2024/UserCfg.opt"
 
 
@@ -34,6 +35,12 @@ class Machine:
     sim_pid: int | None = None
     ntsync_device: bool = False
     ntsync_handles: int | None = None
+    wayland_sockets: list = field(default_factory=list)
+    session_wayland_display: str | None = None
+    sim_wayland_display: str | None = None
+    sim_x_display: str | None = None
+    sim_display_drivers: list = field(default_factory=list)
+    monitors: int | None = None
 
     @property
     def proton_is_fs2024(self):
@@ -183,9 +190,40 @@ def ntsync_handles(pid_dir):
     return count
 
 
-def discover(home=None, steam_override=None, proc=Path("/proc"), dev=Path("/dev")):
+def wayland_sockets(runtime_dir):
+    return sorted(entry.name for entry in Path(runtime_dir).glob("wayland-*") if entry.is_socket())
+
+
+def display_drivers(pid_dir):
+    try:
+        mapped = (pid_dir / "maps").read_text(errors="replace")
+    except OSError:
+        return []
+    return [driver for driver in DISPLAY_DRIVERS if f"{driver}.drv" in mapped]
+
+
+def connector_reads(connector, name):
+    try:
+        return (connector / name).read_text().strip()
+    except OSError:
+        return None
+
+
+def monitor_is_on(connector):
+    return connector_reads(connector, "status") == "connected" and connector_reads(connector, "enabled") == "enabled"
+
+
+def connected_monitors(drm):
+    drm = Path(drm)
+    if not drm.is_dir():
+        return None
+    return sum(1 for connector in drm.glob("card*-*") if monitor_is_on(connector))
+
+
+def discover(home=None, steam_override=None, proc=Path("/proc"), dev=Path("/dev"), runtime_dir=None, drm=Path("/sys/class/drm"), env=None):
+    env = os.environ if env is None else env
     machine = Machine()
-    machine.steam = find_steam(home or Path.home(), steam_override or os.environ.get("STEAM_DIR"))
+    machine.steam = find_steam(home or Path.home(), steam_override or env.get("STEAM_DIR"))
     if not machine.steam:
         return machine
     machine.libraries = steam_libraries(machine.steam)
@@ -204,4 +242,13 @@ def discover(home=None, steam_override=None, proc=Path("/proc"), dev=Path("/dev"
     machine.ntsync_device = (dev / "ntsync").exists()
     server = sim_wineserver(machine.prefix, proc) if machine.prefix and machine.sim_running else None
     machine.ntsync_handles = ntsync_handles(server) if server else None
+    machine.wayland_sockets = wayland_sockets(runtime_dir or env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
+    machine.session_wayland_display = env.get("WAYLAND_DISPLAY")
+    if machine.sim_running:
+        sim_dir = proc / str(machine.sim_pid)
+        sim_env = process_environ(sim_dir)
+        machine.sim_wayland_display = sim_env.get("WAYLAND_DISPLAY")
+        machine.sim_x_display = sim_env.get("DISPLAY")
+        machine.sim_display_drivers = display_drivers(sim_dir)
+    machine.monitors = connected_monitors(drm)
     return machine
