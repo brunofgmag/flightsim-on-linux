@@ -1,0 +1,53 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+winewayland: when ClipCursor confines the pointer to a rectangle smaller than the window and the compositor offers wp_pointer_warp_v1, warp the pointer to the point of the rectangle nearest the cursor first. On Windows ClipCursor moves the cursor inside the rectangle; a Wayland confinement only takes effect while the pointer is already inside its region. During a ChasePlane camera drag the simulator clips the cursor to a single pixel for 29 ms and releases it for 1 ms, over and over, and once the pointer drifted one pixel in a released millisecond no later confinement held, so the arrow wandered off the screen.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/winewayland.drv/wayland_pointer.c
++++ b/dlls/winewayland.drv/wayland_pointer.c
+@@ -1193,8 +1193,8 @@
+     struct wayland_surface *surface = NULL;
+     struct wayland_win_data *data;
+     RECT confine_rect, covered;
+-    POINT cursor_pos, warp;
+-    BOOL covers_window = FALSE, changed = FALSE;
++    POINT cursor_pos, warp, inside;
++    BOOL covers_window = FALSE, changed = FALSE, warp_inside = FALSE;
+ 
+     TRACE("clip=%s reset=%d\n", wine_dbgstr_rect(clip), reset);
+ 
+@@ -1216,6 +1216,19 @@
+             covers_window = process_wayland.wp_pointer_warp_v1 &&
+                             intersect_rect(&covered, clip, &surface->window.rect) &&
+                             EqualRect(&covered, &surface->window.rect);
++            if (process_wayland.wp_pointer_warp_v1 && !covers_window &&
++                intersect_rect(&covered, clip, &surface->window.rect))
++            {
++                inside = cursor_pos;
++                if (inside.x < covered.left) inside.x = covered.left;
++                if (inside.x >= covered.right) inside.x = covered.right - 1;
++                if (inside.y < covered.top) inside.y = covered.top;
++                if (inside.y >= covered.bottom) inside.y = covered.bottom - 1;
++                inside.x -= surface->window.rect.left;
++                inside.y -= surface->window.rect.top;
++                inside = map_point_to_surface(surface, inside);
++                warp_inside = TRUE;
++            }
+         }
+         warp.x = cursor_pos.x - surface->window.rect.left;
+         warp.y = cursor_pos.y - surface->window.rect.top;
+@@ -1253,6 +1266,15 @@
+                                           (clip && wl_surface) ? &confine_rect : NULL,
+                                           FALSE, covers_window))
+         changed = TRUE;
++    if (warp_inside && wl_surface && pointer->zwp_confined_pointer_v1)
++    {
++        wp_pointer_warp_v1_warp_pointer(process_wayland.wp_pointer_warp_v1,
++                                        wl_surface, pointer->wl_pointer,
++                                        wl_fixed_from_int(inside.x),
++                                        wl_fixed_from_int(inside.y),
++                                        pointer->enter_serial);
++        TRACE("warping inside clip to wayland_xy=%s\n", wine_dbgstr_point(&inside));
++    }
+     pthread_mutex_unlock(&pointer->mutex);
+ 
+     if (changed && wl_surface && (data = wayland_win_data_get(hwnd)))

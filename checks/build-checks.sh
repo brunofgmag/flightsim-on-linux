@@ -16,3 +16,11 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-bezier-ceiling-test.exe" "$HERE/src/d2d
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d12-cross-process-fence-test.exe" "$HERE/src/d3d12-cross-process-fence-test.c" -ld3d12 -ld3d11 -ldxguid -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/dxgi-shared-resource-luid-test.exe" "$HERE/src/dxgi-shared-resource-luid-test.c" -ld3d12 -ld3d11 -ldxgi -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d11-keyed-mutex-test.exe" "$HERE/src/d3d11-keyed-mutex-test.c" -ld3d11 -ldxgi -luuid
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/process-memory-after-eperm-test.exe" "$HERE/src/process-memory-after-eperm-test.c" -Wl,--disable-dynamicbase
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-cursor-clip-test.exe" "$HERE/src/hidden-cursor-clip-test.c" -lgdi32 -luser32
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/pointer-constraint-commit-test.exe" "$HERE/src/pointer-constraint-commit-test.c" -lgdi32 -luser32
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/one-pixel-clip-test.exe" "$HERE/src/one-pixel-clip-test.c" -lgdi32 -luser32
+if pkg-config --exists libei-1.0 libsystemd; then
+  read -r -a EIS_FLAGS < <(pkg-config --cflags --libs libei-1.0 libsystemd)
+  gcc -O2 -Wall -o "$OUT/eis-pointer" "$HERE/src/eis-pointer.c" "${EIS_FLAGS[@]}"
+fi

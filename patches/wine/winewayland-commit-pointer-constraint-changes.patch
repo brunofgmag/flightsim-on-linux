@@ -1,0 +1,112 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+winewayland: commit the surface whenever ClipCursor creates, re-regions or destroys a pointer lock or confinement. KWin 6.8 applies pointer constraint changes only on the next wl_surface.commit, and the driver never committed after them. The simulator draws through Vulkan on a subsurface, so its main surface almost never commits: a lock it released stayed in force, the arrow froze until the window lost focus, and a confinement it asked for during a camera drag never took effect.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/winewayland.drv/wayland_pointer.c
++++ b/dlls/winewayland.drv/wayland_pointer.c
+@@ -1009,20 +1009,20 @@
+  *
+  *  Enables/disables pointer confinement.
+  */
+-static void wayland_pointer_update_constraint(struct wl_surface *wl_surface,
++static BOOL wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+                                               RECT *confine_rect,
+                                               BOOL force_lock,
+                                               BOOL covers_window)
+ {
+     struct wayland_pointer *pointer = &process_wayland.pointer;
+-    BOOL needs_lock, needs_confine, is_visible;
++    BOOL needs_lock, needs_confine, is_visible, changed = FALSE;
+     static unsigned int once;
+ 
+     if (!process_wayland.zwp_pointer_constraints_v1)
+     {
+         if (!once++)
+             ERR("This function requires zwp_pointer_constraints_v1\n");
+-        return;
++        return FALSE;
+     }
+ 
+     is_visible = pointer->cursor.wl_surface || pointer->wp_cursor_shape_device_v1;
+@@ -1038,6 +1038,7 @@
+         zwp_confined_pointer_v1_destroy(pointer->zwp_confined_pointer_v1);
+         pointer->zwp_confined_pointer_v1 = NULL;
+         pointer->constraint_hwnd = NULL;
++        changed = TRUE;
+     }
+ 
+     if (!needs_lock && pointer->zwp_locked_pointer_v1)
+@@ -1046,6 +1047,7 @@
+         zwp_locked_pointer_v1_destroy(pointer->zwp_locked_pointer_v1);
+         pointer->zwp_locked_pointer_v1 = NULL;
+         pointer->constraint_hwnd = NULL;
++        changed = TRUE;
+     }
+ 
+     if (needs_confine)
+@@ -1076,6 +1078,7 @@
+             zwp_confined_pointer_v1_set_region(pointer->zwp_confined_pointer_v1,
+                                                region);
+         }
++        changed = TRUE;
+ 
+         TRACE("Confining to hwnd=%p wayland=%d,%d+%d,%d\n",
+               pointer->constraint_hwnd,
+@@ -1102,10 +1105,12 @@
+                     ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+             pointer->constraint_hwnd = hwnd;
+             TRACE("Locking to hwnd=%p\n", pointer->constraint_hwnd);
++            changed = TRUE;
+         }
+     }
+ 
+-    TRACE("lock=%u confine=%u\n", needs_lock, needs_confine);
++    TRACE("lock=%u confine=%u changed=%u\n", needs_lock, needs_confine, changed);
++    return changed;
+ }
+ 
+ void wayland_pointer_clear_constraint(void)
+@@ -1189,7 +1194,7 @@
+     struct wayland_win_data *data;
+     RECT confine_rect, covered;
+     POINT cursor_pos, warp;
+-    BOOL covers_window = FALSE;
++    BOOL covers_window = FALSE, changed = FALSE;
+ 
+     TRACE("clip=%s reset=%d\n", wine_dbgstr_rect(clip), reset);
+ 
+@@ -1221,7 +1226,7 @@
+     pthread_mutex_lock(&pointer->mutex);
+     if (wl_surface && pointer->pending_warp)
+     {
+-        wayland_pointer_update_constraint(wl_surface, NULL, TRUE, FALSE);
++        changed = wayland_pointer_update_constraint(wl_surface, NULL, TRUE, FALSE);
+         pointer->pending_warp = FALSE;
+     }
+ 
+@@ -1244,11 +1249,22 @@
+    /* Since we are running in the context of the foreground thread we know
+     * that the wl_surface of the foreground HWND will not be invalidated,
+     * so we can access it without having the win data lock. */
+-    wayland_pointer_update_constraint(wl_surface,
+-                                      (clip && wl_surface) ? &confine_rect : NULL,
+-                                      FALSE, covers_window);
++    if (wayland_pointer_update_constraint(wl_surface,
++                                          (clip && wl_surface) ? &confine_rect : NULL,
++                                          FALSE, covers_window))
++        changed = TRUE;
+     pthread_mutex_unlock(&pointer->mutex);
+ 
++    if (changed && wl_surface && (data = wayland_win_data_get(hwnd)))
++    {
++        if (data->wayland_surface && data->wayland_surface->wl_surface == wl_surface)
++        {
++            wl_surface_commit(wl_surface);
++            TRACE("committed constraint change hwnd=%p\n", hwnd);
++        }
++        wayland_win_data_release(data);
++    }
++
+     wl_display_flush(process_wayland.wl_display);
+ 
+     return TRUE;

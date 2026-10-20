@@ -1,0 +1,34 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+wineserver: when process_vm_readv or process_vm_writev fails with EPERM, fall back to ptrace for that call only. Upstream Wine and wine-cachyos switch the fast path off for every process after the first EPERM, and from then on each ReadProcessMemory stops the target's main thread with ptrace. With ChasePlane reading the simulator's camera, the simulator's main thread stood still up to 300 ms of every second, which showed as periodic stutter.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/server/ptrace.c
++++ b/server/ptrace.c
+@@ -361,11 +361,12 @@
+     local.iov_base = dest;
+     remote.iov_base = (void *)(unsigned long)ptr;
+     len = process_vm_readv( thread->unix_pid, &local, 1, &remote, 1, 0 );
+-    if (len < 0 && (errno == ENOSYS || errno == EPERM))
++    if (len < 0 && errno == ENOSYS)
+     {
+         not_supported = 1;
+         return -1;
+     }
++    if (len < 0 && errno == EPERM) return -1;
+     if (len == size) return 1;
+     set_error( STATUS_PARTIAL_COPY );
+     return 0;
+@@ -396,11 +397,12 @@
+     local.iov_base = (void *)src;
+     remote.iov_base = (void *)(unsigned long)ptr;
+     len = process_vm_writev( thread->unix_pid, &local, 1, &remote, 1, 0 );
+-    if (len < 0 && (errno == ENOSYS || errno == EPERM))
++    if (len < 0 && errno == ENOSYS)
+     {
+         not_supported = 1;
+         return -1;
+     }
++    if (len < 0 && errno == EPERM) return -1;
+ 
+     if (written) *written = max( len, 0 );
+     if (len != size) set_error( STATUS_PARTIAL_COPY );

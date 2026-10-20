@@ -1,0 +1,81 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+winewayland: when the cursor is hidden and ClipCursor covers the whole window, confine the pointer instead of locking it, as long as the compositor offers wp_pointer_warp_v1. A locked pointer drops absolute motion, so a program that keeps its cursor clipped to its window and hides it now and then, as the simulator does, never sees the cursor move again and its arrow freezes until the window loses focus. Clips smaller than the window still lock, and raw input still arrives through zwp_relative_pointer_v1 either way.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/winewayland.drv/wayland_pointer.c
++++ b/dlls/winewayland.drv/wayland_pointer.c
+@@ -1011,7 +1011,8 @@
+  */
+ static void wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+                                               RECT *confine_rect,
+-                                              BOOL force_lock)
++                                              BOOL force_lock,
++                                              BOOL covers_window)
+ {
+     struct wayland_pointer *pointer = &process_wayland.pointer;
+     BOOL needs_lock, needs_confine, is_visible;
+@@ -1026,9 +1027,9 @@
+ 
+     is_visible = pointer->cursor.wl_surface || pointer->wp_cursor_shape_device_v1;
+     needs_lock = wl_surface &&
+-                 ((confine_rect && !is_visible) || force_lock) &&
++                 ((confine_rect && !is_visible && !covers_window) || force_lock) &&
+                  pointer->wl_pointer;
+-    needs_confine = wl_surface && confine_rect && is_visible && !force_lock &&
++    needs_confine = wl_surface && confine_rect && (is_visible || covers_window) && !force_lock &&
+                     pointer->wl_pointer;
+ 
+     if (!needs_confine && pointer->zwp_confined_pointer_v1)
+@@ -1109,7 +1110,7 @@
+ 
+ void wayland_pointer_clear_constraint(void)
+ {
+-    wayland_pointer_update_constraint(NULL, NULL, FALSE);
++    wayland_pointer_update_constraint(NULL, NULL, FALSE, FALSE);
+ }
+ 
+ /***********************************************************************
+@@ -1186,8 +1187,9 @@
+     struct wl_surface *wl_surface = NULL;
+     struct wayland_surface *surface = NULL;
+     struct wayland_win_data *data;
+-    RECT confine_rect;
++    RECT confine_rect, covered;
+     POINT cursor_pos, warp;
++    BOOL covers_window = FALSE;
+ 
+     TRACE("clip=%s reset=%d\n", wine_dbgstr_rect(clip), reset);
+ 
+@@ -1203,7 +1205,13 @@
+     if ((surface = data->wayland_surface))
+     {
+         wl_surface = surface->wl_surface;
+-        if (clip) wayland_surface_calc_confine(surface, clip, &confine_rect);
++        if (clip)
++        {
++            wayland_surface_calc_confine(surface, clip, &confine_rect);
++            covers_window = process_wayland.wp_pointer_warp_v1 &&
++                            intersect_rect(&covered, clip, &surface->window.rect) &&
++                            EqualRect(&covered, &surface->window.rect);
++        }
+         warp.x = cursor_pos.x - surface->window.rect.left;
+         warp.y = cursor_pos.y - surface->window.rect.top;
+         warp = map_point_to_surface(surface, warp);
+@@ -1213,7 +1221,7 @@
+     pthread_mutex_lock(&pointer->mutex);
+     if (wl_surface && pointer->pending_warp)
+     {
+-        wayland_pointer_update_constraint(wl_surface, NULL, TRUE);
++        wayland_pointer_update_constraint(wl_surface, NULL, TRUE, FALSE);
+         pointer->pending_warp = FALSE;
+     }
+ 
+@@ -1238,7 +1246,7 @@
+     * so we can access it without having the win data lock. */
+     wayland_pointer_update_constraint(wl_surface,
+                                       (clip && wl_surface) ? &confine_rect : NULL,
+-                                      FALSE);
++                                      FALSE, covers_window);
+     pthread_mutex_unlock(&pointer->mutex);
+ 
+     wl_display_flush(process_wayland.wl_display);

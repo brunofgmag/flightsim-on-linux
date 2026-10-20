@@ -1,0 +1,53 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+winewayland: never confine the pointer to an empty region, and never warp it onto the exclusive edge of the region. wayland_surface_calc_confine converts each edge of the ClipCursor rectangle to surface coordinates on its own, rounding it, so at 125% scale a one-pixel clip such as [102,103) became [82,82), a confinement with no area that holds nothing; one ChasePlane camera drag sent 849 of them. Each side of the region now spans at least one surface pixel, and it is moved back inside the window at the far edge. The warp added by winewayland-small-clip-warps-pointer-inside.patch converted its point after clamping it to the clip, so the rounding could leave it on the exclusive edge of the region: a clip of [100,108) became the region [80,86) and the warp went to 86, outside it. The point is now clamped to the region the driver sends.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/winewayland.drv/wayland_pointer.c
++++ b/dlls/winewayland.drv/wayland_pointer.c
+@@ -976,6 +976,13 @@
+     if (reapply_clip) reapply_cursor_clipping();
+ }
+ 
++static void ensure_one_pixel_span(LONG *low, LONG *high, LONG extent)
++{
++    if (*high > *low) return;
++    if (*high < extent) *high = *low + 1;
++    else *low = *high - 1;
++}
++
+ /**********************************************************************
+  *          wayland_surface_calc_confine
+  *
+@@ -985,7 +992,7 @@
+ static void wayland_surface_calc_confine(struct wayland_surface *surface,
+                                          const RECT *clip, RECT *confine)
+ {
+-    RECT window_clip;
++    RECT window_clip, extent;
+ 
+     TRACE("hwnd=%p clip=%s window=%s\n",
+           surface->hwnd, wine_dbgstr_rect(clip),
+@@ -1002,6 +1009,12 @@
+ 
+     OffsetRect(&window_clip, -surface->window.rect.left, -surface->window.rect.top);
+     *confine = map_rect_to_surface(surface, window_clip);
++
++    SetRect(&extent, 0, 0, surface->window.rect.right - surface->window.rect.left,
++            surface->window.rect.bottom - surface->window.rect.top);
++    extent = map_rect_to_surface(surface, extent);
++    ensure_one_pixel_span(&confine->left, &confine->right, extent.right);
++    ensure_one_pixel_span(&confine->top, &confine->bottom, extent.bottom);
+ }
+ 
+ /***********************************************************************
+@@ -1227,6 +1240,10 @@
+                 inside.x -= surface->window.rect.left;
+                 inside.y -= surface->window.rect.top;
+                 inside = map_point_to_surface(surface, inside);
++                if (inside.x < confine_rect.left) inside.x = confine_rect.left;
++                if (inside.x >= confine_rect.right) inside.x = confine_rect.right - 1;
++                if (inside.y < confine_rect.top) inside.y = confine_rect.top;
++                if (inside.y >= confine_rect.bottom) inside.y = confine_rect.bottom - 1;
+                 warp_inside = TRUE;
+             }
+         }
