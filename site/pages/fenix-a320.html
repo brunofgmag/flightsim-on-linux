@@ -15,6 +15,16 @@ description: How to run the Fenix A320, A319 and A321 in MSFS 2024 under Proton:
 <pre><code>~/flightsim-on-linux/addons/fenix-a320/installer</code></pre>
 <p>It needs <code>gamescope</code> and <code>protontricks</code>. It refuses to start while the simulator or any other program of the prefix is open, and names what to close. On the test machine, a Fenix Installer started while another program held the prefix crashed before its window appeared. Then it opens the installer in a gamescope window the size of the installer. Each click takes a second or more to register. Sign in, install the aircraft, then close the installer. If your machine has two GPUs, the script asks gamescope for the dedicated one. From version 1.0.353 the installer also needs a Proton FS2024 built with the installer fix, and the check below tells you whether yours has it. Without it, the installer can't open its package database or check the aircraft for updates.</p>
 
+<h2>If the installer window stays empty</h2>
+<p>On 2026-10-21 Fenix published Fenix Installer 1.0.353, rebuilt on .NET 10. It puts its page inside a Windows composition layer that Wine doesn't have, so under Wine the window stays empty. That page is also what checks for updates, so 1.0.353 never updates itself. Version 1.0.355, out a few hours later, went back to the kind of window Wine can show. See which version you have:</p>
+<pre><code>cd "$(~/flightsim-on-linux/bin/flightsim-on-linux machine --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["prefix"])')/drive_c/users/steamuser/AppData/Local/FenixApp"
+grep -o '&lt;version&gt;[^&lt;]*' current/sq.version</code></pre>
+<p>If it says 1.0.353, close the simulator and every other program of the prefix. Then, in the same folder, download 1.0.355 from the address the installer itself uses, check it and apply it:</p>
+<pre><code>curl -fL -o packages/FenixApp-1.0.355-1cf2ef7-full.nupkg https://software.fenixsim.com/FenixApp/FenixApp-1.0.355-1cf2ef7-full.nupkg
+sha256sum packages/FenixApp-1.0.355-1cf2ef7-full.nupkg
+protontricks --no-term -c 'wine "$PWD/Update.exe" apply --norestart --package "C:\users\steamuser\AppData\Local\FenixApp\packages\FenixApp-1.0.355-1cf2ef7-full.nupkg"' 2537590</code></pre>
+<p><code>sha256sum</code> should print <code>e4e9b327dca634e7ec7f6f4cf583bad824f60aa91f6b76cc6f1804b02094934f</code>, and the update ends with <code>Package version 1.0.355 applied successfully.</code> Open the installer as above afterwards. It also needs a Proton FS2024 built with the installer fix, or it can't open its package database.</p>
+
 <h2>Choose how the displays draw</h2>
 <p>The Fenix draws its displays either on the GPU, its default, or on the CPU. On the test machine both work. The setup below reads the mode from the Fenix settings file, which exists once you have loaded a Fenix aircraft in the simulator. If the check says <code>fenixConfig.xml</code> is missing, load one, quit and run the setup again.</p>
 <p>GPU mode needs a DXVK with three fixes in the Fenix <code>deps</code> folder: the adapter of a shared texture, a keyed mutex that waits for what the other process drew, and a wait that gives up when its timeout runs out. Build it once. It takes about two minutes and needs <code>meson</code>, <code>ninja</code>, <code>glslang</code> and the MinGW-w64 cross compiler:</p>
