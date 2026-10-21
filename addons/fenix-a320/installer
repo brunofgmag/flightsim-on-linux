@@ -31,8 +31,18 @@ require_closed() {
   fi
 }
 
-prefix_path() {
-  "$CLI" machine --json | python3 -I -c 'import json, sys; print(json.load(sys.stdin).get("prefix") or "")'
+machine_field() {
+  python3 -I -c 'import json, sys; value = json.loads(sys.argv[1]).get(sys.argv[2]); print(", ".join(value) if isinstance(value, list) else (value if value else ""))' "$machine" "$1"
+}
+
+require_free_prefix() {
+  [ -n "$(machine_field prefix_in_use)" ] || return 0
+  local programs
+  programs="$(machine_field prefix_programs)"
+  if [ -n "$programs" ]; then
+    die "close $programs first; the Fenix Installer crashes on start while another program holds the prefix"
+  fi
+  die "Wine is still running in the prefix; wait a few seconds and try again"
 }
 
 preferred_device() {
@@ -48,8 +58,10 @@ preferred_device() {
 require_programs
 require_closed
 
-prefix="$(prefix_path)"
+machine="$("$CLI" machine --json)"
+prefix="$(machine_field prefix)"
 [ -n "$prefix" ] || die "$CLI machine finds no simulator prefix; run it and read what it reports"
+require_free_prefix
 install_dir="$prefix/drive_c/users/steamuser/AppData/Local/FenixApp"
 app_dir="$install_dir/current"
 [ -f "$app_dir/FenixApp.exe" ] || die "FenixApp.exe is not in $app_dir; download the Fenix Installer from $FENIX_DOWNLOADS and run it once"

@@ -15,6 +15,8 @@ STEAM_CANDIDATES = (
 )
 DISPLAY_DRIVERS = ("winewayland", "winex11")
 USERCFG = "drive_c/users/steamuser/AppData/Roaming/Microsoft Flight Simulator 2024/UserCfg.opt"
+WINDOWS_PATH = re.compile(r"^[A-Za-z]:\\")
+WINDOWS_FOLDER = "c:\\windows\\"
 
 
 @dataclass
@@ -41,6 +43,8 @@ class Machine:
     sim_x_display: str | None = None
     sim_display_drivers: list = field(default_factory=list)
     monitors: int | None = None
+    prefix_in_use: bool = False
+    prefix_programs: list = field(default_factory=list)
 
     @property
     def proton_is_fs2024(self):
@@ -165,7 +169,12 @@ def process_environ(pid_dir):
     return dict(item.decode(errors="replace").split("=", 1) for item in items if b"=" in item)
 
 
-def sim_wineserver(prefix, proc):
+def in_prefix(pid_dir, wanted):
+    winepfx = process_environ(pid_dir).get("WINEPREFIX", "")
+    return bool(winepfx) and os.path.realpath(winepfx) == wanted
+
+
+def prefix_wineserver(prefix, proc):
     wanted = os.path.realpath(prefix)
     for comm in proc.glob("[0-9]*/comm"):
         try:
@@ -173,10 +182,29 @@ def sim_wineserver(prefix, proc):
                 continue
         except OSError:
             continue
-        winepfx = process_environ(comm.parent).get("WINEPREFIX", "")
-        if winepfx and os.path.realpath(winepfx) == wanted:
+        if in_prefix(comm.parent, wanted):
             return comm.parent
     return None
+
+
+def windows_program(pid_dir):
+    try:
+        first = (pid_dir / "cmdline").read_bytes().split(b"\0", 1)[0].decode(errors="replace")
+    except OSError:
+        return None
+    if not WINDOWS_PATH.match(first) or first.lower().startswith(WINDOWS_FOLDER):
+        return None
+    return first.rsplit("\\", 1)[-1]
+
+
+def prefix_programs(prefix, proc):
+    wanted = os.path.realpath(prefix)
+    names = []
+    for pid_dir in sorted(proc.glob("[0-9]*"), key=lambda path: int(path.name)):
+        name = windows_program(pid_dir)
+        if name and name not in names and in_prefix(pid_dir, wanted):
+            names.append(name)
+    return names
 
 
 def ntsync_handles(pid_dir):
@@ -240,8 +268,10 @@ def discover(home=None, steam_override=None, proc=Path("/proc"), dev=Path("/dev"
     machine.sim_pid = sim_pid(proc)
     machine.sim_running = machine.sim_pid is not None
     machine.ntsync_device = (dev / "ntsync").exists()
-    server = sim_wineserver(machine.prefix, proc) if machine.prefix and machine.sim_running else None
-    machine.ntsync_handles = ntsync_handles(server) if server else None
+    server = prefix_wineserver(machine.prefix, proc) if machine.prefix else None
+    machine.prefix_in_use = server is not None
+    machine.prefix_programs = prefix_programs(machine.prefix, proc) if machine.prefix else []
+    machine.ntsync_handles = ntsync_handles(server) if server and machine.sim_running else None
     machine.wayland_sockets = wayland_sockets(runtime_dir or env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
     machine.session_wayland_display = env.get("WAYLAND_DISPLAY")
     if machine.sim_running:

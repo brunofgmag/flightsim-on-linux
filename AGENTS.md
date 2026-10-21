@@ -11,7 +11,7 @@ bin/flightsim-on-linux machine --json
 bin/flightsim-on-linux doctor --json
 ```
 
-`machine` reports the Steam folder, every library, where the simulator is installed, its compatdata and prefix, the Proton it last ran with (the third line of `compatdata/2537590/config_info`), the compatibility tool Steam has selected, the launch options per Steam user, the packages and Community folders (from `InstalledPackagesPath` in `UserCfg.opt`) and whether the simulator is running. `doctor` turns that into ok, warn, fail or info lines, each with a fix; in `--json`, a command the fix asks the person to run comes apart in `command`. It also lists the Wayland sockets, the simulator's Wine display driver and how many monitors are on.
+`machine` reports the Steam folder, every library, where the simulator is installed, its compatdata and prefix, the Proton it last ran with (the third line of `compatdata/2537590/config_info`), the compatibility tool Steam has selected, the launch options per Steam user, the packages and Community folders (from `InstalledPackagesPath` in `UserCfg.opt`), whether the simulator is running, and whether a Wine server holds the prefix, with the Windows programs that run in it (`prefix_in_use`, `prefix_programs`). `doctor` turns that into ok, warn, fail or info lines, each with a fix; in `--json`, a command the fix asks the person to run comes apart in `command`. It also lists the Wayland sockets, the simulator's Wine display driver and how many monitors are on.
 
 Add-on fixes live in `addons/<id>/`, in the format `addons/README.md` describes. `bin/flightsim-on-linux addon list --json` says which add-ons are installed and fixed, and `addon check <id>` proves a fix still works.
 

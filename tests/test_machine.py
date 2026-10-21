@@ -104,6 +104,10 @@ class FakeMachine:
         for number in range(handles):
             os.symlink("/dev/ntsync", server / f"fd/{number + 10}")
 
+    def run_program(self, pid, cmdline, prefix):
+        write(self.proc / f"{pid}/cmdline", cmdline + "\0")
+        write(self.proc / f"{pid}/environ", f"HOME=/home/pilot\0WINEPREFIX={prefix}\0")
+
     def discover(self):
         return machine.discover(home=self.home, steam_override="", proc=self.proc, dev=self.dev, runtime_dir=self.runtime, drm=self.drm, env={})
 
@@ -151,6 +155,37 @@ class DiscoverTest(unittest.TestCase):
         self.assertFalse(self.fake.discover().sim_running)
         self.fake.run_sim()
         self.assertTrue(self.fake.discover().sim_running)
+
+    def test_an_idle_prefix_is_not_in_use(self):
+        found = self.fake.build().discover()
+        self.assertFalse(found.prefix_in_use)
+        self.assertEqual(found.prefix_programs, [])
+
+    def test_a_wineserver_of_the_prefix_marks_it_in_use_and_names_the_programs_outside_windows(self):
+        self.fake.build()
+        self.fake.run_wineserver(self.fake.prefix, 0)
+        self.fake.run_program(5001, "C:\\users\\steamuser\\AppData\\Local\\TriTriSim\\tritrisim-hub.exe", self.fake.prefix)
+        self.fake.run_program(5002, "C:\\windows\\system32\\winedevice.exe", self.fake.prefix)
+        self.fake.run_program(5003, "C:\\Program Files\\Other Tool\\tool.exe", self.fake.home / "other-prefix")
+        self.fake.run_program(5004, "/usr/bin/python3", self.fake.prefix)
+        found = self.fake.discover()
+        self.assertTrue(found.prefix_in_use)
+        self.assertEqual(found.prefix_programs, ["tritrisim-hub.exe"])
+
+    def test_a_wineserver_of_another_prefix_leaves_this_one_free(self):
+        self.fake.build()
+        self.fake.run_wineserver(self.fake.home / "other-prefix", 0)
+        self.assertFalse(self.fake.discover().prefix_in_use)
+
+    def test_the_prefix_is_matched_through_symlinks(self):
+        self.fake.build()
+        link = self.fake.home / "prefix-link"
+        os.symlink(self.fake.prefix, link)
+        self.fake.run_wineserver(link, 0)
+        self.fake.run_program(5001, "D:\\Tools\\tool.exe", link)
+        found = self.fake.discover()
+        self.assertTrue(found.prefix_in_use)
+        self.assertEqual(found.prefix_programs, ["tool.exe"])
 
     def test_no_steam_gives_an_empty_machine(self):
         found = machine.discover(home=Path(self.temp.name) / "nobody", steam_override="", proc=self.fake.proc, dev=self.fake.proc)

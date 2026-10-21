@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -565,6 +566,33 @@ class InstallerTest(unittest.TestCase):
         code, output = self.run_installer()
         self.assertNotEqual(code, 0)
         self.assertIn("already open", output)
+
+    def report(self, **fields):
+        data = json.dumps({"prefix": str(self.prefix), **fields})
+        self.cli.write_text(f"#!/bin/sh\necho '{data}'\n")
+
+    def test_it_refuses_while_another_program_holds_the_prefix_and_names_it(self):
+        self.install_app()
+        self.report(prefix_in_use=True, prefix_programs=["tritrisim-hub.exe", "AutoFPS.exe"])
+        code, output = self.run_installer()
+        self.assertNotEqual(code, 0)
+        self.assertIn("close tritrisim-hub.exe, AutoFPS.exe first", output)
+        self.assertNotIn("gamescope", output)
+
+    def test_it_refuses_while_wine_still_runs_in_the_prefix_without_a_program_to_name(self):
+        self.install_app()
+        self.report(prefix_in_use=True, prefix_programs=[])
+        code, output = self.run_installer()
+        self.assertNotEqual(code, 0)
+        self.assertIn("Wine is still running in the prefix", output)
+        self.assertNotIn("gamescope", output)
+
+    def test_a_free_prefix_lets_it_start(self):
+        self.install_app()
+        self.report(prefix_in_use=False, prefix_programs=[])
+        code, output = self.run_installer()
+        self.assertEqual(code, 0, output)
+        self.assertIn("gamescope", output)
 
     def test_it_says_where_to_get_the_installer_when_it_is_not_in_the_prefix(self):
         code, output = self.run_installer()
