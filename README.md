@@ -16,6 +16,7 @@ The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if 
 | `addons/` | One folder per add-on fix, with its apply, check and undo scripts; `addons/README.md` has the format |
 | `patches/wine/` | The Wine patches this project adds |
 | `patches/dxvk/` | The DXVK patches the Fenix displays need |
+| `patches/vkd3d-proton/` | The vkd3d-proton patches the Glass Cockpit DLSS Fix needs |
 | `site/` | Source of the website; `tools/build_site.py` writes it to `docs/` |
 | `AGENTS.md` | Instructions for AI coding agents working on a user's machine |
 
@@ -28,7 +29,7 @@ git clone https://github.com/brunofgmag/flightsim-on-linux.git ~/flightsim-on-li
 ~/flightsim-on-linux/bin/flightsim-on-linux proton check
 ```
 
-`doctor` needs only Python 3. The build needs git, curl, a C toolchain with autoconf, flex, bison, perl and the MinGW-w64 cross compiler; `doctor` lists what is missing. See [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html) for the full walk-through.
+`doctor` needs only Python 3. The build needs git, curl, a C toolchain with autoconf, flex, bison, perl, the MinGW-w64 C and C++ cross compilers, meson, ninja, glslang and widl; `doctor` lists what is missing. See [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html) for the full walk-through.
 
 ## Working on it
 
@@ -44,7 +45,7 @@ Fixes were found and measured on one machine: CachyOS, KDE Plasma on Wayland, an
 
 ## Credits
 
-Proton FS2024 is built on the [fenix-a320-linux-patch](https://github.com/marselnenaj/fenix-a320-linux-patch) overlay by its authors, on [Proton-CachyOS](https://github.com/CachyOS/proton-cachyos) and on [Wine](https://www.winehq.org/). This project downloads them from their own releases and doesn't redistribute them.
+Proton FS2024 is built on the [fenix-a320-linux-patch](https://github.com/marselnenaj/fenix-a320-linux-patch) overlay by its authors, on [Proton-CachyOS](https://github.com/CachyOS/proton-cachyos), on [Wine](https://www.winehq.org/) and on [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton). This project downloads them from their own releases and doesn't redistribute them.
 
 Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.
 
@@ -53,3 +54,4 @@ Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-o
 - Code (`bin/`, `fsol/`, `proton/`, `checks/`, `addons/`, `tools/`, `tests/`): MIT, in `LICENSE`.
 - Text of the site and the guides (`site/`, `docs/`, the Markdown files): CC BY 4.0, in `LICENSE-docs`.
 - Wine patches (`patches/wine/`): LGPL-2.1-or-later, like Wine itself, in `patches/wine/COPYING`.
+- vkd3d-proton patches (`patches/vkd3d-proton/`): LGPL-2.1, like vkd3d-proton itself, in `patches/vkd3d-proton/COPYING`.

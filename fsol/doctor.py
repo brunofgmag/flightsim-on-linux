@@ -6,7 +6,9 @@ from dataclasses import dataclass
 
 from fsol import registry
 
-BUILD_TOOLS = ("git", "curl", "patch", "perl", "autoreconf", "make", "gcc", "flex", "bison", "x86_64-w64-mingw32-gcc")
+BUILD_TOOLS = ("git", "curl", "patch", "perl", "autoreconf", "make", "gcc", "flex", "bison", "x86_64-w64-mingw32-gcc",
+               "x86_64-w64-mingw32-g++", "meson", "ninja", "glslangValidator")
+IDL_COMPILERS = ("widl", "widl-stable", "x86_64-w64-mingw32-widl")
 
 
 @dataclass
@@ -133,6 +135,8 @@ def check_running(machine):
 
 def check_build_tools(machine):
     missing = [tool for tool in BUILD_TOOLS if not shutil.which(tool)]
+    if not any(shutil.which(tool) for tool in IDL_COMPILERS):
+        missing.append(f"{', '.join(IDL_COMPILERS[:-1])} or {IDL_COMPILERS[-1]}")
     if not missing:
         return Check("build-tools", "ok", "Every program needed to build Proton FS2024 is installed")
     return Check("build-tools", "info", f"Missing for building Proton FS2024: {', '.join(missing)}", "Install them with your distribution's package manager before running the build.")

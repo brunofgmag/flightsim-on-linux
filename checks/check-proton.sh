@@ -229,16 +229,49 @@ $output
   report_exit_check "$failed_runs" "$since" "$outputs"
 }
 
+choose_gpu() {
+  GPU_STATUS=0
+  GPU="$(python3 -I "$HERE/../tools/discrete-gpu.py" 2>&1)" || GPU_STATUS=$?
+}
+
 check_shared_fence() {
-  local gpu status=0
-  gpu="$(python3 -I "$HERE/../tools/discrete-gpu.py" 2>&1)" || status=$?
-  case "$status" in
-    0) run_fence_test "$gpu" ;;
-    2 | 3) report_fence_checks skipped "$gpu" ;;
-    *) report_fence_checks FAIL "$gpu" ;;
+  case "$GPU_STATUS" in
+    0) run_fence_test "$GPU" ;;
+    2 | 3) report_fence_checks skipped "$GPU" ;;
+    *) report_fence_checks FAIL "$GPU" ;;
   esac
 }
+
+ROOT_SIGNATURE_CHECK="vkd3d-proton hands back the live root signature for an identical blob (Glass Cockpit DLSS Fix skipping every display)"
+DESCRIPTOR_HEAP_CHECK="vkd3d-proton descriptor addresses stay inside their heap (Glass Cockpit DLSS Fix skipping some display draws)"
+
+report_vkd3d_checks() {
+  report "$ROOT_SIGNATURE_CHECK" "$1" "$2"
+  report "$DESCRIPTOR_HEAP_CHECK" "$1" "$2"
+}
+
+run_vkd3d_program() {
+  local name="$1" program="$2" status=0 output verdict=FAIL
+  output="$(run_wine_gpu "$GPU" "$(windows_path "$WORK/$program")")" || status=$?
+  [ "$status" -eq 0 ] && verdict=ok
+  report "$name" "$verdict" "${output:-no output}"
+}
+
+check_vkd3d_proton() {
+  case "$GPU_STATUS" in
+    0)
+      install_gpu_libraries
+      run_vkd3d_program "$ROOT_SIGNATURE_CHECK" d3d12-identical-root-signature-test.exe
+      run_vkd3d_program "$DESCRIPTOR_HEAP_CHECK" d3d12-descriptor-heap-addresses-test.exe
+      ;;
+    2 | 3) report_vkd3d_checks skipped "$GPU" ;;
+    *) report_vkd3d_checks FAIL "$GPU" ;;
+  esac
+}
+
+choose_gpu
 check_shared_fence
+check_vkd3d_proton
 
 name="win32u child window drawn by another process (WebView2 in SayIntentions, GSX, REX)"
 if wayland_socket; then

@@ -1,0 +1,459 @@
+diff --git a/libs/vkd3d/device.c b/libs/vkd3d/device.c
+index bfabbe0f..d1b69c9e 100644
+--- a/libs/vkd3d/device.c
++++ b/libs/vkd3d/device.c
+@@ -3963,6 +3963,7 @@ static void d3d12_device_destroy(struct d3d12_device *device)
+ 
+     vkd3d_free((void *)device->vk_info.extension_names);
+     VK_CALL(vkDestroyDevice(device->vk_device, NULL));
++    vkd3d_root_signature_cache_cleanup(&device->root_signature_cache);
+     rwlock_destroy(&device->fragment_output_lock);
+     rwlock_destroy(&device->vertex_input_lock);
+     pthread_mutex_destroy(&device->mutex);
+@@ -5608,8 +5609,13 @@ static HRESULT STDMETHODCALLTYPE d3d12_device_CreateRootSignature(d3d12_device_i
+ 
+     debug_ignored_node_mask(node_mask);
+ 
+-    if (FAILED(hr = d3d12_root_signature_create(device, bytecode, bytecode_length, &object)))
+-        return hr;
++    if (!(object = vkd3d_root_signature_cache_acquire(&device->root_signature_cache, bytecode, bytecode_length)))
++    {
++        if (FAILED(hr = d3d12_root_signature_create(device, bytecode, bytecode_length, &object)))
++            return hr;
++
++        vkd3d_root_signature_cache_insert(&device->root_signature_cache, object, bytecode, bytecode_length);
++    }
+ 
+     return return_interface(&object->ID3D12RootSignature_iface,
+             &IID_ID3D12RootSignature, riid, root_signature);
+@@ -10560,8 +10566,14 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
+         goto out_free_vertex_input_lock;
+     }
+ 
+-    if (FAILED(hr = vkd3d_create_vk_device(device, create_info)))
++    if ((rc = vkd3d_root_signature_cache_init(&device->root_signature_cache)))
++    {
++        hr = hresult_from_errno(rc);
+         goto out_free_fragment_output_lock;
++    }
++
++    if (FAILED(hr = vkd3d_create_vk_device(device, create_info)))
++        goto out_free_root_signature_cache;
+ 
+     if (FAILED(hr = vkd3d_private_store_init(&device->private_store)))
+         goto out_free_vk_resources;
+@@ -10706,6 +10718,8 @@ out_free_vk_resources:
+     VK_CALL(vkDestroyDevice(device->vk_device, NULL));
+ out_free_instance:
+     vkd3d_instance_decref(device->vkd3d_instance);
++out_free_root_signature_cache:
++    vkd3d_root_signature_cache_cleanup(&device->root_signature_cache);
+ out_free_fragment_output_lock:
+     rwlock_destroy(&device->fragment_output_lock);
+ out_free_vertex_input_lock:
+diff --git a/libs/vkd3d/state.c b/libs/vkd3d/state.c
+index 1945f15a..73cdbe50 100644
+--- a/libs/vkd3d/state.c
++++ b/libs/vkd3d/state.c
+@@ -127,6 +127,7 @@ static ULONG STDMETHODCALLTYPE d3d12_root_signature_Release(ID3D12RootSignature
+ 
+     if (!refcount)
+     {
++        vkd3d_root_signature_cache_remove(&device->root_signature_cache, root_signature);
+         d3d_destruction_notifier_notify(&root_signature->destruction_notifier);
+ 
+         d3d12_root_signature_dec_ref(root_signature);
+@@ -2266,6 +2267,159 @@ HRESULT d3d12_root_signature_create_from_subobject(struct d3d12_device *device,
+     return hr;
+ }
+ 
++int vkd3d_root_signature_cache_init(struct vkd3d_root_signature_cache *cache)
++{
++    cache->entries = NULL;
++    cache->entries_size = 0;
++    cache->entry_count = 0;
++    return pthread_mutex_init(&cache->mutex, NULL);
++}
++
++void vkd3d_root_signature_cache_cleanup(struct vkd3d_root_signature_cache *cache)
++{
++    size_t i;
++
++    for (i = 0; i < cache->entry_count; i++)
++        vkd3d_free(cache->entries[i].blob);
++
++    vkd3d_free(cache->entries);
++    pthread_mutex_destroy(&cache->mutex);
++}
++
++static uint32_t vkd3d_root_signature_cache_hash(const void *bytecode, size_t bytecode_length)
++{
++    const uint8_t *data = bytecode;
++    uint64_t hash = hash_fnv1_init();
++    size_t i;
++
++    for (i = 0; i < bytecode_length; i++)
++        hash = hash_fnv1_iterate_u8(hash, data[i]);
++
++    return (uint32_t)(hash ^ (hash >> 32));
++}
++
++static struct vkd3d_root_signature_cache_entry *vkd3d_root_signature_cache_find(
++        struct vkd3d_root_signature_cache *cache, uint32_t hash, const void *bytecode, size_t bytecode_length)
++{
++    struct vkd3d_root_signature_cache_entry *entry;
++    size_t i;
++
++    for (i = 0; i < cache->entry_count; i++)
++    {
++        entry = &cache->entries[i];
++
++        if (entry->hash == hash && entry->blob_size == bytecode_length &&
++                !memcmp(entry->blob, bytecode, bytecode_length))
++            return entry;
++    }
++
++    return NULL;
++}
++
++static bool d3d12_root_signature_try_add_ref(struct d3d12_root_signature *root_signature)
++{
++    uint32_t refcount, cas_refcount;
++
++    cas_refcount = vkd3d_atomic_uint32_load_explicit(&root_signature->refcount, vkd3d_memory_order_relaxed);
++
++    do
++    {
++        if (!(refcount = cas_refcount))
++            return false;
++
++        cas_refcount = vkd3d_atomic_uint32_compare_exchange((uint32_t *)&root_signature->refcount,
++                refcount, refcount + 1, vkd3d_memory_order_acq_rel, vkd3d_memory_order_relaxed);
++    } while (cas_refcount != refcount);
++
++    return true;
++}
++
++struct d3d12_root_signature *vkd3d_root_signature_cache_acquire(struct vkd3d_root_signature_cache *cache,
++        const void *bytecode, size_t bytecode_length)
++{
++    struct vkd3d_root_signature_cache_entry *entry;
++    struct d3d12_root_signature *root_signature = NULL;
++    uint32_t hash;
++
++    if (!bytecode || !bytecode_length)
++        return NULL;
++
++    hash = vkd3d_root_signature_cache_hash(bytecode, bytecode_length);
++
++    pthread_mutex_lock(&cache->mutex);
++
++    entry = vkd3d_root_signature_cache_find(cache, hash, bytecode, bytecode_length);
++
++    if (entry && d3d12_root_signature_try_add_ref(entry->root_signature))
++        root_signature = entry->root_signature;
++
++    pthread_mutex_unlock(&cache->mutex);
++    return root_signature;
++}
++
++static void vkd3d_root_signature_cache_append(struct vkd3d_root_signature_cache *cache, uint32_t hash,
++        struct d3d12_root_signature *root_signature, const void *bytecode, size_t bytecode_length)
++{
++    struct vkd3d_root_signature_cache_entry *entry;
++    void *blob;
++
++    if (!(blob = vkd3d_malloc(bytecode_length)))
++        return;
++
++    if (!vkd3d_array_reserve((void **)&cache->entries, &cache->entries_size,
++            cache->entry_count + 1, sizeof(*cache->entries)))
++    {
++        vkd3d_free(blob);
++        return;
++    }
++
++    memcpy(blob, bytecode, bytecode_length);
++
++    entry = &cache->entries[cache->entry_count++];
++    entry->hash = hash;
++    entry->blob_size = bytecode_length;
++    entry->blob = blob;
++    entry->root_signature = root_signature;
++}
++
++void vkd3d_root_signature_cache_insert(struct vkd3d_root_signature_cache *cache,
++        struct d3d12_root_signature *root_signature, const void *bytecode, size_t bytecode_length)
++{
++    struct vkd3d_root_signature_cache_entry *entry;
++    uint32_t hash;
++
++    hash = vkd3d_root_signature_cache_hash(bytecode, bytecode_length);
++
++    pthread_mutex_lock(&cache->mutex);
++
++    if ((entry = vkd3d_root_signature_cache_find(cache, hash, bytecode, bytecode_length)))
++        entry->root_signature = root_signature;
++    else
++        vkd3d_root_signature_cache_append(cache, hash, root_signature, bytecode, bytecode_length);
++
++    pthread_mutex_unlock(&cache->mutex);
++}
++
++void vkd3d_root_signature_cache_remove(struct vkd3d_root_signature_cache *cache,
++        struct d3d12_root_signature *root_signature)
++{
++    size_t i;
++
++    pthread_mutex_lock(&cache->mutex);
++
++    for (i = 0; i < cache->entry_count; i++)
++    {
++        if (cache->entries[i].root_signature != root_signature)
++            continue;
++
++        vkd3d_free(cache->entries[i].blob);
++        cache->entries[i] = cache->entries[--cache->entry_count];
++        break;
++    }
++
++    pthread_mutex_unlock(&cache->mutex);
++}
++
+ unsigned int d3d12_root_signature_get_shader_interface_flags(const struct d3d12_root_signature *root_signature,
+         enum vkd3d_pipeline_type pipeline_type)
+ {
+diff --git a/libs/vkd3d/vkd3d_private.h b/libs/vkd3d/vkd3d_private.h
+index 3e71f89c..04d1980c 100644
+--- a/libs/vkd3d/vkd3d_private.h
++++ b/libs/vkd3d/vkd3d_private.h
+@@ -2091,6 +2091,31 @@ struct d3d12_root_signature
+     struct d3d_destruction_notifier destruction_notifier;
+ };
+ 
++struct vkd3d_root_signature_cache_entry
++{
++    uint32_t hash;
++    size_t blob_size;
++    void *blob;
++    struct d3d12_root_signature *root_signature;
++};
++
++struct vkd3d_root_signature_cache
++{
++    pthread_mutex_t mutex;
++    struct vkd3d_root_signature_cache_entry *entries;
++    size_t entries_size;
++    size_t entry_count;
++};
++
++int vkd3d_root_signature_cache_init(struct vkd3d_root_signature_cache *cache);
++void vkd3d_root_signature_cache_cleanup(struct vkd3d_root_signature_cache *cache);
++struct d3d12_root_signature *vkd3d_root_signature_cache_acquire(struct vkd3d_root_signature_cache *cache,
++        const void *bytecode, size_t bytecode_length);
++void vkd3d_root_signature_cache_insert(struct vkd3d_root_signature_cache *cache,
++        struct d3d12_root_signature *root_signature, const void *bytecode, size_t bytecode_length);
++void vkd3d_root_signature_cache_remove(struct vkd3d_root_signature_cache *cache,
++        struct d3d12_root_signature *root_signature);
++
+ HRESULT d3d12_root_signature_create(struct d3d12_device *device, const void *bytecode,
+         size_t bytecode_length, struct d3d12_root_signature **root_signature);
+ HRESULT d3d12_root_signature_create_from_subobject(struct d3d12_device *device, const void *bytecode,
+@@ -5903,6 +5928,7 @@ struct d3d12_device
+     struct hash_map vertex_input_pipelines;
+     rwlock_t fragment_output_lock;
+     struct hash_map fragment_output_pipelines;
++    struct vkd3d_root_signature_cache root_signature_cache;
+ #ifdef VKD3D_ENABLE_BREADCRUMBS
+     struct vkd3d_breadcrumb_tracer breadcrumb_tracer;
+ #endif
+diff --git a/tests/d3d12_root_signature.c b/tests/d3d12_root_signature.c
+index 0f4b98ed..71891a3a 100644
+--- a/tests/d3d12_root_signature.c
++++ b/tests/d3d12_root_signature.c
+@@ -167,6 +167,172 @@ void test_create_root_signature(void)
+     ok(!refcount, "ID3D12Device has %u references left.\n", refcount);
+ }
+ 
++void test_create_root_signature_identical_blob(void)
++{
++    ID3D12RootSignature *root_signature, *root_signature2, *other_root_signature;
++    D3D12_ROOT_SIGNATURE_DESC root_signature_desc, other_desc;
++    D3D12_ROOT_PARAMETER root_parameter, other_parameter;
++    ID3D12Object *object;
++    unsigned int refcount;
++    ID3D12Device *device;
++    ID3DBlob *blob;
++    uint8_t *copy;
++    SIZE_T size;
++    HRESULT hr;
++
++    if (!(device = create_device()))
++    {
++        skip("Failed to create device.\n");
++        return;
++    }
++
++    root_parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
++    root_parameter.Constants.ShaderRegister = 0;
++    root_parameter.Constants.RegisterSpace = 0;
++    root_parameter.Constants.Num32BitValues = 4;
++    root_parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
++    root_signature_desc.NumParameters = 1;
++    root_signature_desc.pParameters = &root_parameter;
++    root_signature_desc.NumStaticSamplers = 0;
++    root_signature_desc.pStaticSamplers = NULL;
++    root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
++
++    other_parameter = root_parameter;
++    other_parameter.Constants.Num32BitValues = 8;
++    other_desc = root_signature_desc;
++    other_desc.pParameters = &other_parameter;
++
++    hr = create_root_signature(device, &root_signature_desc, &root_signature);
++    ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++    hr = create_root_signature(device, &root_signature_desc, &root_signature2);
++    ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++    ok(root_signature == root_signature2,
++            "Got different root signatures %p and %p for identical blobs.\n", root_signature, root_signature2);
++    refcount = ID3D12RootSignature_Release(root_signature2);
++    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
++
++    hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &blob, NULL);
++    ok(hr == S_OK, "Failed to serialize root signature, hr %#x.\n", (int)hr);
++    size = ID3D10Blob_GetBufferSize(blob);
++    copy = malloc(size);
++    memcpy(copy, ID3D10Blob_GetBufferPointer(blob), size);
++    ID3D10Blob_Release(blob);
++    hr = ID3D12Device_CreateRootSignature(device, 0, copy, size,
++            &IID_ID3D12Object, (void **)&object);
++    ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++    ok((void *)object == (void *)root_signature,
++            "Got different root signatures %p and %p for identical blobs.\n", object, root_signature);
++    refcount = ID3D12Object_Release(object);
++    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
++    free(copy);
++
++    hr = create_root_signature(device, &other_desc, &other_root_signature);
++    ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++    ok(other_root_signature != root_signature,
++            "Got the same root signature %p for different blobs.\n", root_signature);
++    refcount = get_refcount(other_root_signature);
++    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
++    refcount = get_refcount(root_signature);
++    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
++    refcount = ID3D12RootSignature_Release(other_root_signature);
++    ok(!refcount, "ID3D12RootSignature has %u references left.\n", refcount);
++
++    refcount = ID3D12RootSignature_Release(root_signature);
++    ok(!refcount, "ID3D12RootSignature has %u references left.\n", refcount);
++
++    hr = create_root_signature(device, &root_signature_desc, &root_signature2);
++    ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++    refcount = get_refcount(root_signature2);
++    ok(refcount == 1, "Got unexpected refcount %u.\n", refcount);
++    refcount = ID3D12RootSignature_Release(root_signature2);
++    ok(!refcount, "ID3D12RootSignature has %u references left.\n", refcount);
++
++    refcount = ID3D12Device_Release(device);
++    ok(!refcount, "ID3D12Device has %u references left.\n", refcount);
++}
++
++struct create_root_signature_thread_data
++{
++    ID3D12Device *device;
++    const void *blob;
++    SIZE_T size;
++};
++
++static void create_root_signature_thread_main(void *untyped_data)
++{
++    struct create_root_signature_thread_data *data = untyped_data;
++    ID3D12RootSignature *root_signature;
++    unsigned int refcount;
++    unsigned int i;
++    HRESULT hr;
++
++    for (i = 0; i < 20000; ++i)
++    {
++        hr = ID3D12Device_CreateRootSignature(data->device, 0, data->blob, data->size,
++                &IID_ID3D12RootSignature, (void **)&root_signature);
++        ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++        refcount = ID3D12RootSignature_AddRef(root_signature);
++        ok(refcount >= 2 && refcount <= 10, "Got unexpected refcount %u.\n", refcount);
++        ID3D12RootSignature_Release(root_signature);
++        ID3D12RootSignature_Release(root_signature);
++    }
++}
++
++void test_multithread_create_root_signature(void)
++{
++    struct create_root_signature_thread_data thread_data;
++    D3D12_ROOT_SIGNATURE_DESC root_signature_desc;
++    ID3D12RootSignature *root_signature;
++    D3D12_ROOT_PARAMETER root_parameter;
++    HANDLE threads[4];
++    unsigned int refcount;
++    ID3D12Device *device;
++    ID3DBlob *blob;
++    unsigned int i;
++    HRESULT hr;
++
++    if (!(device = create_device()))
++    {
++        skip("Failed to create device.\n");
++        return;
++    }
++
++    root_parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
++    root_parameter.Constants.ShaderRegister = 0;
++    root_parameter.Constants.RegisterSpace = 0;
++    root_parameter.Constants.Num32BitValues = 4;
++    root_parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
++    root_signature_desc.NumParameters = 1;
++    root_signature_desc.pParameters = &root_parameter;
++    root_signature_desc.NumStaticSamplers = 0;
++    root_signature_desc.pStaticSamplers = NULL;
++    root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
++    hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1_0, &blob, NULL);
++    ok(hr == S_OK, "Failed to serialize root signature, hr %#x.\n", (int)hr);
++
++    thread_data.device = device;
++    thread_data.blob = ID3D10Blob_GetBufferPointer(blob);
++    thread_data.size = ID3D10Blob_GetBufferSize(blob);
++
++    for (i = 0; i < ARRAY_SIZE(threads); ++i)
++        threads[i] = create_thread(create_root_signature_thread_main, &thread_data);
++
++    create_root_signature_thread_main(&thread_data);
++
++    for (i = 0; i < ARRAY_SIZE(threads); ++i)
++        ok(join_thread(threads[i]), "Failed to join thread %u.\n", i);
++
++    hr = ID3D12Device_CreateRootSignature(device, 0, thread_data.blob, thread_data.size,
++            &IID_ID3D12RootSignature, (void **)&root_signature);
++    ok(hr == S_OK, "Failed to create root signature, hr %#x.\n", (int)hr);
++    refcount = ID3D12RootSignature_Release(root_signature);
++    ok(!refcount, "ID3D12RootSignature has %u references left.\n", refcount);
++
++    ID3D10Blob_Release(blob);
++    refcount = ID3D12Device_Release(device);
++    ok(!refcount, "ID3D12Device has %u references left.\n", refcount);
++}
++
+ void test_root_signature_limits(void)
+ {
+     D3D12_DESCRIPTOR_RANGE descriptor_ranges[D3D12_MAX_ROOT_COST + 1];
+diff --git a/tests/d3d12_tests.h b/tests/d3d12_tests.h
+index 8f052ae3..6d1f6326 100644
+--- a/tests/d3d12_tests.h
++++ b/tests/d3d12_tests.h
+@@ -48,6 +48,8 @@ decl_test(test_create_sampler);
+ decl_test(test_create_sampler2);
+ decl_test(test_create_unordered_access_view);
+ decl_test(test_create_root_signature);
++decl_test(test_create_root_signature_identical_blob);
++decl_test(test_multithread_create_root_signature);
+ decl_test(test_root_signature_limits);
+ decl_test(test_create_compute_pipeline_state);
+ decl_test(test_create_graphics_pipeline_state);

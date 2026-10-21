@@ -1,0 +1,128 @@
+diff --git a/libs/vkd3d/resource.c b/libs/vkd3d/resource.c
+index a8fc26b1..ee70b325 100644
+--- a/libs/vkd3d/resource.c
++++ b/libs/vkd3d/resource.c
+@@ -10314,6 +10314,7 @@ HRESULT d3d12_descriptor_heap_create(struct d3d12_device *device,
+     unsigned int num_descriptor_bits = 0;
+     unsigned int num_descriptors_pot = 0;
+     size_t required_size;
++    size_t cpu_va_span;
+     size_t alignment;
+     HRESULT hr;
+ 
+@@ -10395,6 +10396,9 @@ HRESULT d3d12_descriptor_heap_create(struct d3d12_device *device,
+             required_size += num_descriptors_pot * sizeof(struct vkd3d_descriptor_metadata_types);
+             required_size += desc->NumDescriptors * sizeof(struct vkd3d_descriptor_metadata_view);
+ 
++            cpu_va_span = num_descriptor_bits + (size_t)desc->NumDescriptors * VKD3D_RESOURCE_DESC_INCREMENT;
++            required_size = max(required_size, cpu_va_span);
++
+             /* The alignment should scale roughly with size of the heap,
+              * so any wasted space shouldn't really be that bad. */
+             alignment = max(D3D12_DESC_ALIGNMENT, num_descriptors_pot * VKD3D_RESOURCE_DESC_INCREMENT);
+diff --git a/tests/d3d12_descriptors.c b/tests/d3d12_descriptors.c
+index 2c23cc01..ef424ca5 100644
+--- a/tests/d3d12_descriptors.c
++++ b/tests/d3d12_descriptors.c
+@@ -100,6 +100,89 @@ void test_create_descriptor_heap(void)
+     ok(!refcount, "ID3D12Device has %u references left.\n", refcount);
+ }
+ 
++static bool is_readable_allocation_range(SIZE_T start, SIZE_T end)
++{
++    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
++            PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
++    MEMORY_BASIC_INFORMATION info;
++    void *allocation_base = NULL;
++    SIZE_T address = start;
++
++    while (address < end)
++    {
++        if (!VirtualQuery((const void *)address, &info, sizeof(info)))
++            return false;
++        if (info.State != MEM_COMMIT || !(info.Protect & readable) || (info.Protect & PAGE_GUARD))
++            return false;
++        if (address != start && info.AllocationBase != allocation_base)
++            return false;
++        allocation_base = info.AllocationBase;
++        address = (SIZE_T)info.BaseAddress + info.RegionSize;
++    }
++
++    return true;
++}
++
++void test_descriptor_heap_cpu_handles_readable(void)
++{
++    static const UINT descriptor_counts[] = {65536, 100000, 1000000};
++    static const D3D12_DESCRIPTOR_HEAP_FLAGS heap_flags[] =
++    {
++        D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
++        D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
++    };
++    ID3D12DescriptorHeap *heaps[8];
++    D3D12_DESCRIPTOR_HEAP_DESC heap_desc;
++    D3D12_CPU_DESCRIPTOR_HANDLE start;
++    unsigned int i, j, k, unreadable;
++    ID3D12Device *device;
++    UINT increment;
++    HRESULT hr;
++
++    if (!(device = create_device()))
++    {
++        skip("Failed to create device.\n");
++        return;
++    }
++
++    increment = ID3D12Device_GetDescriptorHandleIncrementSize(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
++
++    for (i = 0; i < ARRAY_SIZE(descriptor_counts); i++)
++    {
++        for (j = 0; j < ARRAY_SIZE(heap_flags); j++)
++        {
++            vkd3d_test_set_context("Count %u, flags %#x", descriptor_counts[i], heap_flags[j]);
++
++            heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
++            heap_desc.NumDescriptors = descriptor_counts[i];
++            heap_desc.Flags = heap_flags[j];
++            heap_desc.NodeMask = 0;
++
++            for (k = 0; k < ARRAY_SIZE(heaps); k++)
++            {
++                hr = ID3D12Device_CreateDescriptorHeap(device, &heap_desc, &IID_ID3D12DescriptorHeap, (void **)&heaps[k]);
++                ok(hr == S_OK, "Failed to create descriptor heap, hr %#x.\n", (int)hr);
++            }
++
++            unreadable = 0;
++            for (k = 0; k < ARRAY_SIZE(heaps); k++)
++            {
++                start = ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(heaps[k]);
++                if (!is_readable_allocation_range(start.ptr, start.ptr + (SIZE_T)descriptor_counts[i] * increment))
++                    unreadable++;
++            }
++            ok(!unreadable, "%u of %u heaps have CPU descriptor handles outside their own readable allocation.\n",
++                    unreadable, (unsigned int)ARRAY_SIZE(heaps));
++
++            for (k = 0; k < ARRAY_SIZE(heaps); k++)
++                ID3D12DescriptorHeap_Release(heaps[k]);
++        }
++    }
++    vkd3d_test_set_context(NULL);
++
++    ID3D12Device_Release(device);
++}
++
+ void test_descriptor_tables(void)
+ {
+     ID3D12DescriptorHeap *heap, *sampler_heap, *heaps[2];
+diff --git a/tests/d3d12_tests.h b/tests/d3d12_tests.h
+index 6d1f6326..835cb81a 100644
+--- a/tests/d3d12_tests.h
++++ b/tests/d3d12_tests.h
+@@ -44,6 +44,7 @@ decl_test(test_create_placed_resource);
+ decl_test(test_create_placed_resource_size);
+ decl_test(test_create_reserved_resource);
+ decl_test(test_create_descriptor_heap);
++decl_test(test_descriptor_heap_cpu_handles_readable);
+ decl_test(test_create_sampler);
+ decl_test(test_create_sampler2);
+ decl_test(test_create_unordered_access_view);

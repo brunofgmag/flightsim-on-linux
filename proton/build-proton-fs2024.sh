@@ -52,6 +52,15 @@ MODULES=(
   "dlls/shell32/x86_64-windows/shell32.dll:lib/wine/x86_64-windows/shell32.dll"
 )
 
+VKD3D_URL="https://github.com/HansKristian-Work/vkd3d-proton"
+VKD3D_PATCHES=(
+  "$ROOT/patches/vkd3d-proton/root-signature-reuse-identical-blob.patch"
+  "$ROOT/patches/vkd3d-proton/descriptor-heap-covers-its-cpu-handles.patch"
+)
+VKD3D_TARGET="libs/d3d12core/d3d12core.dll"
+VKD3D_MODULE="lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll"
+IDL_COMPILERS=(widl widl-stable x86_64-w64-mingw32-widl)
+
 CONFIGURE=(--enable-win64 --disable-tests --enable-silent-rules --without-ffmpeg --without-unwind)
 
 USER_SETTINGS=(
@@ -118,16 +127,25 @@ protocol_version() {
   sed -n 's/^#define SERVER_PROTOCOL_VERSION \([0-9]*\)$/\1/p' "$SOURCE/include/wine/server_protocol.h"
 }
 
+has_idl_compiler() {
+  local tool
+  for tool in "${IDL_COMPILERS[@]}"; do
+    command -v "$tool" > /dev/null && return 0
+  done
+  return 1
+}
+
 check_preconditions() {
   step "Checking the starting point"
   [[ "$RELEASE" == cachyos-11.* ]] || die "only cachyos-11 releases have an overlay variant; $RELEASE does not"
   [ "$RELEASE" = "$VERIFIED_RELEASE" ] || echo "note: $RELEASE is not $VERIFIED_RELEASE, the release this project verified; the patches may not apply"
   local tool
-  for tool in curl git patch python3 perl autoreconf make gcc flex bison x86_64-w64-mingw32-gcc x86_64-w64-mingw32-strip strip readelf sha512sum sha256sum tar; do
+  for tool in curl git patch python3 perl autoreconf make gcc flex bison x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-strip strip readelf sha512sum sha256sum tar meson ninja glslangValidator; do
     command -v "$tool" > /dev/null || die "missing program: $tool"
   done
+  has_idl_compiler || die "missing program: ${IDL_COMPILERS[*]} (any one of them), which vkd3d-proton needs"
   local patch
-  for patch in "${PATCHES[@]:1}"; do
+  for patch in "${PATCHES[@]:1}" "${VKD3D_PATCHES[@]}"; do
     [ -f "$patch" ] || die "missing patch $patch"
   done
   STEAM="$(find_steam)"
@@ -180,6 +198,15 @@ find_wine_commit() {
   [[ "$WINE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "invalid commit: $WINE_COMMIT"
   [[ "$url" =~ ^https://github\.com/CachyOS/wine-cachyos(\.git)?$ ]] || die "the wine submodule points to $url"
   echo "wine-cachyos $WINE_COMMIT"
+}
+
+check_release_leaves_vkd3d_alone() {
+  step "Checking that release $RELEASE patches nothing in vkd3d-proton"
+  local answer found
+  answer="$(curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/CachyOS/proton-cachyos/contents/patches?ref=$RELEASE")"
+  found="$(python3 -I -c 'import json, sys; print(" ".join(d["name"] for d in json.load(sys.stdin) if d.get("type") == "dir" and d.get("name") == "vkd3d-proton"))' <<< "$answer")"
+  [ -z "$found" ] || die "release $RELEASE has patches/vkd3d-proton; this script would build vkd3d-proton without them"
+  echo "release $RELEASE has no patches/vkd3d-proton"
 }
 
 fetch_source() {
@@ -235,6 +262,53 @@ extract_release() {
   tar -xf "$TARBALL" -C "$WORK/release"
   STAGE="$WORK/release/proton-$RELEASE-$ARCH"
   [ -f "$STAGE/proton" ] && [ -f "$STAGE/toolmanifest.vdf" ] || die "the tarball has no proton-$RELEASE-$ARCH/proton"
+}
+
+find_vkd3d_commit() {
+  step "Finding the vkd3d-proton commit of the release"
+  local version="$STAGE/files/lib/wine/vkd3d-proton/version" rest
+  [ -f "$version" ] || die "the release has no lib/wine/vkd3d-proton/version"
+  read -r VKD3D_COMMIT rest < "$version" || true
+  [[ "$VKD3D_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "lib/wine/vkd3d-proton/version of the release does not start with a commit: $VKD3D_COMMIT"
+  echo "vkd3d-proton $VKD3D_COMMIT"
+}
+
+fetch_vkd3d_source() {
+  step "Fetching vkd3d-proton $VKD3D_COMMIT"
+  VKD3D_SOURCE="$WORK/vkd3d-proton"
+  git init -q "$VKD3D_SOURCE"
+  git -C "$VKD3D_SOURCE" fetch -q --depth=1 "$VKD3D_URL" "$VKD3D_COMMIT"
+  git -C "$VKD3D_SOURCE" -c advice.detachedHead=false checkout -q FETCH_HEAD
+  git -C "$VKD3D_SOURCE" submodule update -q --init --recursive --depth=1
+}
+
+apply_vkd3d_patches() {
+  step "Applying the vkd3d-proton patches"
+  cd "$VKD3D_SOURCE"
+  local patch
+  for patch in "${VKD3D_PATCHES[@]}"; do
+    echo "-- $(basename "$patch")"
+    patch --batch --forward --fuzz=0 -p1 --dry-run -i "$patch" > /dev/null || die "$(basename "$patch") does not apply to vkd3d-proton $VKD3D_COMMIT"
+    patch --batch --forward --fuzz=0 -p1 -i "$patch"
+  done
+}
+
+compile_vkd3d() {
+  step "Compiling the 64-bit d3d12core.dll of vkd3d-proton"
+  cd "$VKD3D_SOURCE"
+  meson setup --cross-file build-win64.txt --buildtype release --strip -Db_ndebug=if-release "$WORK/vkd3d-objects" > "$WORK/vkd3d-meson.log" 2>&1 || die "meson setup failed; see $WORK/vkd3d-meson.log"
+  ninja -C "$WORK/vkd3d-objects" -j"$JOBS" "$VKD3D_TARGET" > "$WORK/vkd3d-ninja.log" 2>&1 || die "ninja failed; see $WORK/vkd3d-ninja.log"
+}
+
+install_vkd3d() {
+  step "Swapping d3d12core.dll in the release copy"
+  local source="$WORK/vkd3d-objects/$VKD3D_TARGET" target="$STAGE/files/$VKD3D_MODULE"
+  [ -f "$source" ] || die "ninja did not produce $VKD3D_TARGET"
+  [ -f "$target" ] && [ ! -L "$target" ] || die "the release has no regular file $VKD3D_MODULE"
+  rm -f "$target"
+  install -m 0755 "$source" "$target"
+  x86_64-w64-mingw32-strip --strip-all "$target"
+  echo "$(sha256sum "$target" | cut -d' ' -f1)  $VKD3D_MODULE"
 }
 
 needed_libraries() {
@@ -346,12 +420,17 @@ write_record() {
     echo "wine-cachyos $WINE_COMMIT"
     echo "protocol $PROTOCOL"
     echo "overlay fenix-a320-linux-patch $OVERLAY_TAG $OVERLAY_VARIANT"
+    echo "vkd3d-proton $VKD3D_COMMIT"
     for patch in "${PATCHES[@]}"; do
       echo "patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
+    done
+    for patch in "${VKD3D_PATCHES[@]}"; do
+      echo "vkd3d-patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
     done
     for module in "${MODULES[@]}"; do
       echo "module $(sha256sum "$STAGE/files/$(module_target "$module")" | cut -d' ' -f1) $(module_target "$module")"
     done
+    echo "module $(sha256sum "$STAGE/files/$VKD3D_MODULE" | cut -d' ' -f1) $VKD3D_MODULE"
   } > "$record"
 }
 
@@ -393,12 +472,18 @@ check_preconditions
 download_release
 download_overlay_patch
 find_wine_commit
+check_release_leaves_vkd3d_alone
 fetch_source
 apply_patches
 compile_modules
 extract_release
+find_vkd3d_commit
+fetch_vkd3d_source
+apply_vkd3d_patches
+compile_vkd3d
 check_libraries
 install_modules
+install_vkd3d
 write_settings
 check_runtime
 write_record

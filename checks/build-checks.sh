@@ -15,6 +15,8 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-non-finite-close-test.exe" "$HERE/src/d
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-bezier-ceiling-test.exe" "$HERE/src/d2d1-bezier-ceiling-test.c" -ld2d1 -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d12-cross-process-fence-test.exe" "$HERE/src/d3d12-cross-process-fence-test.c" -ld3d12 -ld3d11 -ldxguid -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/dxgi-shared-resource-luid-test.exe" "$HERE/src/dxgi-shared-resource-luid-test.c" -ld3d12 -ld3d11 -ldxgi -luuid
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d12-identical-root-signature-test.exe" "$HERE/src/d3d12-identical-root-signature-test.c" -ld3d12 -luuid
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d12-descriptor-heap-addresses-test.exe" "$HERE/src/d3d12-descriptor-heap-addresses-test.c" -ld3d12 -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d11-keyed-mutex-test.exe" "$HERE/src/d3d11-keyed-mutex-test.c" -ld3d11 -ldxgi -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/process-memory-after-eperm-test.exe" "$HERE/src/process-memory-after-eperm-test.c" -Wl,--disable-dynamicbase
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-cursor-clip-test.exe" "$HERE/src/hidden-cursor-clip-test.c" -lgdi32 -luser32

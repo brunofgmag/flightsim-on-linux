@@ -3,6 +3,7 @@ import socket
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fsol import doctor, machine, vdf
 
@@ -298,6 +299,32 @@ class DoctorTest(unittest.TestCase):
         found = machine.discover(home=Path(self.temp.name) / "nobody", steam_override="", proc=self.fake.proc, dev=self.fake.proc)
         self.assertEqual([check.name for check in doctor.run(found)], ["steam"])
         self.assertEqual(doctor.run(found)[0].status, "fail")
+
+
+class BuildToolsTest(unittest.TestCase):
+    EVERY_TOOL = ("git", "curl", "patch", "perl", "autoreconf", "make", "gcc", "flex", "bison", "x86_64-w64-mingw32-gcc",
+                  "x86_64-w64-mingw32-g++", "meson", "ninja", "glslangValidator", "widl")
+
+    def check_with(self, installed):
+        with mock.patch.object(doctor.shutil, "which", lambda tool: f"/usr/bin/{tool}" if tool in installed else None):
+            return doctor.check_build_tools(None)
+
+    def test_every_tool_installed_is_ok(self):
+        self.assertEqual(self.check_with(self.EVERY_TOOL).status, "ok")
+
+    def test_the_vkd3d_proton_tools_are_needed(self):
+        for tool in ("x86_64-w64-mingw32-g++", "meson", "ninja", "glslangValidator"):
+            check = self.check_with(set(self.EVERY_TOOL) - {tool})
+            self.assertEqual(check.status, "info")
+            self.assertIn(tool, check.detail)
+
+    def test_the_mingw_tools_widl_is_enough(self):
+        installed = (set(self.EVERY_TOOL) - {"widl"}) | {"x86_64-w64-mingw32-widl"}
+        self.assertEqual(self.check_with(installed).status, "ok")
+
+    def test_without_any_widl_every_name_meson_accepts_is_named(self):
+        check = self.check_with(set(self.EVERY_TOOL) - {"widl"})
+        self.assertIn("widl, widl-stable or x86_64-w64-mingw32-widl", check.detail)
 
 
 if __name__ == "__main__":
