@@ -452,6 +452,8 @@ publish() {
   fi
   mkdir -p "$(dirname "$DEST")"
   mv "$STAGE" "$DEST"
+  rm -rf "$WORK"
+  CREATED_WORK=
   echo "done: $DEST"
   if [ -n "$first" ]; then
     echo "Restart Steam, then pick \"$DISPLAY_NAME\" in Microsoft Flight Simulator 2024 > Properties > Compatibility."
