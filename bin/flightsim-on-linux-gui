@@ -18,6 +18,10 @@ else
   DIALOG=terminal
 fi
 
+SHOW_OUTPUT="Show output"
+TERMINALS=(xdg-terminal-exec konsole gnome-terminal xfce4-terminal x-terminal-emulator xterm)
+FOLLOW="tail -n +1 --pid=\"\$1\" -f \"\$2\"; printf '\\nFinished. Press Enter to close this window.'; read -r _"
+
 show_text() {
   local title="$1" file="$2"
   case "$DIALOG" in
@@ -118,6 +122,45 @@ set_up_addons() {
   rm -f "$results"
 }
 
+terminal_command() {
+  local name
+  local -a preferred=()
+  [ "${XDG_CURRENT_DESKTOP:-}" != KDE ] || preferred=(konsole)
+  for name in ${TERMINAL:-} "${preferred[@]}" "${TERMINALS[@]}"; do
+    command -v "$name" > /dev/null || continue
+    case "$name" in
+      xdg-terminal-exec) echo "$name" ;;
+      gnome-terminal) echo "$name --" ;;
+      xfce4-terminal) echo "$name -x" ;;
+      *) echo "$name -e" ;;
+    esac
+    return 0
+  done
+  return 1
+}
+
+show_output() {
+  local task="$1"
+  local -a launcher
+  if read -r -a launcher < <(terminal_command); then
+    "${launcher[@]}" sh -c "$FOLLOW" sh "$task" "$LOG" > /dev/null 2>&1 &
+  elif command -v zenity > /dev/null; then
+    tail -n +1 --pid="$task" -f "$LOG" | zenity --text-info --auto-scroll --width=760 --height=520 --font=monospace --title="$TITLE: output" > /dev/null 2>&1 &
+  else
+    kdialog --title "$TITLE" --msgbox "No terminal was found. The output goes to $LOG while it runs." > /dev/null 2>&1 &
+  fi
+}
+
+offer_output() {
+  local text="$1" task="$2"
+  kdialog --title "$TITLE" --yes-label "$SHOW_OUTPUT" --no-label "Close" --yesno "$text: you can follow its output while it runs." > /dev/null 2>&1 && show_output "$task"
+}
+
+stop_offer() {
+  pkill -P "$1" 2> /dev/null
+  kill "$1" 2> /dev/null
+}
+
 progress_call() {
   local ref="$1" method="$2"
   shift 2
@@ -130,7 +173,7 @@ run_with_progress() {
   case "$DIALOG" in
     zenity)
       "$@" > "$LOG" 2>&1 &
-      local pid=$! line
+      local pid=$! line button
       {
         while kill -0 "$pid" 2> /dev/null; do
           line="$(tail -n 1 "$LOG" | cut -c1-90)"
@@ -138,15 +181,23 @@ run_with_progress() {
           sleep 1
         done
         echo 100
-      } | zenity --progress --pulsate --auto-close --no-cancel --width=620 --title="$TITLE" --text="$text"
+      } | zenity --progress --pulsate --auto-close --no-cancel --extra-button="$SHOW_OUTPUT" --width=620 --title="$TITLE" --text="$text" |
+        while IFS= read -r button; do
+          [ "$button" != "$SHOW_OUTPUT" ] || show_output "$pid"
+        done
       wait "$pid"
       ;;
     kdialog)
-      local ref status
+      local ref status task offer
       ref="$(kdialog --title "$TITLE" --progressbar "$text" 0)"
       progress_call "$ref" showCancelButton boolean:false
-      "$@" > "$LOG" 2>&1
+      "$@" > "$LOG" 2>&1 &
+      task=$!
+      offer_output "$text" "$task" &
+      offer=$!
+      wait "$task"
       status=$?
+      stop_offer "$offer"
       progress_call "$ref" close
       return "$status"
       ;;
