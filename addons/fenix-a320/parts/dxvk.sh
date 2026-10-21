@@ -59,29 +59,38 @@ dxvk_cache_message() {
   echo "$(dxvk_cache) has no ${DXVK_DLLS[*]}; run $DXVK_BUILD_COMMAND"
 }
 
+dxvk_folders() {
+  echo ""
+  [ ! -d "$FENIX_DEPS/displays" ] || echo displays
+}
+
+dxvk_name() {
+  echo "${1:+$1/}$2"
+}
+
 dxvk_restore() {
   fenix_restore "$FENIX_DEPS/$1" "$1" deps
 }
 
 dxvk_write_conf() {
-  local conf="$FENIX_DEPS/dxvk.conf" line kept
-  line="$(dxvk_filter_line "$1")"
+  local name="$1" conf="$FENIX_DEPS/$1" line kept
+  line="$(dxvk_filter_line "$2")"
   if dxvk_conf_names "$conf" "$line"; then
-    echo "already dxvk.conf names the GPU"
+    echo "already $name names the GPU"
     return 0
   fi
-  fenix_stash "$conf" dxvk.conf
+  fenix_stash "$conf" "$name"
   kept="$(grep -v -E -- "$DXVK_FILTER_PATTERN" "$conf" 2> /dev/null || true)"
   {
     [ -z "$kept" ] || printf '%s\n' "$kept"
     printf '%s\n' "$line"
   } > "$conf"
-  echo "changed dxvk.conf names the GPU: $1"
+  echo "changed $name names the GPU: $2"
 }
 
 dxvk_copy_dll() {
   local name="$1" source
-  source="$(dxvk_cache)/$name"
+  source="$(dxvk_cache)/$(basename "$name")"
   if cmp -s "$source" "$FENIX_DEPS/$name"; then
     echo "already $name is the patched DXVK"
     return 0
@@ -96,22 +105,28 @@ dxvk_gpu_mode() {
 }
 
 dxvk_apply_filter() {
-  if [ -n "$DXVK_GPU" ]; then
-    dxvk_write_conf "$DXVK_GPU"
-  else
-    dxvk_restore dxvk.conf
-  fi
+  local folder name
+  while IFS= read -r folder; do
+    name="$(dxvk_name "$folder" dxvk.conf)"
+    if [ -n "$DXVK_GPU" ]; then
+      dxvk_write_conf "$name" "$DXVK_GPU"
+    else
+      dxvk_restore "$name"
+    fi
+  done < <(dxvk_folders)
 }
 
 dxvk_apply_dlls() {
-  local dll
-  for dll in "${DXVK_DLLS[@]}"; do
-    if dxvk_gpu_mode; then
-      dxvk_copy_dll "$dll"
-    else
-      dxvk_restore "$dll"
-    fi
-  done
+  local folder dll
+  while IFS= read -r folder; do
+    for dll in "${DXVK_DLLS[@]}"; do
+      if dxvk_gpu_mode; then
+        dxvk_copy_dll "$(dxvk_name "$folder" "$dll")"
+      else
+        dxvk_restore "$(dxvk_name "$folder" "$dll")"
+      fi
+    done
+  done < <(dxvk_folders)
 }
 
 dxvk_apply() {
@@ -126,31 +141,42 @@ dxvk_apply() {
 }
 
 dxvk_check_filter() {
-  local conf="$FENIX_DEPS/dxvk.conf"
+  local folder name status=0
   if ! dxvk_probe_gpu; then
     fail "device filter: $DXVK_GPU_ERROR"
-  elif [ -z "$DXVK_GPU" ]; then
-    ok "one GPU, no device filter needed"
-  elif dxvk_conf_names "$conf" "$(dxvk_filter_line "$DXVK_GPU")"; then
-    ok "dxvk.conf names the GPU: $DXVK_GPU"
-  else
-    fail "dxvk.conf in deps does not contain $(dxvk_filter_line "$DXVK_GPU") as its only dxvk.deviceFilter line; run apply"
+    return
   fi
+  if [ -z "$DXVK_GPU" ]; then
+    ok "one GPU, no device filter needed"
+    return
+  fi
+  while IFS= read -r folder; do
+    name="$(dxvk_name "$folder" dxvk.conf)"
+    if dxvk_conf_names "$FENIX_DEPS/$name" "$(dxvk_filter_line "$DXVK_GPU")"; then
+      ok "$name names the GPU: $DXVK_GPU"
+    else
+      fail "$name in deps does not contain $(dxvk_filter_line "$DXVK_GPU") as its only dxvk.deviceFilter line; run apply" || status=1
+    fi
+  done < <(dxvk_folders)
+  return "$status"
 }
 
 dxvk_check_dlls() {
-  local dll status=0
+  local folder dll name status=0
   if ! dxvk_cache_complete; then
     fail "$(dxvk_cache_message)"
     return
   fi
-  for dll in "${DXVK_DLLS[@]}"; do
-    if cmp -s "$(dxvk_cache)/$dll" "$FENIX_DEPS/$dll"; then
-      ok "$dll in deps is the patched DXVK"
-    else
-      fail "$dll in deps is not the patched DXVK of $(dxvk_cache); run apply" || status=1
-    fi
-  done
+  while IFS= read -r folder; do
+    for dll in "${DXVK_DLLS[@]}"; do
+      name="$(dxvk_name "$folder" "$dll")"
+      if cmp -s "$(dxvk_cache)/$dll" "$FENIX_DEPS/$name"; then
+        ok "$name in deps is the patched DXVK"
+      else
+        fail "$name in deps is not the patched DXVK of $(dxvk_cache); run apply" || status=1
+      fi
+    done
+  done < <(dxvk_folders)
   return "$status"
 }
 
@@ -172,8 +198,10 @@ dxvk_check() {
 }
 
 dxvk_undo() {
-  local name
-  for name in dxvk.conf "${DXVK_DLLS[@]}"; do
-    dxvk_restore "$name"
-  done
+  local folder name
+  while IFS= read -r folder; do
+    for name in dxvk.conf "${DXVK_DLLS[@]}"; do
+      dxvk_restore "$(dxvk_name "$folder" "$name")"
+    done
+  done < <(dxvk_folders)
 }

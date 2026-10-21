@@ -52,7 +52,7 @@ fenix_stash() {
   if [ -e "$backup" ] || [ -e "$backup.absent" ]; then
     return 0
   fi
-  mkdir -p "$FENIX_BACKUP"
+  mkdir -p "$(dirname "$backup")"
   if [ -f "$target" ]; then
     cp -p "$target" "$backup"
   else

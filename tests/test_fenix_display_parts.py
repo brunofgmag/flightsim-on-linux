@@ -369,6 +369,70 @@ class DxvkUndoTest(PartsCase):
         self.assertEqual((self.deps / "d3d11.dll").read_bytes(), b"mine")
 
 
+class DxvkDisplaysFolderTest(PartsCase):
+    def setUp(self):
+        super().setUp()
+        self.displays = self.deps / "displays"
+        self.displays.mkdir()
+
+    def test_gpu_mode_copies_the_dlls_next_to_the_fenix_3_displays_too(self):
+        self.mode("GPU")
+        self.build_cache()
+        code, output = self.run_part("dxvk_apply")
+        self.assertEqual(code, 0, output)
+        for folder in (self.deps, self.displays):
+            self.assertEqual((folder / "d3d11.dll").read_bytes(), b"patched d3d11")
+            self.assertEqual((folder / "dxgi.dll").read_bytes(), b"patched dxgi")
+        code, output = self.run_part("dxvk_check")
+        self.assertEqual(code, 0, output)
+        self.assertIn("ok displays/d3d11.dll in deps is the patched DXVK", output)
+        self.assertIn("ok displays/dxgi.dll in deps is the patched DXVK", output)
+
+    def test_the_check_fails_when_only_deps_holds_the_dlls(self):
+        self.mode("GPU")
+        self.build_cache()
+        for name in ("d3d11.dll", "dxgi.dll"):
+            (self.deps / name).write_bytes((self.dxvk / name).read_bytes())
+        code, output = self.run_part("dxvk_check")
+        self.assertNotEqual(code, 0)
+        self.assertIn("ok d3d11.dll in deps is the patched DXVK", output)
+        self.assertEqual(len(self.lines(output, "FAIL displays/d3d11.dll in deps is not the patched DXVK")), 1, output)
+        self.assertEqual(len(self.lines(output, "FAIL displays/dxgi.dll in deps is not the patched DXVK")), 1, output)
+
+    def test_two_gpus_write_the_filter_in_both_folders(self):
+        self.gpus("two")
+        self.mode("CPU")
+        code, output = self.run_part("dxvk_apply")
+        self.assertEqual(code, 0, output)
+        self.assertEqual((self.deps / "dxvk.conf").read_text(), FILTER + "\n")
+        self.assertEqual((self.displays / "dxvk.conf").read_text(), FILTER + "\n")
+        code, output = self.run_part("dxvk_check")
+        self.assertEqual(code, 0, output)
+        self.assertIn("ok displays/dxvk.conf names the GPU: NVIDIA GeForce RTX 4080", output)
+
+    def test_a_missing_filter_next_to_the_displays_fails(self):
+        self.gpus("two")
+        self.mode("CPU")
+        (self.deps / "dxvk.conf").write_text(FILTER + "\n")
+        code, output = self.run_part("dxvk_check")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(len(self.lines(output, "FAIL displays/dxvk.conf in deps does not contain")), 1, output)
+
+    def test_undo_gives_back_what_apply_changed_next_to_the_displays(self):
+        self.gpus("two")
+        self.mode("GPU")
+        self.build_cache()
+        (self.displays / "d3d11.dll").write_bytes(b"stock d3d11")
+        self.assertEqual(self.run_part("dxvk_apply")[0], 0)
+        self.assertEqual((self.backup / "displays" / "d3d11.dll").read_bytes(), b"stock d3d11")
+        code, output = self.run_part("dxvk_undo")
+        self.assertEqual(code, 0, output)
+        self.assertEqual((self.displays / "d3d11.dll").read_bytes(), b"stock d3d11")
+        self.assertFalse((self.displays / "dxgi.dll").exists())
+        self.assertFalse((self.displays / "dxvk.conf").exists())
+        self.assertFalse((self.deps / "d3d11.dll").exists())
+
+
 class GeometryTest(PartsCase):
     DLL = b"geometry provider"
 
