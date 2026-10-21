@@ -23,6 +23,11 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-cursor-clip-test.exe" "$HERE/src/hidd
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/pointer-constraint-commit-test.exe" "$HERE/src/pointer-constraint-commit-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/one-pixel-clip-test.exe" "$HERE/src/one-pixel-clip-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/applicationdata-no-package-test.exe" "$HERE/src/applicationdata-no-package-test.c" -lruntimeobject
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/wintrust-create-indirect-data-test.exe" "$HERE/src/wintrust-create-indirect-data-test.c" -lwintrust -lcrypt32 -lbcrypt
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/globalroot-device-path-test.exe" "$HERE/src/globalroot-device-path-test.c"
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/device-path-current-directory-test.exe" "$HERE/src/device-path-current-directory-test.c"
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/bcrypt-pbkdf2-alg-handle-test.exe" "$HERE/src/bcrypt-pbkdf2-alg-handle-test.c" -lbcrypt
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/ncrypt-ecdh-p256-test.exe" "$HERE/src/ncrypt-ecdh-p256-test.c" -lncrypt -lbcrypt
 if pkg-config --exists libei-1.0 libsystemd; then
   read -r -a EIS_FLAGS < <(pkg-config --cflags --libs libei-1.0 libsystemd)
   gcc -O2 -Wall -o "$OUT/eis-pointer" "$HERE/src/eis-pointer.c" "${EIS_FLAGS[@]}"

@@ -34,6 +34,12 @@ PATCHES=(
   "$ROOT/patches/wine/winewayland-small-clip-warps-pointer-inside.patch"
   "$ROOT/patches/wine/winewayland-clip-at-least-one-pixel.patch"
   "$ROOT/patches/wine/windows-storage-applicationdata-no-package.patch"
+  "$ROOT/patches/wine/wintrust-create-indirect-data.patch"
+  "$ROOT/patches/wine/ntdll-globalroot-device-paths.patch"
+  "$ROOT/patches/wine/ntdll-device-path-current-directory.patch"
+  "$ROOT/patches/wine/bcrypt-pbkdf2-pseudo-handle.patch"
+  "$ROOT/patches/wine/ncrypt-ecdh-secret-agreement.patch"
+  "$ROOT/patches/wine/ntdll-fenix-gateway-loader-case.patch"
 )
 
 MODULES=(
@@ -52,6 +58,9 @@ MODULES=(
   "dlls/gdiplus/x86_64-windows/gdiplus.dll:lib/wine/x86_64-windows/gdiplus.dll"
   "dlls/shell32/x86_64-windows/shell32.dll:lib/wine/x86_64-windows/shell32.dll"
   "dlls/windows.storage.applicationdata/x86_64-windows/windows.storage.applicationdata.dll:lib/wine/x86_64-windows/windows.storage.applicationdata.dll"
+  "dlls/wintrust/x86_64-windows/wintrust.dll:lib/wine/x86_64-windows/wintrust.dll"
+  "dlls/bcrypt/x86_64-windows/bcrypt.dll:lib/wine/x86_64-windows/bcrypt.dll"
+  "dlls/ncrypt/x86_64-windows/ncrypt.dll:lib/wine/x86_64-windows/ncrypt.dll"
 )
 
 VKD3D_URL="https://github.com/HansKristian-Work/vkd3d-proton"

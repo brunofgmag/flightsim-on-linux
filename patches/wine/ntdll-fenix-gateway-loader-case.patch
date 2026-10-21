@@ -1,0 +1,16 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine ntdll: give Fenix.GqlGateway.exe the Windows spellings KERNEL32.DLL and KERNELBASE.dll that the fenix-a320-linux-patch overlay gives Fenix.exe, FenixSystem.exe, FenixDisplay.exe and FenixCDU.exe. Without them the GraphQL gateway of the Fenix 3.0 EFB spins at full CPU before starting .NET, never listens on port 8083, and the EFB shows Unable to connect.
+Applies to wine-cachyos after the fenix-a320-linux-patch overlay patch with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -1672,7 +1672,8 @@
+         if (exe && (!wcsicmp( exe + 1, L"Fenix.exe" ) ||
+                     !wcsicmp( exe + 1, L"FenixSystem.exe" ) ||
+                     !wcsicmp( exe + 1, L"FenixDisplay.exe" ) ||
+-                    !wcsicmp( exe + 1, L"FenixCDU.exe" )))
++                    !wcsicmp( exe + 1, L"FenixCDU.exe" ) ||
++                    !wcsicmp( exe + 1, L"Fenix.GqlGateway.exe" )))
+         {
+             if (!wcsicmp( p, L"kernel32.dll" )) memcpy( (WCHAR *)p, L"KERNEL32.DLL", sizeof(L"KERNEL32.DLL") );
+             if (!wcsicmp( p, L"kernelbase.dll" )) memcpy( (WCHAR *)p, L"KERNELBASE.dll", sizeof(L"KERNELBASE.dll") );

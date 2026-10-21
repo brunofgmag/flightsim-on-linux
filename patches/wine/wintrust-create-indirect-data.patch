@@ -1,0 +1,199 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine wintrust: implement CryptSIPCreateIndirectData for PE files, hashing the image the way Authenticode does (without the checksum, the security directory entry and the certificate table) and returning SPC_PE_IMAGE_DATA with the digest. Fenix.exe 3.0 checks its own signature with it; the stub returned FALSE, and the Fenix runner exited with code 0 before writing a log, so the aircraft never got its systems.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/wintrust/crypt.c
++++ b/dlls/wintrust/crypt.c
+@@ -32,6 +32,7 @@
+ #include "mssip.h"
+ #include "imagehlp.h"
+ #include "winternl.h"
++#include "wintrust_priv.h"
+ 
+ #include "wine/debug.h"
+ 
+@@ -1217,18 +1218,6 @@
+ }
+ 
+ /***********************************************************************
+- *      CryptSIPCreateIndirectData  (WINTRUST.@)
+- */
+-BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
+-                                       SIP_INDIRECT_DATA* pIndirectData)
+-{
+-    FIXME("(%p %p %p) stub\n", pSubjectInfo, pcbIndirectData, pIndirectData);
+- 
+-    return FALSE;
+-}
+-
+-
+-/***********************************************************************
+  *      CryptCATCDFClose  (WINTRUST.@)
+  */
+ BOOL WINAPI CryptCATCDFClose(CRYPTCATCDF *pCDF)
+@@ -1680,6 +1669,137 @@
+     return FALSE;
+ }
+ 
++static const BYTE pe_image_data[] =
++{
++    0x30, 0x25, 0x03, 0x01, 0x00, 0xa0, 0x20, 0xa2, 0x1e, 0x80, 0x1c,
++    0x00, '<', 0x00, '<', 0x00, '<', 0x00, 'O', 0x00, 'b', 0x00, 's', 0x00, 'o',
++    0x00, 'l', 0x00, 'e', 0x00, 't', 0x00, 'e', 0x00, '>', 0x00, '>', 0x00, '>'
++};
++
++static BOOL WINTRUST_CreateIndirectDataFromPEFile(SIP_SUBJECTINFO *pSubjectInfo,
++ DWORD *pcbIndirectData, SIP_INDIRECT_DATA *pIndirectData)
++{
++    const char *oid = pSubjectInfo->DigestAlgorithm.pszObjId;
++    HCRYPTPROV prov = pSubjectInfo->hProv;
++    HANDLE file = pSubjectInfo->hFile;
++    HCRYPTHASH hash = 0;
++    DWORD hash_size, length, oid_size, needed, position = INVALID_SET_FILE_POINTER;
++    BOOL release_prov = FALSE, close_file = FALSE, ret = FALSE;
++    BYTE *ptr;
++    ALG_ID alg;
++
++    if (!oid || !*oid)
++        oid = szOID_OIWSEC_sha1;
++    if (!(alg = CertOIDToAlgId(oid)))
++    {
++        SetLastError(NTE_BAD_ALGID);
++        return FALSE;
++    }
++
++    if (!prov)
++    {
++        if (!CryptAcquireContextW(&prov, NULL, MS_ENH_RSA_AES_PROV_W, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
++            return FALSE;
++        release_prov = TRUE;
++    }
++
++    if (!CryptCreateHash(prov, alg, 0, 0, &hash))
++        goto done;
++    length = sizeof(hash_size);
++    if (!CryptGetHashParam(hash, HP_HASHSIZE, (BYTE *)&hash_size, &length, 0))
++        goto done;
++
++    oid_size = strlen(oid) + 1;
++    needed = sizeof(*pIndirectData) + sizeof(SPC_PE_IMAGE_DATA_OBJID) + sizeof(pe_image_data) +
++     oid_size + hash_size;
++    if (!pIndirectData)
++    {
++        *pcbIndirectData = needed;
++        ret = TRUE;
++        goto done;
++    }
++    if (*pcbIndirectData < needed)
++    {
++        *pcbIndirectData = needed;
++        SetLastError(ERROR_INSUFFICIENT_BUFFER);
++        goto done;
++    }
++
++    if (!file || file == INVALID_HANDLE_VALUE)
++    {
++        file = CreateFileW(pSubjectInfo->pwsFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
++         OPEN_EXISTING, 0, NULL);
++        if (file == INVALID_HANDLE_VALUE)
++            goto done;
++        close_file = TRUE;
++    }
++    else
++        position = SetFilePointer(file, 0, NULL, FILE_CURRENT);
++
++    if (!SOFTPUB_HashPEFile(file, hash))
++    {
++        SetLastError(TRUST_E_SUBJECT_FORM_UNKNOWN);
++        goto done;
++    }
++
++    ptr = (BYTE *)(pIndirectData + 1);
++    pIndirectData->Data.pszObjId = (char *)ptr;
++    memcpy(ptr, SPC_PE_IMAGE_DATA_OBJID, sizeof(SPC_PE_IMAGE_DATA_OBJID));
++    ptr += sizeof(SPC_PE_IMAGE_DATA_OBJID);
++    pIndirectData->Data.Value.cbData = sizeof(pe_image_data);
++    pIndirectData->Data.Value.pbData = ptr;
++    memcpy(ptr, pe_image_data, sizeof(pe_image_data));
++    ptr += sizeof(pe_image_data);
++    pIndirectData->DigestAlgorithm.pszObjId = (char *)ptr;
++    memcpy(ptr, oid, oid_size);
++    ptr += oid_size;
++    pIndirectData->DigestAlgorithm.Parameters.cbData = 0;
++    pIndirectData->DigestAlgorithm.Parameters.pbData = NULL;
++    pIndirectData->Digest.cbData = hash_size;
++    pIndirectData->Digest.pbData = ptr;
++    if ((ret = CryptGetHashParam(hash, HP_HASHVAL, ptr, &hash_size, 0)))
++        *pcbIndirectData = needed;
++
++done:
++    if (close_file)
++        CloseHandle(file);
++    else if (position != INVALID_SET_FILE_POINTER)
++        SetFilePointer(file, position, NULL, FILE_BEGIN);
++    if (hash)
++        CryptDestroyHash(hash);
++    if (release_prov)
++        CryptReleaseContext(prov, 0);
++    return ret;
++}
++
++/***********************************************************************
++ *      CryptSIPCreateIndirectData  (WINTRUST.@)
++ */
++BOOL WINAPI CryptSIPCreateIndirectData(SIP_SUBJECTINFO* pSubjectInfo, DWORD* pcbIndirectData,
++                                       SIP_INDIRECT_DATA* pIndirectData)
++{
++    BOOL ret;
++
++    TRACE("(%p %p %p)\n", pSubjectInfo, pcbIndirectData, pIndirectData);
++
++    if (!pSubjectInfo || !pSubjectInfo->pgSubjectType || !pcbIndirectData)
++    {
++        SetLastError(ERROR_INVALID_PARAMETER);
++        return FALSE;
++    }
++
++    if (!memcmp(pSubjectInfo->pgSubjectType, &unknown, sizeof(unknown)))
++        ret = WINTRUST_CreateIndirectDataFromPEFile(pSubjectInfo, pcbIndirectData, pIndirectData);
++    else
++    {
++        FIXME("unimplemented for subject type %s\n", debugstr_guid(pSubjectInfo->pgSubjectType));
++        ret = FALSE;
++    }
++
++    TRACE("returning %d\n", ret);
++    return ret;
++}
++
+ /***********************************************************************
+  *      CryptSIPRemoveSignedDataMsg  (WINTRUST.@)
+  */
+--- a/dlls/wintrust/softpub.c
++++ b/dlls/wintrust/softpub.c
+@@ -25,6 +25,7 @@
+ #include "wintrust.h"
+ #include "mssip.h"
+ #include "softpub.h"
++#include "wintrust_priv.h"
+ #include "winnls.h"
+ #include "wine/debug.h"
+ 
+@@ -231,7 +232,7 @@
+ /* See https://www.cs.auckland.ac.nz/~pgut001/pubs/authenticode.txt
+  * for details about the hashing.
+  */
+-static BOOL SOFTPUB_HashPEFile(HANDLE file, HCRYPTHASH hash)
++BOOL SOFTPUB_HashPEFile(HANDLE file, HCRYPTHASH hash)
+ {
+     DWORD checksum, security_dir;
+     IMAGE_DOS_HEADER dos_header;
+--- a/dlls/wintrust/wintrust_priv.h
++++ b/dlls/wintrust/wintrust_priv.h
+@@ -24,5 +24,6 @@
+ BOOL WINAPI WINTRUST_AddCert(CRYPT_PROVIDER_DATA *data, DWORD idxSigner,
+  BOOL fCounterSigner, DWORD idxCounterSigner, PCCERT_CONTEXT pCert2Add);
+ BOOL WINAPI WINTRUST_AddPrivData(CRYPT_PROVIDER_DATA *data, CRYPT_PROVIDER_PRIVDATA *pPrivData2Add);
++BOOL SOFTPUB_HashPEFile(HANDLE file, HCRYPTHASH hash);
+ 
+ #endif /* ndef __WINTRUST_PRIV_H__ */

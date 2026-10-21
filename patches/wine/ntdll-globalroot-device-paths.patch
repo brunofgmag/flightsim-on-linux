@@ -1,0 +1,40 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine ntdll: open \\?\GLOBALROOT\Device\HarddiskVolumeN paths, the NT form GetFinalPathNameByHandleW(VOLUME_NAME_NT) returns, by mapping the device to its drive the way plain \Device\ paths already were, and stop storing a doubled backslash after the drive in the object name. The Fenix 3.0 runner opens its child executables and walks their folders through these paths; Wine failed with STATUS_OBJECT_NAME_INVALID (Win32 error 123), and with the doubled backslash the reopened path failed again.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/ntdll/unix/file.c
++++ b/dlls/ntdll/unix/file.c
+@@ -4104,21 +4104,28 @@
+     static const WCHAR systemrootW[] = {'\\','S','y','s','t','e','m','R','o','o','t','\\',0};
+     static const WCHAR dosprefixW[] = {'\\','?','?','\\'};
+     static const WCHAR deviceW[] = {'\\','D','e','v','i','c','e','\\',0};
++    static const WCHAR globalrootW[] = {'\\','?','?','\\','G','l','o','b','a','l','R','o','o','t'};
+     WCHAR *name, *ptr, *prefix, buffer[3] = {'c',':',0};
+     UNICODE_STRING *nameW;
+-    size_t offset, name_len;
++    size_t offset, name_len, start = 0;
+     NTSTATUS status;
+ 
+     if (attr->RootDirectory) return nt_to_unix_file_name_internal( attr, nt_name, name_ret, disposition, open_reparse );
+ 
+     nameW = attr->ObjectName;
+ 
+-    if (nameW->Length >= sizeof(deviceW) - sizeof(WCHAR)
+-        && !wcsnicmp( nameW->Buffer, deviceW, ARRAY_SIZE(deviceW) - 1 ))
++    if (nameW->Length >= sizeof(globalrootW) + sizeof(deviceW) - sizeof(WCHAR)
++        && !wcsnicmp( nameW->Buffer, globalrootW, ARRAY_SIZE(globalrootW) )
++        && !wcsnicmp( nameW->Buffer + ARRAY_SIZE(globalrootW), deviceW, ARRAY_SIZE(deviceW) - 1 ))
++        start = ARRAY_SIZE(globalrootW);
++
++    if (nameW->Length >= start * sizeof(WCHAR) + sizeof(deviceW) - sizeof(WCHAR)
++        && !wcsnicmp( nameW->Buffer + start, deviceW, ARRAY_SIZE(deviceW) - 1 ))
+     {
+-        offset = sizeof(deviceW) / sizeof(WCHAR);
++        offset = start + sizeof(deviceW) / sizeof(WCHAR);
+         while (offset * sizeof(WCHAR) < nameW->Length && nameW->Buffer[ offset ] != '\\') offset++;
+-        if ((status = nt_to_dos_device( nameW->Buffer, offset, buffer ))) return status;
++        if ((status = nt_to_dos_device( nameW->Buffer + start, offset - start, buffer ))) return status;
++        if (offset * sizeof(WCHAR) < nameW->Length) offset++;
+         prefix = buffer;
+     }
+     else if (nameW->Length >= sizeof(systemrootW) - sizeof(WCHAR) &&

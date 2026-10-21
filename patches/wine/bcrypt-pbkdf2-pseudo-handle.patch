@@ -1,0 +1,15 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine bcrypt: accept BCRYPT_PBKDF2_ALG_HANDLE, as upstream Wine does. .NET derives PBKDF2 keys through it on Windows 10; the authorization the Fenix 3.0 runner prepares for FenixSystem got STATUS_INVALID_HANDLE and failed with CryptographicException 0xc1000008.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/bcrypt/bcrypt_main.c
++++ b/dlls/bcrypt/bcrypt_main.c
+@@ -257,6 +257,8 @@
+     {{ MAGIC_ALG }, ALG_ID_ECDSA_P384, 0, 0, ECC_CURVE_P384R1 },
+     {{ MAGIC_ALG }, ALG_ID_ECDSA_P521, 0, 0, ECC_CURVE_P521R1 },
+     {{ MAGIC_ALG }, ALG_ID_RSA_SIGN },
++    {{ 0 }},
++    {{ MAGIC_ALG }, ALG_ID_PBKDF2 },
+ };
+ 
+ /* Algorithm pseudo-handles are denoted by having the lowest bit set.

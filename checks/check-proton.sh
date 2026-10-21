@@ -92,7 +92,9 @@ export WINEDLLPATH="$TOOL/files/lib/vkd3d:$TOOL/files/lib/wine"
 export_settings
 
 "$HERE/build-checks.sh" "$WORK"
-x86_64-w64-mingw32-gcc -O2 -o "$WORK/Fenix.exe" "$(fetch_probe)"
+LOADER_PROBE="$(fetch_probe)"
+x86_64-w64-mingw32-gcc -O2 -o "$WORK/Fenix.exe" "$LOADER_PROBE"
+x86_64-w64-mingw32-gcc -O2 -o "$WORK/Fenix.GqlGateway.exe" "$LOADER_PROBE"
 
 echo "Proton: $TOOL"
 echo "Runtime: ${RUNTIME:-none, running on the host}"
@@ -117,13 +119,21 @@ report() {
   esac
 }
 
-output="$(cd "$WORK" && run_wine Fenix.exe)" || true
-if grep -q "KERNEL32.DLL" <<< "$output" && grep -q "KERNELBASE.dll" <<< "$output"; then
-  report "fenix-a320-linux-patch loader (Fenix runner)" ok "$output"
-else
-  report "fenix-a320-linux-patch loader (Fenix runner)" FAIL "${output:-no output}
-Without this the Fenix runner spins without opening a window."
-fi
+report_loader_case() {
+  local name="$1" program="$2" consequence="$3" output
+  output="$(cd "$WORK" && run_wine "$program")" || true
+  if grep -q "KERNEL32.DLL" <<< "$output" && grep -q "KERNELBASE.dll" <<< "$output"; then
+    report "$name" ok "$output"
+  else
+    report "$name" FAIL "${output:-no output}
+$consequence"
+  fi
+}
+
+report_loader_case "fenix-a320-linux-patch loader (Fenix runner)" Fenix.exe \
+  "Without this the Fenix runner spins without opening a window."
+report_loader_case "ntdll loader spells KERNEL32.DLL and KERNELBASE.dll for Fenix.GqlGateway.exe (Fenix EFB GraphQL gateway)" Fenix.GqlGateway.exe \
+  "Without this the Fenix GraphQL gateway spins at full CPU and never listens on port 8083."
 
 status=0
 output="$(run_wine "$(windows_path "$WORK/notifyicon-guid-test.exe")")" || status=$?
@@ -163,6 +173,24 @@ status=0
 output="$(run_wine "$(windows_path "$WORK/applicationdata-no-package-test.exe")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "ApplicationData refuses a process without a package (Fenix Installer database)" "$verdict" "${output:-no output}"
+
+report_windows_program() {
+  local name="$1" program="$2" status=0 output verdict=FAIL
+  output="$(run_wine "$(windows_path "$WORK/$program")")" || status=$?
+  [ "$status" -eq 0 ] && verdict=ok
+  report "$name" "$verdict" "${output:-no output}"
+}
+
+report_windows_program 'wintrust CryptSIPCreateIndirectData hashes a PE file with a certificate table (Fenix 3.0 Runner checking its own signature)' \
+  wintrust-create-indirect-data-test.exe
+report_windows_program 'ntdll opens \\?\GLOBALROOT\Device\HarddiskVolumeN paths (Fenix 3.0 reopening its child executables)' \
+  globalroot-device-path-test.exe
+report_windows_program 'ntdll keeps the \\.\ prefix of a device-path current directory (FenixSystem 3.0 finding its data files)' \
+  device-path-current-directory-test.exe
+report_windows_program 'bcrypt accepts BCRYPT_PBKDF2_ALG_HANDLE (FenixSystem 3.0 authorization)' \
+  bcrypt-pbkdf2-alg-handle-test.exe
+report_windows_program 'ncrypt agrees on a secret between two ECDH P-256 keys (Fenix 3.0 Runner and FenixSystem key exchange)' \
+  ncrypt-ecdh-p256-test.exe
 
 name="reading another process after an EPERM leaves its main thread running (stutter with ChasePlane)"
 if [ "$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null)" = 1 ]; then

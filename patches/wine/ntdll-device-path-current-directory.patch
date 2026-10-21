@@ -1,0 +1,20 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine ntdll: keep the \\.\ prefix when the current directory is a device path such as \\.\GLOBALROOT\Device\HarddiskVolume1\dir. RtlSetCurrentDirectory_U stripped \??\ from the NT name and stored GLOBALROOT\Device\..., a relative path, so FenixSystem 3.0, which the runner starts in such a folder, resolved transitionAltitudes.xml and its engine model to doubled paths and stopped.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/ntdll/path.c
++++ b/dlls/ntdll/path.c
+@@ -1040,6 +1040,13 @@
+         size -= 2;
+         *ptr = '\\';
+     }
++    else if (size < 2 || ptr[1] != ':')
++    {
++        ptr -= 4;
++        size += 4;
++        ptr[1] = '\\';
++        ptr[2] = '.';
++    }
+ 
+     RtlAcquirePebLock();
+     if (0 && NtCurrentTeb()->Tib.SubSystemTib)  /* FIXME: hack */
