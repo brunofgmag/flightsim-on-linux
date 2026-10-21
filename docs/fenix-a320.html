@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fenix A320 · Flightsim on Linux</title>
-  <meta name="description" content="How to run the Fenix A320, A319 and A321 in MSFS 2024 under Proton: the installer inside gamescope, .NET Framework 4.8 for the Fenix programs only, the geometry library and the DXVK the displays need, and how to undo it all.">
+  <meta name="description" content="How to run the Fenix A320, A319 and A321 in MSFS 2024 under Proton: the Fenix Installer and its updates, .NET Framework 4.8 for the Fenix programs only, the geometry library and the DXVK the displays need, and how to undo it all.">
   <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
   <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
 </head>
@@ -31,11 +31,11 @@
 <p>Close the simulator for every step on this page except the check and the last section.</p>
 
 <h2>Install the Fenix</h2>
-<p>The Fenix Installer is a WebView2 window, and under Wine it gets no mouse pointer or keyboard unless it runs inside gamescope. Download the Fenix Installer from <a href="https://fenixsim.com">fenixsim.com</a> and run its setup once in the simulator's prefix:</p>
+<p>Download the Fenix Installer from <a href="https://fenixsim.com">fenixsim.com</a> and run its setup once in the simulator's prefix:</p>
 <pre><code>protontricks-launch --no-term --appid 2537590 ~/Downloads/FenixInstaller-Setup.exe</code></pre>
-<p>Use the name of the file you downloaded. The setup installs the installer and opens it, and that first window gets no mouse pointer. Close it. From then on, open the installer with:</p>
+<p>Use the name of the file you downloaded. The setup installs the installer and opens it. Close that first window, and from then on open the installer with:</p>
 <pre><code>~/flightsim-on-linux/addons/fenix-a320/installer</code></pre>
-<p>It needs <code>gamescope</code> and <code>protontricks</code>. It refuses to start while the simulator or any other program of the prefix is open, and names what to close. On the test machine, a Fenix Installer started while another program held the prefix crashed before its window appeared. Then it opens the installer in a gamescope window the size of the installer. Each click takes a second or more to register. Sign in, install the aircraft, then close the installer. If your machine has two GPUs, the script asks gamescope for the dedicated one. From version 1.0.353 the installer also needs a Proton FS2024 built with the installer fix, and the check below tells you whether yours has it. Without it, the installer can't open its package database or check the aircraft for updates.</p>
+<p>It needs <code>protontricks</code>. It refuses to start while the simulator or any other program of the prefix is open, and names what to close. On the test machine, a Fenix Installer started while another program held the prefix crashed before its window appeared. Otherwise it opens the installer in its own window and keeps running until the installer and any update it applies have finished. On the test machine, with installer 1.0.355 and Proton FS2024, that window took mouse clicks and typing. Sign in, install the aircraft, then close the installer. From version 1.0.353 the installer also needs a Proton FS2024 built with the installer fix, and the check below tells you whether yours has it. Without it, the installer can't open its package database or check the aircraft for updates.</p>
 
 <h2>If the installer window stays empty</h2>
 <p>On 2026-10-21 Fenix published Fenix Installer 1.0.353, rebuilt on .NET 10. It puts its page inside a Windows composition layer that Wine doesn't have, so under Wine the window stays empty. That page is also what checks for updates, so 1.0.353 never updates itself. Version 1.0.355, out a few hours later, went back to the kind of window Wine can show. See which version you have:</p>

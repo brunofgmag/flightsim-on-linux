@@ -526,16 +526,13 @@ class InstallerTest(unittest.TestCase):
         self.cli = self.root / "cli"
         self.cli.write_text(f'#!/bin/sh\necho \'{{"prefix": "{self.prefix}"}}\'\n')
         self.cli.chmod(0o755)
-        self.gpu = self.root / "gpu"
-        self.stub("gpu", 'case "${1:-}" in --vk-device) echo 10de:2704 ;; "") echo "NVIDIA GeForce RTX 4080" ;; *) exit 64 ;; esac')
-        self.stub("gamescope", 'echo "gamescope $*"; echo "cwd $PWD"; echo "wayland ${WAYLAND_DISPLAY-unset}"')
-        self.stub("protontricks", "exit 0")
+        self.stub("protontricks", 'echo "protontricks $*"; echo "cwd $PWD"')
         self.stub("pgrep", "exit 1")
         self.notes = self.root / "notify.log"
         self.stub("notify-send", f'printf "%s|" "$@" >> "{self.notes}"; echo >> "{self.notes}"')
 
     def stub(self, name, body):
-        path = self.gpu if name == "gpu" else self.bin / name
+        path = self.bin / name
         path.write_text("#!/bin/sh\n" + body + "\n")
         path.chmod(0o755)
 
@@ -544,8 +541,6 @@ class InstallerTest(unittest.TestCase):
             **os.environ,
             "PATH": f"{self.bin}:{path if path is not None else os.environ['PATH']}",
             "FSOL_CLI": str(self.cli),
-            "FSOL_DISCRETE_GPU": str(self.gpu),
-            "WAYLAND_DISPLAY": "wayland-9",
         }
         result = subprocess.run([shutil.which("bash"), str(INSTALLER)], capture_output=True, text=True, env=env)
         return result.returncode, result.stdout + result.stderr
@@ -595,7 +590,7 @@ class InstallerTest(unittest.TestCase):
         code, output = self.run_installer()
         self.assertNotEqual(code, 0)
         self.assertIn("close tritrisim-hub.exe, AutoFPS.exe first", output)
-        self.assertNotIn("gamescope", output)
+        self.assertNotIn("cwd", output)
 
     def test_it_refuses_while_wine_still_runs_in_the_prefix_without_a_program_to_name(self):
         self.install_app()
@@ -603,14 +598,14 @@ class InstallerTest(unittest.TestCase):
         code, output = self.run_installer()
         self.assertNotEqual(code, 0)
         self.assertIn("Wine is still running in the prefix", output)
-        self.assertNotIn("gamescope", output)
+        self.assertNotIn("cwd", output)
 
     def test_a_free_prefix_lets_it_start(self):
         self.install_app()
         self.report(prefix_in_use=False, prefix_programs=[])
         code, output = self.run_installer()
         self.assertEqual(code, 0, output)
-        self.assertIn("gamescope", output)
+        self.assertIn("protontricks --no-term", output)
 
     def test_it_says_where_to_get_the_installer_when_it_is_not_in_the_prefix(self):
         code, output = self.run_installer()
@@ -629,46 +624,30 @@ class InstallerTest(unittest.TestCase):
     def test_it_says_when_protontricks_is_missing(self):
         self.install_app()
         (self.bin / "protontricks").unlink()
-        code, output = self.run_installer(path=self.nothing())
+        code, output = self.run_installer(path=self.limited("readlink", "dirname"))
         self.assertNotEqual(code, 0)
         self.assertIn("missing program: protontricks", output)
         self.assertNotIn("cwd", output)
 
-    def test_it_says_which_program_is_missing(self):
-        (self.bin / "gamescope").unlink()
-        code, output = self.run_installer(path=self.nothing())
-        self.assertNotEqual(code, 0)
-        self.assertIn("missing program: gamescope", output)
+    def limited(self, *tools):
+        folder = self.root / "limited"
+        folder.mkdir(exist_ok=True)
+        for tool in tools:
+            (folder / tool).symlink_to(shutil.which(tool))
+        return str(folder)
 
-    def nothing(self):
-        limited = self.root / "limited"
-        limited.mkdir(exist_ok=True)
-        for tool in ("readlink", "dirname"):
-            (limited / tool).symlink_to(shutil.which(tool))
-        return str(limited)
-
-    def test_with_two_gpus_it_prefers_the_discrete_one_and_drops_the_wayland_socket(self):
+    def test_it_opens_the_installer_through_protontricks_from_the_fenixapp_folder(self):
         self.install_app()
         code, output = self.run_installer()
         self.assertEqual(code, 0, output)
-        self.assertIn(f"gamescope --prefer-vk-device 10de:2704 -W 1333 -H 1000 -w 1200 -h 900 -- protontricks --no-term -c {SESSION} 2537590", output)
+        self.assertIn(f"protontricks --no-term -c {SESSION} 2537590", output.splitlines())
         self.assertIn(f"cwd {self.app.parent}", output.splitlines())
-        self.assertIn("wayland unset", output)
 
-    def test_with_one_gpu_it_passes_no_device_preference(self):
+    def test_it_opens_without_gamescope_installed(self):
         self.install_app()
-        self.stub("gpu", "exit 0")
-        code, output = self.run_installer()
+        code, output = self.run_installer(path=self.limited("readlink", "dirname", "python3"))
         self.assertEqual(code, 0, output)
-        self.assertNotIn("--prefer-vk-device", output)
-        self.assertIn("gamescope -W 1333", output)
-
-    def test_ambiguous_gpus_stop_it(self):
-        self.install_app()
-        self.stub("gpu", 'echo "cannot pick one GPU: two integrated" >&2; exit 3')
-        code, output = self.run_installer()
-        self.assertNotEqual(code, 0)
-        self.assertIn("cannot choose the GPU for the installer: cannot pick one GPU", output)
+        self.assertIn(f"protontricks --no-term -c {SESSION} 2537590", output.splitlines())
 
 
 class InstallerSessionTest(unittest.TestCase):
