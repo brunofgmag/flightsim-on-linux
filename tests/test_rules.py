@@ -88,7 +88,7 @@ class WpfTest(RuleTestCase):
         self.registry_with(GOOD_FONTS)
         check = self.check("wpf")
         self.assertEqual(check.status, "warn")
-        self.assertIn('reg add "HKCU\\Software\\Microsoft\\Avalon.Graphics" /v DisableHWAcceleration /t REG_DWORD /d 1 /f', check.fix)
+        self.assertIn('reg add "HKCU\\Software\\Microsoft\\Avalon.Graphics" /v DisableHWAcceleration /t REG_DWORD /d 1 /f', check.command)
 
     def test_without_the_key_and_without_wayland_it_is_only_information(self):
         self.fake.build()
@@ -118,9 +118,9 @@ class FontTest(RuleTestCase):
         self.assertEqual(check.status, "warn")
         self.assertIn("Verdana is replaced by Times New Roman", check.detail)
         self.assertIn("Consolas has no replacement", check.detail)
-        self.assertIn('/v "Verdana" /d "DejaVu Sans"', check.fix)
-        self.assertIn('/v "Consolas" /d "DejaVu Sans Mono"', check.fix)
-        self.assertNotIn('"Segoe UI"', check.fix)
+        self.assertIn('/v "Verdana" /d "DejaVu Sans"', check.command)
+        self.assertIn('/v "Consolas" /d "DejaVu Sans Mono"', check.command)
+        self.assertNotIn('"Segoe UI"', check.command)
 
     def test_a_replacement_the_system_lacks_warns_and_asks_to_install_it(self):
         self.fake.build()
@@ -139,10 +139,12 @@ class FontTest(RuleTestCase):
     def test_the_fix_is_one_protontricks_command_for_the_simulator(self):
         self.fake.build()
         self.registry_with(GOOD_FONTS.replace('"Segoe UI"="Noto Sans"', '"Segoe UI"="Times New Roman"'))
-        command = shlex.split(self.check("fonts").fix.split("run: ", 1)[1])
+        command = shlex.split(self.check("fonts").command)
         self.assertEqual(command[:2], ["protontricks", "-c"])
         self.assertEqual(command[3], "2537590")
-        self.assertEqual(shlex.split(command[2]), ["wine", "reg", "add", "HKCU\\Software\\Wine\\Fonts\\Replacements", "/v", "Segoe UI", "/d", "Noto Sans", "/f"])
+        fake_wine = 'wine() { printf "%s\\n" "$@"; }; '
+        written = subprocess.run(["sh", "-c", fake_wine + command[2]], capture_output=True, text=True, check=True).stdout.splitlines()
+        self.assertEqual(written, ["reg", "add", "HKCU\\Software\\Wine\\Fonts\\Replacements", "/v", "Segoe UI", "/d", "Noto Sans", "/f"])
 
 
 class CommunityDisabledTest(RuleTestCase):
@@ -171,7 +173,7 @@ class CommunityDisabledTest(RuleTestCase):
     def test_the_printed_fix_turns_on_only_what_the_simulator_switched_off(self):
         self.fake.build()
         content = self.content(a="SystemDisabled")
-        subprocess.run(shlex.split(self.check("community-disabled").fix.split("with: ", 1)[1]), check=True)
+        subprocess.run(shlex.split(self.check("community-disabled").command), check=True)
         text = content.read_text()
         self.assertIn('"communityfs20-a" active="Activated"', text)
         self.assertIn('"communityfs24-c" active="UserDisabled"', text)

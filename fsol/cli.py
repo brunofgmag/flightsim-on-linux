@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import textwrap
 from pathlib import Path
 
 from fsol import addons, container, doctor, machine
@@ -9,6 +10,10 @@ from fsol import addons, container, doctor, machine
 ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "bin" / "flightsim-on-linux"
 MARKS = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "info": "info"}
+DOCTOR_WIDTH = 80
+DOCTOR_INDENT = " " * 6
+COMMAND_INDENT = " " * 8
+DOCTOR_GROUPS = (("Needs attention", ("fail", "warn")), ("Good to know", ("info",)), ("Fine", ("ok",)))
 
 
 def show_machine(args):
@@ -21,15 +26,44 @@ def show_machine(args):
     return 0
 
 
+def wrapped(text, first):
+    return textwrap.wrap(text, DOCTOR_WIDTH, initial_indent=first, subsequent_indent=DOCTOR_INDENT,
+                         break_long_words=False, break_on_hyphens=False)
+
+
+def check_lines(check):
+    lines = wrapped(check.detail, f"{MARKS[check.status]}  ")
+    if check.status == "ok":
+        return lines
+    if check.fix:
+        lines += wrapped(check.fix, DOCTOR_INDENT)
+    if check.command:
+        lines += ["", *(COMMAND_INDENT + line for line in check.command.splitlines())]
+    return lines
+
+
+def group_lines(members):
+    if members[0].status == "ok":
+        return [line for check in members for line in check_lines(check)]
+    spaced = [line for check in members for line in ["", *check_lines(check)]]
+    return spaced[1:]
+
+
+def doctor_text(checks):
+    groups = [(title, [check for check in checks if check.status in statuses]) for title, statuses in DOCTOR_GROUPS]
+    lines = [" ".join(f"{title}: {len(members)}." for title, members in groups)]
+    for title, members in groups:
+        if members:
+            lines += ["", title, "-" * len(title), "", *group_lines(members)]
+    return "\n".join(lines) + "\n"
+
+
 def show_doctor(args):
     checks = doctor.run(machine.discover())
     if args.json:
         print(json.dumps([check.as_dict() for check in checks], indent=2))
     else:
-        for check in checks:
-            print(f"{MARKS[check.status]}  {check.detail}")
-            if check.fix and check.status != "ok":
-                print(f"      {check.fix}")
+        print(doctor_text(checks), end="")
     return 1 if any(check.status == "fail" for check in checks) else 0
 
 

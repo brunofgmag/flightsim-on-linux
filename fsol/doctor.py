@@ -3,12 +3,15 @@ import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 from fsol import registry
 
 BUILD_TOOLS = ("git", "curl", "patch", "perl", "autoreconf", "make", "gcc", "flex", "bison", "x86_64-w64-mingw32-gcc",
                "x86_64-w64-mingw32-g++", "meson", "ninja", "glslangValidator")
 IDL_COMPILERS = ("widl", "widl-stable", "x86_64-w64-mingw32-widl")
+CLI = Path(__file__).resolve().parent.parent / "bin" / "flightsim-on-linux"
+SIMULATOR_CLOSED = "Run this with the simulator closed:"
 
 
 @dataclass
@@ -17,6 +20,7 @@ class Check:
     status: str
     detail: str
     fix: str = ""
+    command: str = ""
 
     def as_dict(self):
         return dict(self.__dict__)
@@ -46,7 +50,8 @@ def check_proton(machine):
         return Check("proton", "ok", f"Proton in use: {name} ({machine.proton}), a Proton FS2024 build")
     where = f" ({machine.proton})" if machine.proton else ""
     return Check("proton", "warn", f"Proton in use: {name}{where}, not a Proton FS2024 build",
-                 "The Fenix A320, the FSLabs displays and the AutoFPS tray icon need Proton FS2024. Build it with: flightsim-on-linux proton build, then pick it under Compatibility > Select compatibility tool in the simulator's Properties.")
+                 "The Fenix A320, the FSLabs displays and the AutoFPS tray icon need Proton FS2024. Build it with the command below, then pick it under Compatibility > Select compatibility tool in the simulator's Properties.",
+                 f"{shlex.quote(str(CLI))} proton build")
 
 
 NTSYNC_REMEDY = ("If the simulator freezes in the menu or while loading an aircraft, turn ntsync off first: put "
@@ -176,7 +181,7 @@ def check_wpf(machine):
         return Check("wpf", "ok", "WPF programs in the prefix draw in software (Avalon.Graphics DisableHWAcceleration is 1)")
     status = "warn" if wayland_in_options(machine) else "info"
     return Check("wpf", status, "WPF programs in the prefix draw with Direct3D 9: HKCU\\Software\\Microsoft\\Avalon.Graphics has no DisableHWAcceleration=1",
-                 f"Under Wine's Wayland driver, {WPF_APPS} crash when their window opens. With the simulator closed, run: {WPF_COMMAND}")
+                 f"Under Wine's Wayland driver, {WPF_APPS} crash when their window opens. {SIMULATOR_CLOSED}", WPF_COMMAND)
 
 
 def installed_font_families():
@@ -197,8 +202,8 @@ def font_problem(current, families):
 
 
 def font_command(fixes):
-    adds = " && ".join(f'wine reg add "HKCU\\Software\\Wine\\Fonts\\Replacements" /v "{windows}" /d "{target}" /f' for windows, target in fixes)
-    return f"protontricks -c '{adds}' 2537590"
+    adds = "".join(f' &&\n  wine reg add "$key" /v "{windows}" /d "{target}" /f' for windows, target in fixes)
+    return f"protontricks -c 'key=\"HKCU\\{FONTS_KEY}\"{adds}' 2537590"
 
 
 def check_fonts(machine):
@@ -216,9 +221,9 @@ def check_fonts(machine):
     if not problems:
         return Check("fonts", "ok", f"The {len(FONT_REPLACEMENTS)} Windows fonts add-ons ask for most have a replacement this system has")
     missing = sorted({target for _, target in fixes if families is not None and target.lower() not in families})
-    install = f" Install {', '.join(missing)} first." if missing else ""
+    install = f"Install {', '.join(missing)} first. " if missing else ""
     return Check("fonts", "warn", "Text in add-on windows can come out thin and jagged: " + "; ".join(problems),
-                 f"With the simulator closed, run: {font_command(fixes)}{install}")
+                 f"{install}{SIMULATOR_CLOSED}", font_command(fixes))
 
 
 def content_files(machine):
@@ -235,7 +240,7 @@ def check_community_disabled(machine):
         return Check("community-disabled", "ok", "The simulator has not switched off any Community package")
     paths = " ".join(shlex.quote(str(path)) for path, count in disabled.items() if count)
     return Check("community-disabled", "warn", f"The simulator switched off {total} Community package{'s' if total > 1 else ''} (SystemDisabled in Content.xml)",
-                 f"It does this when it is killed while loading. With the simulator closed, turn them back on with: sed -i -E {shlex.quote(REACTIVATE)} {paths}")
+                 f"It does this when it is killed while loading. {SIMULATOR_CLOSED}", f"sed -i -E {shlex.quote(REACTIVATE)} {paths}")
 
 
 CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_wayland, check_graphics_driver, check_monitors, check_library_paths, check_community, check_community_disabled, check_wpf, check_fonts, check_running, check_build_tools)
