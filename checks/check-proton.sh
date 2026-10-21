@@ -159,6 +159,11 @@ output="$(run_wine "$(windows_path "$WORK/d2d1-bezier-ceiling-test.exe")")" || s
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "d2d1 coincident Bezier curves close fast (Fenix displays freezing)" "$verdict" "${output:-no output}"
 
+status=0
+output="$(run_wine "$(windows_path "$WORK/applicationdata-no-package-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "ApplicationData refuses a process without a package (Fenix Installer database)" "$verdict" "${output:-no output}"
+
 name="reading another process after an EPERM leaves its main thread running (stutter with ChasePlane)"
 if [ "$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null)" = 1 ]; then
   stop_prefix

@@ -22,6 +22,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/process-memory-after-eperm-test.exe" "$HERE/
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-cursor-clip-test.exe" "$HERE/src/hidden-cursor-clip-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/pointer-constraint-commit-test.exe" "$HERE/src/pointer-constraint-commit-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/one-pixel-clip-test.exe" "$HERE/src/one-pixel-clip-test.c" -lgdi32 -luser32
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/applicationdata-no-package-test.exe" "$HERE/src/applicationdata-no-package-test.c" -lruntimeobject
 if pkg-config --exists libei-1.0 libsystemd; then
   read -r -a EIS_FLAGS < <(pkg-config --cflags --libs libei-1.0 libsystemd)
   gcc -O2 -Wall -o "$OUT/eis-pointer" "$HERE/src/eis-pointer.c" "${EIS_FLAGS[@]}"

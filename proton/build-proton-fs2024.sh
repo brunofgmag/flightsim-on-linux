@@ -33,6 +33,7 @@ PATCHES=(
   "$ROOT/patches/wine/winewayland-commit-pointer-constraint-changes.patch"
   "$ROOT/patches/wine/winewayland-small-clip-warps-pointer-inside.patch"
   "$ROOT/patches/wine/winewayland-clip-at-least-one-pixel.patch"
+  "$ROOT/patches/wine/windows-storage-applicationdata-no-package.patch"
 )
 
 MODULES=(
@@ -50,6 +51,7 @@ MODULES=(
   "dlls/mmdevapi/x86_64-windows/mmdevapi.dll:lib/wine/x86_64-windows/mmdevapi.dll"
   "dlls/gdiplus/x86_64-windows/gdiplus.dll:lib/wine/x86_64-windows/gdiplus.dll"
   "dlls/shell32/x86_64-windows/shell32.dll:lib/wine/x86_64-windows/shell32.dll"
+  "dlls/windows.storage.applicationdata/x86_64-windows/windows.storage.applicationdata.dll:lib/wine/x86_64-windows/windows.storage.applicationdata.dll"
 )
 
 VKD3D_URL="https://github.com/HansKristian-Work/vkd3d-proton"

@@ -1,0 +1,60 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine windows.storage.applicationdata: ApplicationData.Current fails with APPMODEL_ERROR_NO_PACKAGE in a process without a package, as on Windows. Fixes the package database of the Fenix Installer 1.0.353 and later, whose Microsoft.Data.Sqlite read the stub LocalFolder and threw from its type initializer.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/windows.storage.applicationdata/applicationdata.c b/dlls/windows.storage.applicationdata/applicationdata.c
+index dbe42b3a8d6..07126b93c7e 100644
+--- a/dlls/windows.storage.applicationdata/applicationdata.c
++++ b/dlls/windows.storage.applicationdata/applicationdata.c
+@@ -18,6 +18,7 @@
+  */
+ 
+ #include "private.h"
++#include "appmodel.h"
+ #include "wine/debug.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(data);
+@@ -294,10 +295,16 @@ DEFINE_IINSPECTABLE( application_data_statics, IApplicationDataStatics, struct a
+ static HRESULT WINAPI application_data_statics_get_Current( IApplicationDataStatics *iface, IApplicationData **value )
+ {
+     struct application_data *impl;
++    UINT32 length = 0;
+ 
+     TRACE( "iface %p, value %p\n", iface, value );
+ 
+     if (!value) return E_INVALIDARG;
++    if (GetCurrentPackageFullName( &length, NULL ) == APPMODEL_ERROR_NO_PACKAGE)
++    {
++        *value = NULL;
++        return HRESULT_FROM_WIN32( APPMODEL_ERROR_NO_PACKAGE );
++    }
+     if (!(impl = calloc( 1, sizeof(*impl) ))) return E_OUTOFMEMORY;
+ 
+     impl->IApplicationData_iface.lpVtbl = &application_data_vtbl;
+diff --git a/dlls/windows.storage.applicationdata/tests/data.c b/dlls/windows.storage.applicationdata/tests/data.c
+index 18145a4b14d..88fe23ae7ea 100644
+--- a/dlls/windows.storage.applicationdata/tests/data.c
++++ b/dlls/windows.storage.applicationdata/tests/data.c
+@@ -77,8 +77,8 @@ static void test_ApplicationDataStatics(void)
+     hr = IApplicationDataStatics_get_Current( application_data_statics, NULL );
+     ok( hr == E_INVALIDARG, "got hr %#lx.\n", hr );
+     hr = IApplicationDataStatics_get_Current( application_data_statics, &application_data );
+-    todo_wine ok( hr == 0x80073d54, "got hr %#lx.\n", hr );
+-    todo_wine ok( !application_data, "got application_data %p.\n", application_data );
++    ok( hr == 0x80073d54, "got hr %#lx.\n", hr );
++    ok( !application_data, "got application_data %p.\n", application_data );
+     if (application_data) IApplicationData_Release( application_data );
+ 
+     ref = IApplicationDataStatics_Release( application_data_statics );
+diff --git a/include/appmodel.h b/include/appmodel.h
+index cab001f60c7..52972d8af50 100644
+--- a/include/appmodel.h
++++ b/include/appmodel.h
+@@ -89,6 +89,7 @@ LONG WINAPI AppPolicyGetProcessTerminationMethod(HANDLE token, AppPolicyProcessT
+ LONG WINAPI AppPolicyGetShowDeveloperDiagnostic(HANDLE token, AppPolicyShowDeveloperDiagnostic *policy);
+ LONG WINAPI AppPolicyGetThreadInitializationType(HANDLE token, AppPolicyThreadInitializationType *policy);
+ LONG WINAPI AppPolicyGetWindowingModel(HANDLE processToken, AppPolicyWindowingModel *policy);
++LONG WINAPI GetCurrentPackageFullName(UINT32 *length, WCHAR *name);
+ LONG WINAPI GetPackagePath(const PACKAGE_ID *package_id, const UINT32 reserved, UINT32 *length, WCHAR *path);
+ LONG WINAPI GetPackagesByPackageFamily(const WCHAR *family_name, UINT32 *count, WCHAR **full_names,
+         UINT32 *buffer_length, WCHAR *buffer);
