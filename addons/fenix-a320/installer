@@ -11,6 +11,9 @@ FENIX_DOWNLOADS="https://fenixsim.com"
 
 die() {
   echo "fenix installer: $*" >&2
+  if [ ! -t 2 ] && command -v notify-send > /dev/null; then
+    notify-send -a "Fenix Installer" -i dialog-information "Fenix Installer" "$*" || true
+  fi
   exit 1
 }
 

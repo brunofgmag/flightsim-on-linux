@@ -531,6 +531,8 @@ class InstallerTest(unittest.TestCase):
         self.stub("gamescope", 'echo "gamescope $*"; echo "cwd $PWD"; echo "wayland ${WAYLAND_DISPLAY-unset}"')
         self.stub("protontricks", "exit 0")
         self.stub("pgrep", "exit 1")
+        self.notes = self.root / "notify.log"
+        self.stub("notify-send", f'printf "%s|" "$@" >> "{self.notes}"; echo >> "{self.notes}"')
 
     def stub(self, name, body):
         path = self.gpu if name == "gpu" else self.bin / name
@@ -551,6 +553,22 @@ class InstallerTest(unittest.TestCase):
     def install_app(self):
         self.app.mkdir(parents=True)
         (self.app / "FenixApp.exe").write_bytes(b"MZ")
+
+    def test_a_refusal_without_a_terminal_also_shows_a_desktop_notification(self):
+        self.install_app()
+        self.stub("pgrep", '[ "$2" = "FlightSimulator2024[.]exe" ] && exit 0; exit 1')
+        code, output = self.run_installer()
+        self.assertNotEqual(code, 0)
+        notes = self.notes.read_text().splitlines()
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Fenix Installer|", notes[0])
+        self.assertIn("close Microsoft Flight Simulator 2024 first", notes[0])
+
+    def test_a_start_without_a_refusal_shows_no_notification(self):
+        self.install_app()
+        code, output = self.run_installer()
+        self.assertEqual(code, 0, output)
+        self.assertFalse(self.notes.exists())
 
     def test_it_refuses_while_the_simulator_runs(self):
         self.install_app()
