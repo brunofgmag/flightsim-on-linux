@@ -179,9 +179,9 @@ def check_wpf(machine):
         return None
     if registry.value(keys, WPF_KEY, "DisableHWAcceleration") == 1:
         return Check("wpf", "ok", "WPF programs in the prefix draw in software (Avalon.Graphics DisableHWAcceleration is 1)")
-    status = "warn" if wayland_in_options(machine) else "info"
+    status = "warn" if wayland_in_options(machine) and not machine.proton_is_fs2024 else "info"
     return Check("wpf", status, "WPF programs in the prefix draw with Direct3D 9: HKCU\\Software\\Microsoft\\Avalon.Graphics has no DisableHWAcceleration=1",
-                 f"Under Wine's Wayland driver, {WPF_APPS} crash when their window opens. {SIMULATOR_CLOSED}", WPF_COMMAND)
+                 f"Under Wine's Wayland driver, on the Proton the test machine used before Proton FS2024, {WPF_APPS} crashed when their window opened. On Proton FS2024 they open without this setting. {SIMULATOR_CLOSED}", WPF_COMMAND)
 
 
 def installed_font_families():

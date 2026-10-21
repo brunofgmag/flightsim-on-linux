@@ -7,11 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from fsol import exe_xml, registry  # noqa: E402
-from fsol.doctor import WPF_KEY  # noqa: E402
+from fsol import exe_xml  # noqa: E402
 
 CONTROL_CENTER = r"C:\FlightSimLabs\ControlCenter\FSLControlCenter.exe"
-WPF_VALUE = "DisableHWAcceleration"
 EFB_BROWSER = "cef_browser.exe"
 WRITECOPY_SETTING = "WINE_TRACK_WRITECOPY"
 BUILD_RECORD = "fs2024-build.txt"
@@ -68,19 +66,6 @@ def gdiplus_line(proton):
     return True, "Proton's gdiplus.dll draws the display glow and centred text"
 
 
-def wpf_value(prefix):
-    file = prefix / "user.reg"
-    return registry.value(registry.load(file), WPF_KEY, WPF_VALUE) if file.is_file() else None
-
-
-def wpf_line(prefix):
-    found = wpf_value(prefix)
-    if found == 1:
-        return True, f"WPF programs draw in software ({WPF_VALUE} is 1), so the Control Center window opens"
-    found_text = f"has {WPF_VALUE} {found!r}" if found is not None else f"has no {WPF_VALUE}"
-    return False, f"HKCU\\{WPF_KEY} {found_text}, want 1, so the Control Center window can crash as it opens; run apply"
-
-
 def control_center_state(base):
     file = base / "exe.xml"
     if not file.is_file():
@@ -111,18 +96,11 @@ def command_check(args):
     lines = [
         located(args.proton, "Proton", writecopy_line),
         located(args.proton, "Proton", gdiplus_line),
-        located(args.prefix, "simulator prefix", wpf_line),
         located(args.base, "simulator base folder", exe_xml_line),
     ]
     for good, text in lines:
         print(f"ok {text}" if good else f"FAIL {text}")
     return 0 if all(good for good, _ in lines) else 1
-
-
-def command_wpf(args):
-    found = wpf_value(Path(args.prefix))
-    print("absent" if found is None else found)
-    return 0
 
 
 def command_control_center(args):
@@ -138,13 +116,9 @@ def parser():
     root = argparse.ArgumentParser(prog="fslabs.py")
     commands = root.add_subparsers(dest="command", required=True)
     check = commands.add_parser("check")
-    check.add_argument("prefix")
     check.add_argument("proton")
     check.add_argument("base")
     check.set_defaults(run=command_check)
-    wpf = commands.add_parser("wpf")
-    wpf.add_argument("prefix")
-    wpf.set_defaults(run=command_wpf)
     control_center = commands.add_parser("control-center")
     control_center.add_argument("base")
     control_center.set_defaults(run=command_control_center)

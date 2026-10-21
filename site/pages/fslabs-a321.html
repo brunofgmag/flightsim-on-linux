@@ -1,8 +1,8 @@
 title: FSLabs A321
-description: How to run the FSLabs A321 and its Control Center in MSFS 2024 under Proton: Proton FS2024 for the displays and the EFB, WPF in software for the Control Center window, what the check looks at, and the problems that remain.
+description: How to run the FSLabs A321 and its Control Center in MSFS 2024 under Proton: Proton FS2024 for the displays and the EFB, the Control Center started from exe.xml, what the check looks at, and the problems that remain.
 ---
 <h1>FSLabs A321 and Control Center</h1>
-<p class="lead">Tested with Control Center 2.0.1.197 in October 2026. One command changes a single setting in the prefix, and another checks everything the A321 needs. Neither touches the FSLabs folders.</p>
+<p class="lead">Tested with Control Center 2.0.1.197 on 21 October 2026. The A321 needs nothing in the prefix beyond Proton FS2024, and one command checks everything it needs. It changes nothing, in the prefix or in the FSLabs folders.</p>
 
 <h2>Before you start</h2>
 <p>The A321 needs <a href="proton-fs2024.html">Proton FS2024</a> for two reasons:</p>
@@ -12,26 +12,18 @@ description: How to run the FSLabs A321 and its Control Center in MSFS 2024 unde
 </ul>
 <p>Pick Proton FS2024 for the simulator in Steam. Install the A321 and the Control Center with the FSLabs installer, and activate the aircraft in the Control Center, as on Windows. Run the installer with the simulator closed, following <a href="rules.html">the ground rules</a>.</p>
 
-<h2>Set up the prefix</h2>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply fslabs-a321</code></pre>
-<p>Close the simulator first. The command makes WPF programs draw in software and then runs the check below.</p>
-<p>The Control Center is a WPF program, and the simulator starts it from <code>exe.xml</code>, so it inherits the simulator's Direct3D 9, which is DXVK. On the test machine, WPF programs started that way under Wine's Wayland driver crashed the moment their window opened, with <code>importing the supplied dmabufs failed</code>. With this setting the Control Center opened from <code>exe.xml</code> and validated the A321 licence. The setting is the one in the <a href="rules.html">ground rules</a>, and it applies to every WPF program in the prefix. If it is already there, the command leaves it alone.</p>
-<p>The command also reports what it finds in <code>exe.xml</code>, but it never edits that file. The Control Center writes its own entry there.</p>
+<h2>The Control Center starts with the simulator</h2>
+<p>The Control Center writes its own entry in <code>exe.xml</code>, and the simulator starts it from there. On the test machine, under Wine's Wayland driver and on Proton FS2024, it opened that way, drew its window normally and validated the A321 licence. Nothing has to be set up for it.</p>
 
 <h2>Check it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fslabs-a321</code></pre>
-<p>It prints four lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
 <ul>
   <li>the Proton's <code>user_settings.py</code> turns on copy-on-write tracking for <code>cef_browser.exe</code>;</li>
   <li>the Proton was built from this repository's GDI+ patch, and its <code>gdiplus.dll</code> is the one the build recorded;</li>
-  <li>WPF programs draw in software;</li>
   <li><code>exe.xml</code> has the Control Center entry, switched on.</li>
 </ul>
 <p>When the first two fail, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the last one fails because the entry is missing, start the Control Center and run the check again. When it fails because the entry is switched off, the simulator won't start the Control Center. That is only right if you start it yourself, as the gamescope section below explains.</p>
-
-<h2>Undo it</h2>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo fslabs-a321</code></pre>
-<p>If the setup changed the WPF setting, undo puts back the value from before, or removes the setting if it wasn't there. Lorby AAO, AutoFPS, vRAAS and the Fenix runner rely on it too, and under the Wayland driver they crash without it.</p>
 
 <h2>Starting the Control Center yourself</h2>
 <p>With the simulator running, start it inside the simulator's container:</p>

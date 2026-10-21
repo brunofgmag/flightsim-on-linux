@@ -83,12 +83,17 @@ class WpfTest(RuleTestCase):
         self.registry_with(WPF_ON, GOOD_FONTS)
         self.assertEqual(self.check("wpf").status, "ok")
 
-    def test_without_the_key_the_wayland_driver_warns_with_the_command(self):
-        self.fake.build(launch_options=WAYLAND)
+    def test_without_the_key_the_wayland_driver_on_another_proton_warns_with_the_command(self):
+        self.fake.build(launch_options=WAYLAND, fenix=False)
         self.registry_with(GOOD_FONTS)
         check = self.check("wpf")
         self.assertEqual(check.status, "warn")
         self.assertIn('reg add "HKCU\\Software\\Microsoft\\Avalon.Graphics" /v DisableHWAcceleration /t REG_DWORD /d 1 /f', check.command)
+
+    def test_without_the_key_the_wayland_driver_on_proton_fs2024_is_only_information(self):
+        self.fake.build(launch_options=WAYLAND)
+        self.registry_with(GOOD_FONTS)
+        self.assertEqual(self.check("wpf").status, "info")
 
     def test_without_the_key_and_without_wayland_it_is_only_information(self):
         self.fake.build()
@@ -96,7 +101,7 @@ class WpfTest(RuleTestCase):
         self.assertEqual(self.check("wpf").status, "info")
 
     def test_the_key_set_to_zero_is_not_software(self):
-        self.fake.build(launch_options=WAYLAND)
+        self.fake.build(launch_options=WAYLAND, fenix=False)
         self.registry_with(WPF_ON.replace("00000001", "00000000"))
         self.assertEqual(self.check("wpf").status, "warn")
 

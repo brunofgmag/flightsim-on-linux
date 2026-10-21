@@ -5,5 +5,4 @@ HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=/dev/null
 . "$HERE/parts/common.sh"
 
-fsl_wpf_apply
 fsl_exe_xml_report
