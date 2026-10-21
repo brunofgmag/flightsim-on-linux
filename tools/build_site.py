@@ -1,3 +1,4 @@
+import hashlib
 import html
 import shutil
 import sys
@@ -31,19 +32,26 @@ def nav_for(name):
     return "\n        ".join(links)
 
 
-def build():
-    layout = Template((SITE / "layout.html").read_text())
-    if OUT.exists():
-        shutil.rmtree(OUT)
-    shutil.copytree(SITE / "assets", OUT / "assets")
+def asset_url(site, name):
+    version = hashlib.sha256((site / "assets" / name).read_bytes()).hexdigest()[:12]
+    return f"assets/{name}?v={version}"
+
+
+def build(site=SITE, out=OUT):
+    layout = Template((site / "layout.html").read_text())
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(site / "assets", out / "assets")
     for static in ("llms.txt",):
-        shutil.copy(SITE / static, OUT / static)
-    (OUT / ".nojekyll").write_text("")
-    for page in sorted((SITE / "pages").glob("*.html")):
+        shutil.copy(site / static, out / static)
+    (out / ".nojekyll").write_text("")
+    for page in sorted((site / "pages").glob("*.html")):
         meta, body = read_page(page)
-        (OUT / page.name).write_text(layout.substitute(
+        (out / page.name).write_text(layout.substitute(
             title=html.escape(meta["title"]),
             description=html.escape(meta["description"]),
+            style=asset_url(site, "style.css"),
+            script=asset_url(site, "copy.js"),
             nav=nav_for(page.name),
             body=body.strip(),
         ))
