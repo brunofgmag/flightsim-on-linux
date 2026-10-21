@@ -36,20 +36,20 @@ choose() {
     zenity)
       zenity --list --radiolist --width=620 --height=380 --title="$TITLE" \
         --text="What do you want to do?" --column=" " --column=Action --column=Task --hide-column=3 --print-column=3 \
-        TRUE "Set up add-ons" addons \
+        TRUE "Fix my add-ons (apply and check)" addons \
         FALSE "Check the Proton the simulator uses" check \
         FALSE "Build Proton FS2024 (takes a few minutes)" build \
         FALSE "Run the setup check again" doctor
       ;;
     kdialog)
       kdialog --title "$TITLE" --geometry 620x320 --radiolist "What do you want to do?" \
-        addons "Set up add-ons" on \
+        addons "Fix my add-ons (apply and check)" on \
         check "Check the Proton the simulator uses" off \
         build "Build Proton FS2024 (takes a few minutes)" off \
         doctor "Run the setup check again" off
       ;;
     *)
-      echo "1) Set up add-ons" >&2
+      echo "1) Fix my add-ons (apply and check)" >&2
       echo "2) Check the Proton the simulator uses" >&2
       echo "3) Build Proton FS2024" >&2
       echo "4) Run the setup check again" >&2
