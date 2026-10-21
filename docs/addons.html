@@ -62,7 +62,7 @@
   <tr><th>Add-on</th><th>What it needs</th><th>Guide</th></tr>
   <tr><td>MSFS AutoFPS (0.5.4)</td><td>Proton FS2024 for "Close to Tray", Direct3D 9 off, started inside the simulator's container. It won't start from <code>exe.xml</code>.</td><td><span class="tag soon">in progress</span></td></tr>
   <tr><td>Volanta (1.19.2)</td><td>Runs in the simulator's prefix, because its connector is a Windows program.</td><td><span class="tag soon">in progress</span></td></tr>
-  <tr><td>Navigraph Simlink (1.1.41)</td><td>Its own Wine prefix, so it can start at login and wait in the tray as on Windows. A <code>SimConnect.cfg</code> next to it points it at the simulator's SimConnect TCP port. The default port, 500, needs root on Linux, so the simulator's <code>SimConnect.xml</code> moves it above 1024. The sign-in comes back as a <code>navigraph-traffic-desktop://</code> link that Linux has to hand to the prefix.</td><td><span class="tag soon">in progress</span></td></tr>
+  <tr><td>Navigraph Simlink (1.1.41)</td><td>Its own Wine prefix, so it can start at login and wait in the tray as on Windows. A <code>SimConnect.cfg</code> next to it points it at the simulator's SimConnect TCP port. The default port, 500, needs root on Linux, so the simulator's <code>SimConnect.xml</code> moves it above 1024. The sign-in comes back as a <code>navigraph-traffic-desktop://</code> link that Linux has to hand to the prefix. Sometimes Simlink stops updating the aircraft's position, for example after you restart the simulator. Restarting Simlink brings it back.</td><td><span class="tag soon">in progress</span></td></tr>
   <tr><td>Lorby Axis and Ohs (4.58.2)</td><td>A timer fix in wine-mono's WindowsBase, without which its scripts stop after a minute, and joystick IDs remapped from Windows.</td><td><span class="tag soon">in progress</span></td></tr>
   <tr><td>OpenDeck for Stream Deck (2.14.1)</td><td>The native Linux app, with converted Stream Deck profiles and three small source patches.</td><td><span class="tag soon">in progress</span></td></tr>
   <tr><td>ReShade (6.8)</td><td>Copied into the simulator folder as <code>dxgi.dll</code>; no launch option.</td><td><span class="tag soon">in progress</span></td></tr>
@@ -84,7 +84,7 @@
 </div>
 
 <h2>Doesn't work</h2>
-<p><strong>SimAtlas</strong> (2.0.5) delivers its packages through a Windows file-system filter driver, and Wine cannot host one.</p>
+<p><strong>SimAtlas</strong> (2.0.5) delivers its packages through a Windows file-system filter driver, and Wine doesn't support those yet.</p>
   </main>
   <footer class="wrap">
     <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
