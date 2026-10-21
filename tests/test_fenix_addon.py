@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 ADDON = ROOT / "addons" / "fenix-a320"
 PARTS = ADDON / "parts"
 BOOTSTRAPPER = r"C:\Program Files\FenixSim A320\deps\FenixBootstrapper.exe"
+FENIX_PROTON_PATCH = "windows-storage-applicationdata-no-package.patch"
+FENIX_PROTON_MODULE = "lib/wine/x86_64-windows/windows.storage.applicationdata.dll"
 BOM = b"\xef\xbb\xbf"
 
 
@@ -362,6 +364,7 @@ echo "source:{part}" >> "$LOG"
 }}
 """
 PART_ORDER = ["dotnet48", "geometry", "dxvk", "exe_xml"]
+CHECK_ORDER = PART_ORDER + ["proton"]
 
 
 class ScriptOrderTest(unittest.TestCase):
@@ -373,7 +376,7 @@ class ScriptOrderTest(unittest.TestCase):
         for action in ("apply", "check", "undo"):
             shutil.copy2(ADDON / action, self.folder / action)
         (self.folder / "parts" / "common.sh").write_text(STUB_COMMON)
-        for part in PART_ORDER:
+        for part in CHECK_ORDER:
             (self.folder / "parts" / f"{part}.sh").write_text(STUB_PART.format(part=part))
         self.log = Path(self.temp.name) / "calls.log"
 
@@ -397,11 +400,21 @@ class ScriptOrderTest(unittest.TestCase):
     def test_check_runs_every_part_and_fails_if_any_failed(self):
         code, calls = self.run_action("check", BREAK="dotnet48")
         self.assertEqual(code, 1)
-        self.assertEqual([call for call in calls if call.endswith(":check")], [f"{part}:check" for part in PART_ORDER])
+        self.assertEqual([call for call in calls if call.endswith(":check")], [f"{part}:check" for part in CHECK_ORDER])
 
     def test_check_passes_when_every_part_passes(self):
         code, _ = self.run_action("check")
         self.assertEqual(code, 0)
+
+    def test_check_also_looks_at_proton_and_fails_when_only_proton_fails(self):
+        code, calls = self.run_action("check", BREAK="proton")
+        self.assertEqual(code, 1)
+        self.assertIn("proton:check", calls)
+
+    def test_apply_and_undo_leave_proton_alone(self):
+        self.run_action("apply")
+        self.run_action("undo")
+        self.assertFalse([call for call in self.log.read_text().split() if call.startswith("proton")])
 
     def test_undo_runs_the_parts_in_reverse_order(self):
         code, calls = self.run_action("undo")
@@ -460,6 +473,37 @@ class PartsInBashTest(PrefixCase):
     def bash(self, script):
         text = f'set -euo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/dotnet48.sh\n. parts/exe_xml.sh\n{script}\n'
         return subprocess.run(["bash", "-c", text], env=self.env, capture_output=True, text=True)
+
+    def proton_check(self):
+        text = f'set -euo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/proton.sh\nproton_check\n'
+        return subprocess.run(["bash", "-c", text], env=self.env, capture_output=True, text=True)
+
+    def write_proton_build(self, data, recorded=None):
+        module = self.proton / "files" / FENIX_PROTON_MODULE
+        module.parent.mkdir(parents=True, exist_ok=True)
+        module.write_bytes(data)
+        patch = hashlib.sha256((ROOT / "patches" / "wine" / FENIX_PROTON_PATCH).read_bytes()).hexdigest()
+        record = [f"patch {patch} {FENIX_PROTON_PATCH}", f"module {recorded or hashlib.sha256(data).hexdigest()} {FENIX_PROTON_MODULE}"]
+        (self.proton / "fs2024-build.txt").write_text("\n".join(record) + "\n")
+
+    def test_the_proton_check_passes_on_a_build_with_the_installer_fix(self):
+        self.write_proton_build(b"patched")
+        result = self.proton_check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.splitlines(), ["ok Proton's windows.storage.applicationdata.dll lets the Fenix Installer open its package database"])
+
+    def test_the_proton_check_fails_on_a_build_without_the_installer_fix(self):
+        self.write_proton_build(b"stock", recorded=hashlib.sha256(b"patched").hexdigest())
+        result = self.proton_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(result.stdout.startswith("FAIL "), result.stdout)
+        self.assertIn("proton build", result.stdout)
+
+    def test_the_proton_check_fails_when_the_machine_found_no_proton(self):
+        self.env["FSOL_PROTON"] = ""
+        result = self.proton_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout.splitlines(), ["FAIL no Proton found; run: flightsim-on-linux machine"])
 
     def wine_calls(self):
         if not self.wine_log.exists():

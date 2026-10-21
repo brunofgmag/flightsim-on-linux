@@ -1,25 +1,18 @@
 import argparse
 import ast
-import hashlib
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from fsol import exe_xml  # noqa: E402
+from fsol import exe_xml, proton_build  # noqa: E402
 
 CONTROL_CENTER = r"C:\FlightSimLabs\ControlCenter\FSLControlCenter.exe"
 EFB_BROWSER = "cef_browser.exe"
 WRITECOPY_SETTING = "WINE_TRACK_WRITECOPY"
-BUILD_RECORD = "fs2024-build.txt"
 GDIPLUS_PATCH = "gdiplus-path-gradient-and-centered-text.patch"
 GDIPLUS_MODULE = "lib/wine/x86_64-windows/gdiplus.dll"
-PROTON_BUILD = "flightsim-on-linux proton build"
-
-
-def sha256_of(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
 def user_settings(proton):
@@ -38,32 +31,14 @@ def writecopy_apps(proton):
     return {name.strip().casefold() for name in names.split(",") if name.strip()}
 
 
-def build_record(proton):
-    file = proton / BUILD_RECORD
-    if not file.is_file():
-        return set()
-    return {tuple(line.split(" ", 2)) for line in file.read_text(errors="replace").splitlines() if line.count(" ") >= 2}
-
-
-def recorded_module(record, module):
-    return next((sha for kind, sha, name in record if kind == "module" and name == module), None)
-
-
 def writecopy_line(proton):
     if EFB_BROWSER in writecopy_apps(proton):
         return True, f"Proton tracks copy-on-write pages in {EFB_BROWSER}, so the EFB browser starts"
-    return False, f"{proton / 'user_settings.py'} does not list {EFB_BROWSER} in {WRITECOPY_SETTING}; use Proton FS2024 ({PROTON_BUILD})"
+    return False, f"{proton / 'user_settings.py'} does not list {EFB_BROWSER} in {WRITECOPY_SETTING}; use Proton FS2024 ({proton_build.PROTON_BUILD})"
 
 
 def gdiplus_line(proton):
-    record = build_record(proton)
-    patch = sha256_of(ROOT / "patches" / "wine" / GDIPLUS_PATCH)
-    if ("patch", patch, GDIPLUS_PATCH) not in record:
-        return False, f"{proton / BUILD_RECORD} does not list this repository's {GDIPLUS_PATCH}; run: {PROTON_BUILD}"
-    wanted = recorded_module(record, GDIPLUS_MODULE)
-    if not wanted or sha256_of(proton / "files" / GDIPLUS_MODULE) != wanted:
-        return False, f"{GDIPLUS_MODULE} in {proton / 'files'} is not the one its build record lists; run: {PROTON_BUILD}"
-    return True, "Proton's gdiplus.dll draws the display glow and centred text"
+    return proton_build.patch_line(proton, GDIPLUS_PATCH, GDIPLUS_MODULE, "Proton's gdiplus.dll draws the display glow and centred text")
 
 
 def control_center_state(base):

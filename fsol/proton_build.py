@@ -1,0 +1,51 @@
+import hashlib
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+WINE_PATCHES = ROOT / "patches" / "wine"
+BUILD_RECORD = "fs2024-build.txt"
+PROTON_BUILD = "flightsim-on-linux proton build"
+USAGE = "usage: proton_build.py check <Proton folder> <patch> <module> <text when it passes>"
+
+
+def sha256_of(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+
+def build_record(proton):
+    file = proton / BUILD_RECORD
+    if not file.is_file():
+        return set()
+    return {tuple(line.split(" ", 2)) for line in file.read_text(errors="replace").splitlines() if line.count(" ") >= 2}
+
+
+def recorded_module(record, module):
+    return next((sha for kind, sha, name in record if kind == "module" and name == module), None)
+
+
+def patch_line(proton, patch, module, passed):
+    record = build_record(proton)
+    if ("patch", sha256_of(WINE_PATCHES / patch), patch) not in record:
+        return False, f"{proton / BUILD_RECORD} does not list this repository's {patch}; run: {PROTON_BUILD}"
+    wanted = recorded_module(record, module)
+    if not wanted or sha256_of(proton / "files" / module) != wanted:
+        return False, f"{module} in {proton / 'files'} is not the one its build record lists; run: {PROTON_BUILD}"
+    return True, passed
+
+
+def main(argv):
+    if len(argv) != 5 or argv[0] != "check":
+        print(USAGE, file=sys.stderr)
+        return 2
+    _, proton, patch, module, passed = argv
+    if not proton:
+        print("FAIL no Proton found; run: flightsim-on-linux machine")
+        return 1
+    good, text = patch_line(Path(proton), patch, module, passed)
+    print(f"ok {text}" if good else f"FAIL {text}")
+    return 0 if good else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
