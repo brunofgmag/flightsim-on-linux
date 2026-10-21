@@ -15,8 +15,22 @@ ROOT = Path(__file__).resolve().parent.parent
 ADDON = ROOT / "addons" / "fenix-a320"
 PARTS = ADDON / "parts"
 BOOTSTRAPPER = r"C:\Program Files\FenixSim A320\deps\FenixBootstrapper.exe"
-FENIX_PROTON_PATCH = "windows-storage-applicationdata-no-package.patch"
-FENIX_PROTON_MODULE = "lib/wine/x86_64-windows/windows.storage.applicationdata.dll"
+FENIX_PROTON_FIXES = [
+    ("windows-storage-applicationdata-no-package.patch", "lib/wine/x86_64-windows/windows.storage.applicationdata.dll",
+     "Proton's windows.storage.applicationdata.dll lets the Fenix Installer open its package database"),
+    ("wintrust-create-indirect-data.patch", "lib/wine/x86_64-windows/wintrust.dll",
+     "Proton's wintrust.dll lets the Fenix 3 runner check its own signature"),
+    ("ntdll-globalroot-device-paths.patch", "lib/wine/x86_64-unix/ntdll.so",
+     "Proton's ntdll.so opens the device paths the Fenix 3 runner starts its programs from"),
+    ("ntdll-device-path-current-directory.patch", "lib/wine/x86_64-windows/ntdll.dll",
+     "Proton's ntdll.dll keeps the device path FenixSystem 3 starts in as its current folder"),
+    ("bcrypt-pbkdf2-pseudo-handle.patch", "lib/wine/x86_64-windows/bcrypt.dll",
+     "Proton's bcrypt.dll gives FenixSystem 3 the PBKDF2 handle its authorization uses"),
+    ("ncrypt-ecdh-secret-agreement.patch", "lib/wine/x86_64-windows/ncrypt.dll",
+     "Proton's ncrypt.dll lets FenixSystem 3 and the runner agree on a session key"),
+    ("ntdll-fenix-gateway-loader-case.patch", "lib/wine/x86_64-windows/ntdll.dll",
+     "Proton's ntdll.dll gives the Fenix 3 EFB gateway the Windows spelling of KERNEL32.DLL"),
+]
 BOM = b"\xef\xbb\xbf"
 
 
@@ -478,26 +492,37 @@ class PartsInBashTest(PrefixCase):
         text = f'set -euo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/proton.sh\nproton_check\n'
         return subprocess.run(["bash", "-c", text], env=self.env, capture_output=True, text=True)
 
-    def write_proton_build(self, data, recorded=None):
-        module = self.proton / "files" / FENIX_PROTON_MODULE
-        module.parent.mkdir(parents=True, exist_ok=True)
-        module.write_bytes(data)
-        patch = hashlib.sha256((ROOT / "patches" / "wine" / FENIX_PROTON_PATCH).read_bytes()).hexdigest()
-        record = [f"patch {patch} {FENIX_PROTON_PATCH}", f"module {recorded or hashlib.sha256(data).hexdigest()} {FENIX_PROTON_MODULE}"]
+    def write_proton_build(self, stock=()):
+        record = []
+        for patch, module, _ in FENIX_PROTON_FIXES:
+            path = self.proton / "files" / module
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"stock" if module in stock else module.encode())
+            patch_sha = hashlib.sha256((ROOT / "patches" / "wine" / patch).read_bytes()).hexdigest()
+            record += [f"patch {patch_sha} {patch}", f"module {hashlib.sha256(module.encode()).hexdigest()} {module}"]
         (self.proton / "fs2024-build.txt").write_text("\n".join(record) + "\n")
 
-    def test_the_proton_check_passes_on_a_build_with_the_installer_fix(self):
-        self.write_proton_build(b"patched")
+    def test_the_proton_check_passes_on_a_build_with_every_fenix_fix(self):
+        self.write_proton_build()
         result = self.proton_check()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ["ok Proton's windows.storage.applicationdata.dll lets the Fenix Installer open its package database"])
+        self.assertEqual(result.stdout.splitlines(), [f"ok {text}" for _, _, text in FENIX_PROTON_FIXES])
 
     def test_the_proton_check_fails_on_a_build_without_the_installer_fix(self):
-        self.write_proton_build(b"stock", recorded=hashlib.sha256(b"patched").hexdigest())
+        self.write_proton_build(stock={"lib/wine/x86_64-windows/windows.storage.applicationdata.dll"})
         result = self.proton_check()
         self.assertEqual(result.returncode, 1)
         self.assertTrue(result.stdout.startswith("FAIL "), result.stdout)
         self.assertIn("proton build", result.stdout)
+
+    def test_the_proton_check_names_the_one_fenix_3_fix_a_build_lacks(self):
+        self.write_proton_build(stock={"lib/wine/x86_64-windows/ncrypt.dll"})
+        result = self.proton_check()
+        self.assertEqual(result.returncode, 1)
+        failures = [line for line in result.stdout.splitlines() if line.startswith("FAIL ")]
+        self.assertEqual(len(failures), 1, result.stdout)
+        self.assertIn("ncrypt.dll", failures[0])
+        self.assertEqual(len(result.stdout.splitlines()), len(FENIX_PROTON_FIXES))
 
     def test_the_proton_check_fails_when_the_machine_found_no_proton(self):
         self.env["FSOL_PROTON"] = ""

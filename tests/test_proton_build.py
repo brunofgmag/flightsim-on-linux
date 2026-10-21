@@ -80,6 +80,25 @@ class CheckCommandTest(unittest.TestCase):
         self.assertEqual(lines, [])
         self.assertIn("usage:", errors)
 
+    def test_an_incomplete_second_patch_prints_the_usage(self):
+        code, lines, errors = self.check("check", str(self.proton), PATCH, MODULE, GOOD, PATCH, MODULE)
+        self.assertEqual(code, 2)
+        self.assertEqual(lines, [])
+        self.assertIn("usage:", errors)
+
+    def test_every_patch_gets_its_own_line_and_one_failure_fails_the_check(self):
+        other = "wintrust-create-indirect-data.patch"
+        code, lines, _ = self.check("check", str(self.proton), PATCH, MODULE, GOOD, other, MODULE, "wintrust is patched")
+        self.assertEqual(code, 1)
+        self.assertEqual(lines[0], f"ok {GOOD}")
+        self.assertEqual(lines[1], f"FAIL {self.proton / 'fs2024-build.txt'} does not list this repository's {other}; run: flightsim-on-linux proton build")
+        self.assertEqual(len(lines), 2)
+
+    def test_no_proton_folder_fails_once_for_several_patches(self):
+        code, lines, _ = self.check("check", "", PATCH, MODULE, GOOD, PATCH, MODULE, GOOD)
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["FAIL no Proton found; run: flightsim-on-linux machine"])
+
 
 if __name__ == "__main__":
     unittest.main()

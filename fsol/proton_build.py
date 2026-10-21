@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WINE_PATCHES = ROOT / "patches" / "wine"
 BUILD_RECORD = "fs2024-build.txt"
 PROTON_BUILD = "flightsim-on-linux proton build"
-USAGE = "usage: proton_build.py check <Proton folder> <patch> <module> <text when it passes>"
+USAGE = "usage: proton_build.py check <Proton folder> <patch> <module> <text when it passes> [<patch> <module> <text when it passes> ...]"
 
 
 def sha256_of(path):
@@ -35,16 +35,19 @@ def patch_line(proton, patch, module, passed):
 
 
 def main(argv):
-    if len(argv) != 5 or argv[0] != "check":
+    if len(argv) < 5 or (len(argv) - 2) % 3 or argv[0] != "check":
         print(USAGE, file=sys.stderr)
         return 2
-    _, proton, patch, module, passed = argv
+    proton, fixes = argv[1], argv[2:]
     if not proton:
         print("FAIL no Proton found; run: flightsim-on-linux machine")
         return 1
-    good, text = patch_line(Path(proton), patch, module, passed)
-    print(f"ok {text}" if good else f"FAIL {text}")
-    return 0 if good else 1
+    status = 0
+    for patch, module, passed in zip(fixes[0::3], fixes[1::3], fixes[2::3]):
+        good, text = patch_line(Path(proton), patch, module, passed)
+        print(f"ok {text}" if good else f"FAIL {text}")
+        status = status or (0 if good else 1)
+    return status
 
 
 if __name__ == "__main__":
