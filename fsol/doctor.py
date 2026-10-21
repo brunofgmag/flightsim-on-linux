@@ -56,7 +56,7 @@ def check_proton(machine):
 
 NTSYNC_REMEDY = ("If the simulator freezes in the menu or while loading an aircraft, turn ntsync off first: put "
                  "PROTON_NO_NTSYNC=1 before %command% under Launch Options in the simulator's Properties in Steam. "
-                 "PROTON_USE_NTSYNC=0 does nothing here. The fenix-a320-linux-patch overlay was only verified with ntsync off.")
+                 "PROTON_USE_NTSYNC=0 does nothing here. The Fenix A320 has flown with ntsync on.")
 
 
 def ntsync_off_by_options(machine):
