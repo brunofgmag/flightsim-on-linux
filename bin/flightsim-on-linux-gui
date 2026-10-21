@@ -118,6 +118,12 @@ set_up_addons() {
   rm -f "$results"
 }
 
+progress_call() {
+  local ref="$1" method="$2"
+  shift 2
+  dbus-send --session --type=method_call --dest="${ref%% *}" "${ref##* }" "org.kde.kdialog.ProgressDialog.$method" "$@" 2> /dev/null
+}
+
 run_with_progress() {
   local text="$1"
   shift
@@ -138,9 +144,10 @@ run_with_progress() {
     kdialog)
       local ref status
       ref="$(kdialog --title "$TITLE" --progressbar "$text" 0)"
+      progress_call "$ref" showCancelButton boolean:false
       "$@" > "$LOG" 2>&1
       status=$?
-      dbus-send --session --dest="${ref%% *}" "${ref##* }" org.kde.kdialog.ProgressDialog.close 2> /dev/null
+      progress_call "$ref" close
       return "$status"
       ;;
     *)
@@ -150,27 +157,32 @@ run_with_progress() {
   esac
 }
 
-"$CLI" doctor > "$LOG" 2>&1
-show_text "your machine" "$LOG"
+main() {
+  local task
+  "$CLI" doctor > "$LOG" 2>&1
+  show_text "your machine" "$LOG"
 
-while task="$(choose)" && [ -n "$task" ]; do
-  case "$task" in
-    addons)
-      set_up_addons
-      ;;
-    check)
-      run_with_progress "Testing Proton in a throwaway prefix" "$CLI" proton check
-      { tail -n 1 "$LOG"; echo; cat "$LOG"; } > "$LOG.view"
-      show_text "Proton check" "$LOG.view"
-      rm -f "$LOG.view"
-      ;;
-    build)
-      run_with_progress "Building Proton FS2024" "$CLI" proton build
-      show_text "Proton build" "$LOG"
-      ;;
-    doctor)
-      "$CLI" doctor > "$LOG" 2>&1
-      show_text "your machine" "$LOG"
-      ;;
-  esac
-done
+  while task="$(choose)" && [ -n "$task" ]; do
+    case "$task" in
+      addons)
+        set_up_addons
+        ;;
+      check)
+        run_with_progress "Testing Proton in a throwaway prefix" "$CLI" proton check
+        { tail -n 1 "$LOG"; echo; cat "$LOG"; } > "$LOG.view"
+        show_text "Proton check" "$LOG.view"
+        rm -f "$LOG.view"
+        ;;
+      build)
+        run_with_progress "Building Proton FS2024" "$CLI" proton build
+        show_text "Proton build" "$LOG"
+        ;;
+      doctor)
+        "$CLI" doctor > "$LOG" 2>&1
+        show_text "your machine" "$LOG"
+        ;;
+    esac
+  done
+}
+
+[ "${BASH_SOURCE[0]}" != "$0" ] || main
