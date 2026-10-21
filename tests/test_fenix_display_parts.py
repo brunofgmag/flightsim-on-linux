@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PARTS = ROOT / "addons" / "fenix-a320" / "parts"
 INSTALLER = ROOT / "addons" / "fenix-a320" / "installer"
+SESSION = PARTS / "installer-session.sh"
 
 HARNESS = """
 set -u
@@ -527,7 +528,7 @@ class InstallerTest(unittest.TestCase):
         self.gpu = self.root / "gpu"
         self.stub("gpu", 'case "${1:-}" in --vk-device) echo 10de:2704 ;; "") echo "NVIDIA GeForce RTX 4080" ;; *) exit 64 ;; esac')
         self.stub("gamescope", 'echo "gamescope $*"; echo "cwd $PWD"; echo "wayland ${WAYLAND_DISPLAY-unset}"')
-        self.stub("protontricks-launch", "exit 0")
+        self.stub("protontricks", "exit 0")
         self.stub("pgrep", "exit 1")
 
     def stub(self, name, body):
@@ -579,12 +580,12 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("finds no simulator prefix", output)
         self.assertNotIn("cwd", output)
 
-    def test_it_says_when_protontricks_launch_is_missing(self):
+    def test_it_says_when_protontricks_is_missing(self):
         self.install_app()
-        (self.bin / "protontricks-launch").unlink()
+        (self.bin / "protontricks").unlink()
         code, output = self.run_installer(path=self.nothing())
         self.assertNotEqual(code, 0)
-        self.assertIn("missing program: protontricks-launch", output)
+        self.assertIn("missing program: protontricks", output)
         self.assertNotIn("cwd", output)
 
     def test_it_says_which_program_is_missing(self):
@@ -604,8 +605,8 @@ class InstallerTest(unittest.TestCase):
         self.install_app()
         code, output = self.run_installer()
         self.assertEqual(code, 0, output)
-        self.assertIn("gamescope --prefer-vk-device 10de:2704 -W 1333 -H 1000 -w 1200 -h 900 -- protontricks-launch --no-term --appid 2537590 ./FenixApp.exe", output)
-        self.assertIn(f"cwd {self.app}", output)
+        self.assertIn(f"gamescope --prefer-vk-device 10de:2704 -W 1333 -H 1000 -w 1200 -h 900 -- protontricks --no-term -c {SESSION} 2537590", output)
+        self.assertIn(f"cwd {self.app.parent}", output.splitlines())
         self.assertIn("wayland unset", output)
 
     def test_with_one_gpu_it_passes_no_device_preference(self):
@@ -622,6 +623,66 @@ class InstallerTest(unittest.TestCase):
         code, output = self.run_installer()
         self.assertNotEqual(code, 0)
         self.assertIn("cannot choose the GPU for the installer: cannot pick one GPU", output)
+
+
+class InstallerSessionTest(unittest.TestCase):
+    UPDATER = r"C:\users\steamuser\AppData\Local\FenixApp\Update.exe apply --package C:\users\steamuser\AppData\Local\FenixApp\packages\FenixApp-1.0.355-1cf2ef7-full.nupkg"
+    RESTARTED = r"C:\users\steamuser\AppData\Local\FenixApp\current\FenixApp.exe"
+    STUB = r"C:\users\steamuser\AppData\Local\FenixApp\Fenix Installer.exe"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.log = self.root / "calls.log"
+        self.stub("wine", 'echo "wine $* in $PWD" >> "$LOG"; exit "${WINE_EXIT:-0}"')
+        self.stub("pgrep", 'echo "pgrep $*" >> "$LOG"; n=$(grep -c "^pgrep" "$LOG"); [ "$n" -le "${RUNNING_CHECKS:-0}" ]')
+        self.stub("sleep", 'echo "sleep $*" >> "$LOG"')
+
+    def stub(self, name, body):
+        path = self.bin / name
+        path.write_text("#!/bin/sh\n" + body + "\n")
+        path.chmod(0o755)
+
+    def run_session(self, **extra):
+        env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "LOG": str(self.log), **extra}
+        result = subprocess.run([shutil.which("bash"), str(SESSION)], capture_output=True, text=True, env=env, cwd=self.root)
+        return result.returncode, result.stdout + result.stderr
+
+    def calls(self, prefix):
+        return [line for line in self.log.read_text().splitlines() if line.startswith(prefix)]
+
+    def test_it_starts_the_current_installer_from_the_folder_above_it(self):
+        code, output = self.run_session()
+        self.assertEqual(code, 0, output)
+        self.assertEqual(self.calls("wine"), [f"wine {self.root}/current/FenixApp.exe in {self.root}"])
+
+    def test_it_waits_while_the_updater_or_the_restarted_installer_runs(self):
+        code, output = self.run_session(RUNNING_CHECKS="4")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(len(self.calls("pgrep")), 7)
+        self.assertEqual(self.log.read_text().splitlines()[0].split()[0], "wine")
+
+    def test_a_gap_shorter_than_three_checks_does_not_end_the_wait(self):
+        self.stub("pgrep", 'echo "pgrep $*" >> "$LOG"; n=$(grep -c "^pgrep" "$LOG"); [ "$n" -eq 1 ] || [ "$n" -eq 4 ]')
+        code, output = self.run_session()
+        self.assertEqual(code, 0, output)
+        self.assertEqual(len(self.calls("pgrep")), 7)
+
+    def test_it_ends_with_the_exit_status_of_the_first_installer(self):
+        code, output = self.run_session(WINE_EXIT="5")
+        self.assertEqual(code, 5, output)
+        self.assertEqual(len(self.calls("pgrep")), 3)
+
+    def test_the_pattern_finds_the_updater_and_the_installer_and_not_the_session(self):
+        self.run_session()
+        pattern = self.calls("pgrep")[0].split(" ", 2)[2]
+        for line in (self.UPDATER, self.RESTARTED, self.STUB):
+            self.assertRegex(line, pattern)
+        self.assertNotRegex(f"bash {SESSION}", pattern)
+        self.assertNotRegex(r"S:\steamapps\common\Microsoft Flight Simulator 2024\FlightSimulator2024.exe", pattern)
 
 
 if __name__ == "__main__":
