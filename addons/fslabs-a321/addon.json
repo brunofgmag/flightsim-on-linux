@@ -1,0 +1,11 @@
+{
+  "name": "FSLabs A321 and Control Center",
+  "tested_version": "2.0.1.197",
+  "tested_on": "2026-10-21",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/FlightSimLabs/ControlCenter/FSLControlCenter.exe"],
+    "community": ["fsl-a32x/manifest.json"]
+  }
+}

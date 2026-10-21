@@ -37,24 +37,14 @@ fenix_download() {
   echo "$target"
 }
 
-fenix_run_in_runtime() {
-  local prefix="$1" program="$2" runner=(env) runtime
-  shift 2
-  runtime="$(TOOL="$FSOL_PROTON" STEAM_DIR="${STEAM_DIR:-${FSOL_STEAM:-}}" find_runtime)"
-  [ -z "$runtime" ] || runner=("$runtime" --)
-  "${runner[@]}" env WINEPREFIX="$prefix" WINEDEBUG=-all \
-    WINEDLLPATH="$FSOL_PROTON/files/lib/vkd3d:$FSOL_PROTON/files/lib/wine" \
-    "$FSOL_PROTON/files/bin/$program" "$@" < /dev/null
-}
-
 fenix_wine() {
   local prefix="$1"
   shift
-  fenix_run_in_runtime "$prefix" wine "$@"
+  addon_prefix_run "$prefix" wine "$@"
 }
 
 fenix_wineserver_kill() {
-  fenix_run_in_runtime "$1" wineserver -k > /dev/null 2>&1 || true
+  addon_prefix_run "$1" wineserver -k > /dev/null 2>&1 || true
 }
 
 fenix_stash() {

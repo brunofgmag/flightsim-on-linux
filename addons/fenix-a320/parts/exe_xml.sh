@@ -6,7 +6,7 @@ FENIX_EXE_XML_MARK="$FENIX_BACKUP/exe-xml-entry"
 exe_xml_py() {
   local command="$1"
   shift
-  python3 -I "$FENIX_PARTS/exe_xml.py" "$command" "$@" "$FSOL_BASE/exe.xml" "$FENIX_BOOTSTRAPPER"
+  python3 -I "$FSOL_ROOT/fsol/exe_xml.py" "$command" "$@" "$FSOL_BASE/exe.xml" "$FENIX_BOOTSTRAPPER"
 }
 
 exe_xml_status() {

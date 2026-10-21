@@ -25,7 +25,7 @@ def load_module(name, file):
     return module
 
 
-exe_xml = load_module("fenix_exe_xml", PARTS / "exe_xml.py")
+exe_xml = load_module("fsol_exe_xml", ROOT / "fsol" / "exe_xml.py")
 dotnet48 = load_module("fenix_dotnet48", PARTS / "dotnet48.py")
 
 

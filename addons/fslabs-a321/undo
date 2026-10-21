@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+fsl_wpf_undo
+echo "left exe.xml as it is: the Control Center entry is the Control Center's own"

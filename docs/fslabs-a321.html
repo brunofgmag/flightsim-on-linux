@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FSLabs A321 · Flightsim on Linux</title>
+  <meta name="description" content="How to run the FSLabs A321 and its Control Center in MSFS 2024 under Proton: Proton FS2024 for the displays and the EFB, WPF in software for the Control Center window, what the check looks at, and the problems that remain.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>FSLabs A321 and Control Center</h1>
+<p class="lead">Tested with Control Center 2.0.1.197 in October 2026. One command changes a single setting in the prefix, and another checks everything the A321 needs. Neither touches the FSLabs folders.</p>
+
+<h2>Before you start</h2>
+<p>The A321 needs <a href="proton-fs2024.html">Proton FS2024</a> for two reasons:</p>
+<ul>
+  <li>The cockpit displays are drawn with GDI+, and stock Wine skips four features of its gradient brushes. Each display then sits under a glare of white edges that fade to the centre, and the MCDU and clock letters lose their right side. With the brightness turned all the way down you can see the real picture underneath.</li>
+  <li>The EFB is a Chromium (CEF) page. Chromium checks that a page it locks was writable first. Stock Wine reports the wrong protection, so every renderer process stops at that check within half a second and the EFB stays dark. Proton FS2024 fixes this for <code>cef_browser.exe</code>, the process that hosts those renderers.</li>
+</ul>
+<p>Pick Proton FS2024 for the simulator in Steam. Install the A321 and the Control Center with the FSLabs installer, and activate the aircraft in the Control Center, as on Windows. Run the installer with the simulator closed, following <a href="rules.html">the ground rules</a>.</p>
+
+<h2>Set up the prefix</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply fslabs-a321</code></pre>
+<p>Close the simulator first. The command makes WPF programs draw in software and then runs the check below.</p>
+<p>The Control Center is a WPF program, and the simulator starts it from <code>exe.xml</code>, so it inherits the simulator's Direct3D 9, which is DXVK. On the test machine, WPF programs started that way under Wine's Wayland driver crashed the moment their window opened, with <code>importing the supplied dmabufs failed</code>. With this setting the Control Center opened from <code>exe.xml</code> and validated the A321 licence. The setting is the one in the <a href="rules.html">ground rules</a>, and it applies to every WPF program in the prefix. If it is already there, the command leaves it alone.</p>
+<p>The command also reports what it finds in <code>exe.xml</code>, but it never edits that file. The Control Center writes its own entry there.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fslabs-a321</code></pre>
+<p>It prints four lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the Proton's <code>user_settings.py</code> turns on copy-on-write tracking for <code>cef_browser.exe</code>;</li>
+  <li>the Proton was built from this repository's GDI+ patch, and its <code>gdiplus.dll</code> is the one the build recorded;</li>
+  <li>WPF programs draw in software;</li>
+  <li><code>exe.xml</code> has the Control Center entry, switched on.</li>
+</ul>
+<p>When the first two fail, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the last one fails because the entry is missing, start the Control Center and run the check again. When it fails because the entry is switched off, the simulator won't start the Control Center. That is only right if you start it yourself, as the gamescope section below explains.</p>
+
+<h2>Undo it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo fslabs-a321</code></pre>
+<p>If the setup changed the WPF setting, undo puts back the value from before, or removes the setting if it wasn't there. Lorby AAO, AutoFPS, vRAAS and the Fenix runner rely on it too, and under the Wayland driver they crash without it.</p>
+
+<h2>Starting the Control Center yourself</h2>
+<p>With the simulator running, start it inside the simulator's container:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux run 'C:\FlightSimLabs\ControlCenter\FSLControlCenter.exe' -NOTIFY</code></pre>
+<p><code>-NOTIFY</code> is the option the Control Center's own <code>exe.xml</code> entry passes.</p>
+
+<h2>If you play inside gamescope</h2>
+<p>gamescope shows one window at a time. On the test machine the Control Center, started by the simulator, opened inside gamescope, covered the simulator and left it without a mouse pointer. Without gamescope, under the Wayland driver, it opened in its own window on the desktop, so skip this section unless you use gamescope.</p>
+<p>Switch off the Control Center entry: in <code>exe.xml</code>, in the folder that holds <code>UserCfg.opt</code>, set its <code>Disabled</code> to <code>True</code>. Keep a copy of the file first. Then start the Control Center yourself, about 20 seconds after the simulator, with the command in the previous section. <code>run</code> gives it the desktop's display, so it opens outside gamescope. The test machine worked like this from 16 October 2026, with a small script that waited for the simulator, and the Control Center validated the licence. In this setup the check reports the switched-off entry as <code>FAIL</code>, and that is expected.</p>
+
+<h2>Changing aircraft freezes the simulator</h2>
+<p>On the test machine, switching from the A321 to another aircraft in the same session froze the simulator twice on 18 October 2026. To fly something else, quit the simulator and start it again. While the A321 is loaded, a thread inside the simulator keeps one CPU core at 100%, busy in Wine's locale and string-comparison functions called from the FSLabs module. The cause hasn't been found.</p>
+<h2>The automatic jetway call fails with GSX</h2>
+<p>When the A321 loads, it asks GSX for the jetway by itself. On the test machine that request failed in both sessions, because it arrived just as GSX was taking over the newly loaded aircraft, and the A321 doesn't reopen the GSX menu when it retries. Calling the jetway from the GSX menu worked in both. The same race could happen on Windows if GSX is slow to take over.</p>
+<h2>The Control Center log holds your key</h2>
+<p><code>AppData\Roaming\FlightSimLabs\CCLog.txt</code> in the prefix stores the activation key in plain text. Never paste it into an issue, a forum post or an AI chat.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>
