@@ -19,6 +19,7 @@ else
 fi
 
 SHOW_OUTPUT="Show output"
+OFFER_DELAY="${FSOL_OFFER_DELAY:-5}"
 TERMINALS=(xdg-terminal-exec konsole gnome-terminal xfce4-terminal x-terminal-emulator xterm)
 FOLLOW="tail -n +1 --pid=\"\$1\" -f \"\$2\"; printf '\\nFinished. Press Enter to close this window.'; read -r _"
 
@@ -153,12 +154,27 @@ show_output() {
 
 offer_output() {
   local text="$1" task="$2"
-  kdialog --title "$TITLE" --yes-label "$SHOW_OUTPUT" --no-label "Close" --yesno "$text: you can follow its output while it runs." > /dev/null 2>&1 && show_output "$task"
+  trap 'pkill -P "$BASHPID"; exit 0' TERM
+  sleep "$OFFER_DELAY" &
+  wait "$!"
+  kdialog --title "$TITLE" --yes-label "$SHOW_OUTPUT" --no-label "Not now" --yesno "$text is still running. Follow its output in a terminal?" > /dev/null 2>&1 &
+  wait "$!" && show_output "$task"
 }
 
-stop_offer() {
-  pkill -P "$1" 2> /dev/null
-  kill "$1" 2> /dev/null
+last_line() {
+  tail -n 1 "$LOG" | cut -c1-90
+}
+
+confirm_stop() {
+  local question="Stop \"$1\"? What it has done so far stays. Run it again to finish."
+  case "$DIALOG" in
+    zenity) zenity --question --title="$TITLE" --text="$question" --ok-label="Stop" --cancel-label="Keep going" > /dev/null 2>&1 ;;
+    *) kdialog --title "$TITLE" --yes-label "Stop" --no-label "Keep going" --warningyesno "$question" > /dev/null 2>&1 ;;
+  esac
+}
+
+stop_task() {
+  kill -TERM -- "-$1" 2> /dev/null || kill -TERM "$1" 2> /dev/null
 }
 
 progress_call() {
@@ -167,45 +183,67 @@ progress_call() {
   dbus-send --session --type=method_call --dest="${ref%% *}" "${ref##* }" "org.kde.kdialog.ProgressDialog.$method" "$@" 2> /dev/null
 }
 
+progress_open() {
+  dbus-send --session --print-reply --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.NameHasOwner "string:${1%% *}" 2> /dev/null | grep -q 'boolean true'
+}
+
+kdialog_progress() {
+  local text="$1" task="$2" ref
+  ref="$(kdialog --title "$TITLE" --geometry 620x150 --progressbar "$text
+Starting..." 0)"
+  while kill -0 "$task" 2> /dev/null; do
+    progress_open "$ref" || return 1
+    progress_call "$ref" setLabelText "string:$text
+$(last_line)"
+    sleep 1
+  done
+  progress_call "$ref" close
+}
+
+zenity_feed() {
+  local text="$1" task="$2" line
+  while kill -0 "$task" 2> /dev/null; do
+    line="$(last_line)"
+    echo "# ${line:-$text}" || return
+    sleep 1
+  done
+  echo 100
+}
+
+zenity_progress() {
+  local text="$1" task="$2" button
+  zenity_feed "$text" "$task" | zenity --progress --pulsate --auto-close --extra-button="$SHOW_OUTPUT" --width=620 --title="$TITLE" --text="$text" |
+    while IFS= read -r button; do
+      [ "$button" != "$SHOW_OUTPUT" ] || show_output "$task"
+    done
+  ! kill -0 "$task" 2> /dev/null
+}
+
 run_with_progress() {
-  local text="$1"
+  local text="$1" task offer="" stopped="" status
   shift
-  case "$DIALOG" in
-    zenity)
-      "$@" > "$LOG" 2>&1 &
-      local pid=$! line button
-      {
-        while kill -0 "$pid" 2> /dev/null; do
-          line="$(tail -n 1 "$LOG" | cut -c1-90)"
-          [ -z "$line" ] || echo "# $line"
-          sleep 1
-        done
-        echo 100
-      } | zenity --progress --pulsate --auto-close --no-cancel --extra-button="$SHOW_OUTPUT" --width=620 --title="$TITLE" --text="$text" |
-        while IFS= read -r button; do
-          [ "$button" != "$SHOW_OUTPUT" ] || show_output "$pid"
-        done
-      wait "$pid"
-      ;;
-    kdialog)
-      local ref status task offer
-      ref="$(kdialog --title "$TITLE" --progressbar "$text" 0)"
-      progress_call "$ref" showCancelButton boolean:false
-      "$@" > "$LOG" 2>&1 &
-      task=$!
-      offer_output "$text" "$task" &
-      offer=$!
-      wait "$task"
-      status=$?
-      stop_offer "$offer"
-      progress_call "$ref" close
-      return "$status"
-      ;;
-    *)
-      "$@" 2>&1 | tee "$LOG"
-      return "${PIPESTATUS[0]}"
-      ;;
-  esac
+  if [ "$DIALOG" != zenity ] && [ "$DIALOG" != kdialog ]; then
+    "$@" 2>&1 | tee "$LOG"
+    return "${PIPESTATUS[0]}"
+  fi
+  setsid "$@" > "$LOG" 2>&1 &
+  task=$!
+  if [ "$DIALOG" = kdialog ]; then
+    offer_output "$text" "$task" &
+    offer=$!
+  fi
+  until "${DIALOG}_progress" "$text" "$task"; do
+    if confirm_stop "$text"; then
+      stop_task "$task"
+      stopped=1
+      break
+    fi
+  done
+  [ -z "$offer" ] || kill "$offer" 2> /dev/null
+  wait "$task"
+  status=$?
+  [ -z "$stopped" ] || printf '\nStopped before it finished.\n' >> "$LOG"
+  return "$status"
 }
 
 main() {

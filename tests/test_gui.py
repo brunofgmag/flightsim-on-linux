@@ -7,14 +7,16 @@ import unittest
 from pathlib import Path
 
 GUI = Path(__file__).resolve().parent.parent / "bin" / "flightsim-on-linux-gui"
-FAKE_DBUS_SEND = '#!/bin/sh\necho "$*" >> "$DBUS_LOG"\n'
+FAKE_DBUS_SEND = '#!/bin/sh\necho "$*" >> "$DBUS_LOG"\ncase "$*" in\n  *NameHasOwner*) if [ -e "$CANCELLED" ]; then rm -f "$CANCELLED"; echo "   boolean false"; else echo "   boolean true"; fi ;;\nesac\n'
 FAKE_TERMINAL = '#!/bin/sh\necho "$(basename "$0") $1" > "$TERMINAL_LOG.who"\ncase "$1" in -e|-x|--) shift ;; esac\n"$@" < /dev/null > "$TERMINAL_LOG" 2>&1\n'
 TASK = "sh -c 'echo first line; sleep 1; echo last line'"
-TOOLS = ("bash", "sh", "mktemp", "dirname", "readlink", "rm", "tail", "sleep", "kill", "pkill", "cat", "basename", "printf")
+TOOLS = ("bash", "sh", "mktemp", "dirname", "readlink", "rm", "tail", "sleep", "kill", "pkill", "cat", "basename", "printf", "setsid", "cut", "grep", "touch", "true", "false", "seq")
 
 
-def fake_kdialog(yesno):
-    return f'#!/bin/sh\ncase "$*" in\n  *--progressbar*) echo "org.kde.kdialog-1 /ProgressDialog" ;;\n  *--yesno*) echo $$ > "$KDIALOG_PID"; {yesno} ;;\nesac\n'
+def fake_kdialog(yesno, warning="exit 1"):
+    return (f'#!/bin/sh\ncase "$*" in\n  *--progressbar*) echo progressbar >> "$KDIALOG_LOG"; echo "org.kde.kdialog-1 /ProgressDialog" ;;\n'
+            f'  *--yesno*) echo yesno >> "$KDIALOG_LOG"; echo $$ > "$KDIALOG_PID"; {yesno} ;;\n'
+            f'  *--warningyesno*) echo warningyesno >> "$KDIALOG_LOG"; {warning} ;;\nesac\n')
 
 
 FAKE_ZENITY = '#!/bin/sh\ncase "$*" in\n  *--progress*) echo "$*" > "$ZENITY_LOG"; echo "Show output"; cat > /dev/null ;;\nesac\n'
@@ -42,7 +44,8 @@ class GuiTestCase(unittest.TestCase):
     def run_gui(self, script, dialog="kdialog", desktop="KDE", **extra):
         env = dict(PATH=str(self.bin), HOME=str(self.root), FSOL_DIALOG=dialog, XDG_CURRENT_DESKTOP=desktop,
                    DBUS_LOG=str(self.calls), TERMINAL_LOG=str(self.terminal_log),
-                   KDIALOG_PID=str(self.root / "kdialog.pid"), ZENITY_LOG=str(self.root / "zenity.log"), **extra)
+                   KDIALOG_PID=str(self.root / "kdialog.pid"), ZENITY_LOG=str(self.root / "zenity.log"),
+                   KDIALOG_LOG=str(self.root / "kdialog.log"), CANCELLED=str(self.root / "cancelled"), **extra)
         result = subprocess.run([str(self.bin / "bash"), "-c", f'source "{GUI}"; {script}'], env=env, capture_output=True, text=True, timeout=30)
         return result.returncode, result.stdout
 
@@ -62,17 +65,53 @@ class KdialogProgressTest(GuiTestCase):
     def dbus_calls(self):
         return self.calls.read_text().splitlines()
 
+    def kdialog_calls(self):
+        log = self.root / "kdialog.log"
+        return log.read_text().splitlines() if log.exists() else []
+
     def test_the_dialog_is_closed_with_a_method_call(self):
         self.run_gui('run_with_progress "Testing" true')
         self.assertIn("--session --type=method_call --dest=org.kde.kdialog-1 /ProgressDialog org.kde.kdialog.ProgressDialog.close", self.dbus_calls())
 
-    def test_the_cancel_button_is_hidden_with_a_method_call(self):
+    def test_the_cancel_button_stays(self):
         self.run_gui('run_with_progress "Testing" true')
-        self.assertIn("--session --type=method_call --dest=org.kde.kdialog-1 /ProgressDialog org.kde.kdialog.ProgressDialog.showCancelButton boolean:false", self.dbus_calls())
+        self.assertFalse([call for call in self.dbus_calls() if "showCancelButton" in call])
+
+    def test_the_dialog_shows_the_last_line_of_the_output(self):
+        self.run_gui(f'run_with_progress "Testing" {TASK}')
+        self.assertIn("ProgressDialog.setLabelText string:Testing\nfirst line\n", self.calls.read_text())
 
     def test_the_command_status_comes_back(self):
         status, _ = self.run_gui('run_with_progress "Testing" false')
         self.assertEqual(status, 1)
+
+    def test_a_task_shorter_than_the_delay_never_asks_about_the_output(self):
+        self.run_gui(f'run_with_progress "Testing" {TASK}', FSOL_OFFER_DELAY="5")
+        self.assertNotIn("yesno", self.kdialog_calls())
+
+    def test_a_quick_task_never_leaves_an_offer_behind(self):
+        self.run_gui('for i in $(seq 1 40); do run_with_progress "Testing" false; done; sleep 0.5', FSOL_OFFER_DELAY="5")
+        self.assertNotIn("yesno", self.kdialog_calls())
+
+    def test_cancel_then_stop_ends_the_task_and_its_children_and_says_so(self):
+        self.fake("kdialog", fake_kdialog("exit 1", warning="exit 0"))
+        (self.root / "cancelled").touch()
+        started = time.monotonic()
+        status, out = self.run_gui(f"run_with_progress Testing sh -c 'sleep 30 & echo $! > {self.root}/child; wait'; cat \"$LOG\"")
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertIn("Stopped before it finished.", out)
+        child = int((self.root / "child").read_text())
+        time.sleep(0.2)
+        self.assertFalse(Path(f"/proc/{child}").exists())
+
+    def test_cancel_then_keep_going_opens_the_progress_again_and_lets_the_task_finish(self):
+        (self.root / "cancelled").touch()
+        status, out = self.run_gui(f'run_with_progress "Testing" {TASK}; echo "status $?"; cat "$LOG"')
+        self.assertEqual(self.kdialog_calls().count("progressbar"), 2)
+        self.assertIn("warningyesno", self.kdialog_calls())
+        self.assertIn("status 0", out)
+        self.assertIn("last line", out)
+        self.assertNotIn("Stopped", out)
 
 
 class ShowOutputTest(GuiTestCase):
@@ -82,7 +121,7 @@ class ShowOutputTest(GuiTestCase):
 
     def test_kdialog_offers_the_output_and_the_terminal_follows_the_task_to_its_end(self):
         self.fake("kdialog", fake_kdialog("exit 0"))
-        self.run_gui(f'run_with_progress "Testing" {TASK}')
+        self.run_gui(f'run_with_progress "Testing" {TASK}', FSOL_OFFER_DELAY="0")
         output = self.terminal_output()
         self.assertIn("first line", output)
         self.assertIn("last line", output)
@@ -91,7 +130,7 @@ class ShowOutputTest(GuiTestCase):
     def test_an_offer_nobody_answers_closes_when_the_task_ends(self):
         self.fake("kdialog", fake_kdialog("exec sleep 60"))
         started = time.monotonic()
-        self.run_gui(f'run_with_progress "Testing" {TASK}')
+        self.run_gui(f'run_with_progress "Testing" {TASK}', FSOL_OFFER_DELAY="0")
         self.assertLess(time.monotonic() - started, 10)
         pid = int((self.root / "kdialog.pid").read_text())
         time.sleep(0.2)
@@ -103,6 +142,17 @@ class ShowOutputTest(GuiTestCase):
         self.run_gui(f'run_with_progress "Testing" {TASK}', dialog="zenity")
         self.assertIn("--extra-button=Show output", (self.root / "zenity.log").read_text())
         self.assertIn("last line", self.terminal_output())
+
+
+class ZenityCancelTest(GuiTestCase):
+    def test_cancel_then_stop_ends_the_task_and_says_so(self):
+        self.fake("zenity", '#!/bin/sh\ncase "$*" in\n  *--progress*) exit 1 ;;\n  *--question*) echo question >> "$ZENITY_LOG"; exit 0 ;;\nesac\n')
+        started = time.monotonic()
+        status, out = self.run_gui('run_with_progress Testing sleep 30; echo "status $?"; cat "$LOG"', dialog="zenity")
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertIn("question", (self.root / "zenity.log").read_text())
+        self.assertIn("Stopped before it finished.", out)
+        self.assertNotIn("status 0", out)
 
 
 class TerminalChoiceTest(GuiTestCase):
