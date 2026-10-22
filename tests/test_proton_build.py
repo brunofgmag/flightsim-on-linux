@@ -4,8 +4,9 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
-from fsol import proton_build
+from fsol import doctor, proton_build
 
 ROOT = Path(__file__).resolve().parent.parent
 PATCH = "windows-storage-applicationdata-no-package.patch"
@@ -98,6 +99,52 @@ class CheckCommandTest(unittest.TestCase):
         code, lines, _ = self.check("check", "", PATCH, MODULE, GOOD, PATCH, MODULE, GOOD)
         self.assertEqual(code, 1)
         self.assertEqual(lines, ["FAIL no Proton found; run: flightsim-on-linux machine"])
+
+
+
+OTHER = "lib/wine/x86_64-windows/wintrust.dll"
+
+
+class ProtonDoctorTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.proton = Path(self.temp.name) / "Proton-FS2024"
+        files = self.proton / "files"
+        record = ["release cachyos-11.0-20261005-slr x86_64"]
+        for module in (MODULE, OTHER):
+            (files / module).parent.mkdir(parents=True, exist_ok=True)
+            (files / module).write_bytes(b"patched " + module.encode())
+            record.append(f"module {sha256(b'patched ' + module.encode())} {module}")
+        (self.proton / "fs2024-build.txt").write_text("\n".join(record) + "\n")
+
+    def machine(self, fs2024=True):
+        return SimpleNamespace(proton=self.proton, compat_tool="Proton-FS2024", proton_is_fs2024=fs2024)
+
+    def test_a_build_whose_modules_match_its_record_is_fine(self):
+        self.assertEqual(doctor.check_proton(self.machine()).status, "ok")
+
+    def test_a_module_written_over_after_the_build_fails_and_names_it(self):
+        (self.proton / "files" / OTHER).write_bytes(b"another proton's module")
+        check = doctor.check_proton(self.machine())
+        self.assertEqual(check.status, "fail")
+        self.assertIn("wintrust.dll", check.detail)
+        self.assertNotIn("windows.storage.applicationdata.dll", check.detail)
+        self.assertTrue(check.command.endswith(" proton build"))
+
+    def test_a_missing_module_fails(self):
+        (self.proton / "files" / MODULE).unlink()
+        check = doctor.check_proton(self.machine())
+        self.assertEqual(check.status, "fail")
+        self.assertIn("windows.storage.applicationdata.dll", check.detail)
+
+    def test_a_build_without_a_record_is_not_reported_as_written_over(self):
+        (self.proton / "fs2024-build.txt").unlink()
+        self.assertEqual(doctor.check_proton(self.machine()).status, "ok")
+
+    def test_another_proton_is_not_read_for_a_build_record(self):
+        (self.proton / "files" / OTHER).write_bytes(b"another proton's module")
+        self.assertEqual(doctor.check_proton(self.machine(fs2024=False)).status, "warn")
 
 
 if __name__ == "__main__":

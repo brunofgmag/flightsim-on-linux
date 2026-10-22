@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from fsol import registry
+from fsol import proton_build, registry
 
 BUILD_TOOLS = ("git", "curl", "patch", "perl", "autoreconf", "make", "gcc", "flex", "bison", "x86_64-w64-mingw32-gcc",
                "x86_64-w64-mingw32-g++", "meson", "ninja", "glslangValidator")
@@ -47,6 +47,11 @@ def check_prefix(machine):
 def check_proton(machine):
     name = machine.compat_tool or "Steam default"
     if machine.proton_is_fs2024:
+        changed = proton_build.changed_modules(machine.proton)
+        if changed:
+            return Check("proton", "fail", f"Proton in use: {name} ({machine.proton}), a Proton FS2024 build whose modules no longer match its build record: {', '.join(Path(module).name for module in changed)}",
+                         f"Something wrote over these modules after the build, and the fixes in them are gone. {SIMULATOR_CLOSED}",
+                         f"{shlex.quote(str(CLI))} proton build")
         return Check("proton", "ok", f"Proton in use: {name} ({machine.proton}), a Proton FS2024 build")
     where = f" ({machine.proton})" if machine.proton else ""
     return Check("proton", "warn", f"Proton in use: {name}{where}, not a Proton FS2024 build",

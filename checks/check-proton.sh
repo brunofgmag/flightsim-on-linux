@@ -119,6 +119,19 @@ report() {
   esac
 }
 
+report_read_only_modules() {
+  local name="Wine's Windows modules are read-only, as in the release (Proton FS2024 overwritten when Steam starts)" writable
+  writable="$(find "$TOOL/files/lib/wine" -type f -path '*-windows/*' -perm /222 -printf '%P\n' | sort)"
+  if [ -z "$writable" ]; then
+    report "$name" ok "no module under files/lib/wine can be written"
+  else
+    report "$name" FAIL "$(head -n 5 <<< "$writable")
+$(wc -l <<< "$writable") module(s) can be written. A prefix links to them, and another Proton that sets up the same prefix writes its own module through the link."
+  fi
+}
+
+report_read_only_modules
+
 report_loader_case() {
   local name="$1" program="$2" consequence="$3" output
   output="$(cd "$WORK" && run_wine "$program")" || true

@@ -24,6 +24,10 @@ def recorded_module(record, module):
     return next((sha for kind, sha, name in record if kind == "module" and name == module), None)
 
 
+
+def changed_modules(proton):
+    return sorted(name for kind, sha, name in build_record(proton) if kind == "module" and sha256_of(proton / "files" / name) != sha)
+
 def patch_line(proton, patch, module, passed):
     record = build_record(proton)
     if ("patch", sha256_of(WINE_PATCHES / patch), patch) not in record:

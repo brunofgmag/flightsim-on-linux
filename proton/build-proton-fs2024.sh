@@ -313,12 +313,14 @@ compile_vkd3d() {
 
 install_vkd3d() {
   step "Swapping d3d12core.dll in the release copy"
-  local source="$WORK/vkd3d-objects/$VKD3D_TARGET" target="$STAGE/files/$VKD3D_MODULE"
+  local source="$WORK/vkd3d-objects/$VKD3D_TARGET" target="$STAGE/files/$VKD3D_MODULE" mode
   [ -f "$source" ] || die "ninja did not produce $VKD3D_TARGET"
   [ -f "$target" ] && [ ! -L "$target" ] || die "the release has no regular file $VKD3D_MODULE"
+  mode="$(stat -c %a "$target")"
   rm -f "$target"
   install -m 0755 "$source" "$target"
   x86_64-w64-mingw32-strip --strip-all "$target"
+  chmod "$mode" "$target"
   echo "$(sha256sum "$target" | cut -d' ' -f1)  $VKD3D_MODULE"
 }
 
@@ -344,18 +346,20 @@ check_libraries() {
 
 install_modules() {
   step "Swapping the modules in the release copy"
-  local module source target
+  local module source target mode
   for module in "${MODULES[@]}"; do
     source="$WORK/objects/$(module_source "$module")"
     target="$STAGE/files/$(module_target "$module")"
     [ -f "$source" ] || die "make did not produce $(module_source "$module")"
     [ -f "$target" ] && [ ! -L "$target" ] || die "the release has no regular file $(module_target "$module")"
+    mode="$(stat -c %a "$target")"
     rm -f "$target"
     install -m 0755 "$source" "$target"
     case "$target" in
       *.dll) x86_64-w64-mingw32-strip --strip-debug "$target" ;;
       *) strip --strip-debug "$target" ;;
     esac
+    chmod "$mode" "$target"
     echo "$(sha256sum "$target" | cut -d' ' -f1)  $(module_target "$module")"
   done
 }
