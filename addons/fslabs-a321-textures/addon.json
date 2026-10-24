@@ -1,0 +1,10 @@
+{
+  "name": "FSLabs A321 texture sizes",
+  "tested_version": "2.0.1.197",
+  "tested_on": "2026-10-24",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "community": ["fsl-a32x/layout.json"]
+  }
+}
