@@ -1,0 +1,57 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine ntdll: keep at least 64 KiB of readable memory after every heap block. A sub-heap committed only up to the end of the block it handed out, rounded to 64 KiB, and a sub-heap or a large block ended where its reservation did, so a block could sit a few bytes before memory that is not mapped. Windows programs that read a fixed-size structure out of a smaller block got away with it on Windows and faulted here: Lorby Axis and Ohs copies 7200 bytes out of every SimConnect data message, which SimConnect.dll mallocs at the size of the message, and crashed in that copy at a 64 KiB boundary. The heap now commits 64 KiB past the block it hands out and reserves every region 64 KiB longer, with that tail committed read-only.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/ntdll/heap.c
++++ b/dlls/ntdll/heap.c
+@@ -82,6 +82,7 @@
+ 
+ #define INITIAL_COMMIT_ALIGN  (0x400 * sizeof(void *))
+ #define REGION_ALIGN  0x10000
++#define HEAP_READ_SLACK  REGION_ALIGN
+ #define BLOCK_ALIGN   (2 * sizeof(void *))
+ 
+ struct DECLSPEC_ALIGN(8) block
+@@ -814,7 +815,7 @@
+     SIZE_T size;
+     void *addr;
+ 
+-    commit_end = (char *)block + block_size + sizeof(struct entry);
++    commit_end = (char *)block + block_size + sizeof(struct entry) + HEAP_READ_SLACK;
+     commit_end = ROUND_ADDR( (char *)commit_end + REGION_ALIGN - 1, REGION_ALIGN - 1 );
+ 
+     if (commit_end > end) commit_end = end;
+@@ -980,7 +981,8 @@
+ {
+     const SIZE_T align = 0x400 * sizeof(void*);  /* minimum alignment for virtual allocations */
+     ULONG reserve_flags = MEM_RESERVE;
+-    void *addr = NULL;
++    SIZE_T reserve_size, tail_size = HEAP_READ_SLACK;
++    void *addr = NULL, *tail;
+     NTSTATUS status;
+ 
+     if (heap && !(flags & HEAP_GROWABLE) && (NtCurrentTeb()->Peb->OSPlatformId != VER_PLATFORM_WIN32_WINDOWS))
+@@ -994,8 +996,9 @@
+ 
+     if (heap_top_down_hack) reserve_flags |= MEM_TOP_DOWN;
+ 
++    reserve_size = *region_size + HEAP_READ_SLACK;
+     /* allocate the memory block */
+-    if ((status = NtAllocateVirtualMemory( NtCurrentProcess(), &addr, 0, region_size, reserve_flags,
++    if ((status = NtAllocateVirtualMemory( NtCurrentProcess(), &addr, 0, &reserve_size, reserve_flags,
+                                            get_protection_type( flags ) )))
+     {
+         WARN( "Could not allocate %#Ix bytes, status %#lx\n", *region_size, status );
+@@ -1007,6 +1010,12 @@
+         WARN( "Could not commit %#Ix bytes, status %#lx\n", *commit_size, status );
+         return NULL;
+     }
++    tail = (char *)addr + *region_size;
++    if ((status = NtAllocateVirtualMemory( NtCurrentProcess(), &tail, 0, &tail_size, MEM_COMMIT, PAGE_READONLY )))
++    {
++        WARN( "Could not commit %#Ix bytes after the region, status %#lx\n", tail_size, status );
++        return NULL;
++    }
+ 
+     return addr;
+ }

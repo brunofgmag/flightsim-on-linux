@@ -204,6 +204,8 @@ report_windows_program 'bcrypt accepts BCRYPT_PBKDF2_ALG_HANDLE (FenixSystem 3.0
   bcrypt-pbkdf2-alg-handle-test.exe
 report_windows_program 'ncrypt agrees on a secret between two ECDH P-256 keys (Fenix 3.0 Runner and FenixSystem key exchange)' \
   ncrypt-ecdh-p256-test.exe
+report_windows_program 'ntdll leaves readable memory after every heap block (Axis and Ohs crashing while it copies SimConnect messages)' \
+  heap-read-slack-test.exe
 
 name="reading another process after an EPERM leaves its main thread running (stutter with ChasePlane)"
 if [ "$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null)" = 1 ]; then

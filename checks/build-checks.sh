@@ -26,6 +26,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/applicationdata-no-package-test.exe" "$HERE/
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/wintrust-create-indirect-data-test.exe" "$HERE/src/wintrust-create-indirect-data-test.c" -lwintrust -lcrypt32 -lbcrypt
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/globalroot-device-path-test.exe" "$HERE/src/globalroot-device-path-test.c"
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/device-path-current-directory-test.exe" "$HERE/src/device-path-current-directory-test.c"
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/heap-read-slack-test.exe" "$HERE/src/heap-read-slack-test.c"
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/bcrypt-pbkdf2-alg-handle-test.exe" "$HERE/src/bcrypt-pbkdf2-alg-handle-test.c" -lbcrypt
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/ncrypt-ecdh-p256-test.exe" "$HERE/src/ncrypt-ecdh-p256-test.c" -lncrypt -lbcrypt
 if pkg-config --exists libei-1.0 libsystemd; then

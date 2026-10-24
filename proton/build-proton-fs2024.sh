@@ -40,6 +40,7 @@ PATCHES=(
   "$ROOT/patches/wine/bcrypt-pbkdf2-pseudo-handle.patch"
   "$ROOT/patches/wine/ncrypt-ecdh-secret-agreement.patch"
   "$ROOT/patches/wine/ntdll-fenix-gateway-loader-case.patch"
+  "$ROOT/patches/wine/ntdll-heap-read-slack.patch"
 )
 
 MODULES=(
