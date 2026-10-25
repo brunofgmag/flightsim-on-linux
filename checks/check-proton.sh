@@ -406,6 +406,7 @@ run_constraint_commit_test() {
   [ "$status" -eq 0 ] || return "$status"
   awk '
     !/\{pointer-constraint-commit-test\.exe\}  -> / { next }
+    pending && /  -> (wp_pointer_warp_v1#[0-9]+\.warp_pointer|wl_compositor#[0-9]+\.create_region|wl_region#[0-9]+\.|zwp_pointer_constraints_v1#[0-9]+\.(confine|lock)_pointer)\(/ { next }
     pending {
       pending = 0
       if (/wl_surface#[0-9]+\.attach\(nil/) { released--; next }
@@ -438,10 +439,17 @@ fi
 ONE_PIXEL_REGION_CHECK="winewayland confines a one-pixel clip at 125% scale to at least one pixel (ChasePlane drag)"
 ONE_PIXEL_WARP_CHECK="winewayland warps the pointer inside a small clip (simulator arrow leaving the screen in a ChasePlane drag)"
 ONE_PIXEL_LOG="$WORK/one-pixel-clip.log"
+DRAG_CHECK="winewayland holds the pointer on a one-pixel clip while the mouse moves (simulator arrow shaking in a ChasePlane drag under KWin 6.7)"
+DRAG_LOG="$WORK/pointer-drag-clip.log"
 
 report_one_pixel_checks() {
   report "$ONE_PIXEL_REGION_CHECK" "$1" "$2"
   report "$ONE_PIXEL_WARP_CHECK" "$1" "$2"
+}
+
+report_private_kwin_checks() {
+  report_one_pixel_checks "$1" "$2"
+  report "$DRAG_CHECK" "$1" "$2"
 }
 
 missing_for_private_kwin() {
@@ -494,7 +502,7 @@ start_private_kwin() {
 }
 
 start_pointer_device() {
-  "$WORK/eis-pointer" "$PRIVATE/eis-ready" > "$PRIVATE/eis.log" 2>&1 &
+  "$WORK/eis-pointer" "$PRIVATE/eis-ready" ${POINTER_MOTION:+"$POINTER_MOTION"} > "$PRIVATE/eis.log" 2>&1 &
   EIS_PID=$!
   wait_ten_seconds_for "the virtual pointer to be ready" test -e "$PRIVATE/eis-ready" || return $?
   command -v wayland-info > /dev/null || return 0
@@ -507,7 +515,7 @@ runner_sees_socket() {
   return 2
 }
 
-run_one_pixel_clip_program() {
+run_private_program() {
   local inner status _
   inner="LD_LIBRARY_PATH=\"\$1\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"; shift; export LD_LIBRARY_PATH; exec \"\$@\""
   for _ in 1 2 3; do
@@ -515,10 +523,10 @@ run_one_pixel_clip_program() {
     status=0
     WINEDEBUG="-all" WAYLAND_DEBUG=1 timeout 120 env -u DISPLAY WAYLAND_DISPLAY="$SOCKET" "${RUNNER[@]}" sh -c "$inner" sh \
       "$TOOL/files/lib/x86_64-linux-gnu:$TOOL/files/lib/i386-linux-gnu" "$TOOL/files/bin/wine" \
-      "$(windows_path "$WORK/one-pixel-clip-test.exe")" > /dev/null 2> "$ONE_PIXEL_LOG" || status=$?
+      "$(windows_path "$WORK/$PROGRAM")" > /dev/null 2> "$PROGRAM_LOG" || status=$?
     [ "$status" -eq 2 ] || break
   done
-  [ "$status" -eq 0 ] || echo "one-pixel-clip-test.exe exited with status $status"
+  [ "$status" -eq 0 ] || echo "$PROGRAM exited with status $status"
   return "$status"
 }
 
@@ -538,17 +546,17 @@ isolated_session() {
   EIS_PID=""
   trap isolated_cleanup EXIT
   mkdir "$PRIVATE"
-  start_private_kwin && start_pointer_device && runner_sees_socket && run_one_pixel_clip_program || status=$?
+  start_private_kwin && start_pointer_device && runner_sees_socket && run_private_program || status=$?
   [ "$status" -eq 0 ] || tail -n 5 "$PRIVATE/kwin.log" "$PRIVATE/eis.log" 2> /dev/null
   return "$status"
 }
 
-run_isolated_one_pixel_session() {
-  local state
+run_isolated_session() {
+  local PROGRAM="$1" PROGRAM_LOG="$2" POINTER_MOTION="${3:-}" state
   state="$(
-    declare -p TOOL WORK RUNNER ONE_PIXEL_LOG
+    declare -p TOOL WORK RUNNER PROGRAM PROGRAM_LOG POINTER_MOTION
     declare -f windows_path stop_prefix wait_ten_seconds_for kwin_socket_exists kwin_on_bus seat_has_pointer \
-      kwin_output_config start_private_kwin start_pointer_device runner_sees_socket run_one_pixel_clip_program isolated_cleanup isolated_session
+      kwin_output_config start_private_kwin start_pointer_device runner_sees_socket run_private_program isolated_cleanup isolated_session
   )"
   dbus-run-session -- bash -c "$state
 isolated_session" 2> /dev/null
@@ -575,21 +583,34 @@ judge_one_pixel_clip() {
       box[id] = a[1] " " a[2] " " a[3] " " a[4]
       next
     }
+    function attach_pending_warps(    i) {
+      for (i = 1; i <= pending; i++) {
+        warps[count] = warps[count] sprintf(" %g,%g", px[i], py[i])
+        if (px[i] >= x[count] && px[i] < x[count] + w[count] && py[i] >= y[count] && py[i] < y[count] + h[count]) landed[count] = 1
+      }
+      pending = 0
+    }
     line ~ /^zwp_pointer_constraints_v1#[0-9]+\.confine_pointer\(/ || line ~ /^zwp_confined_pointer_v1#[0-9]+\.set_region\(/ {
       if (!match(line, /wl_region#[0-9]+/)) next
       id = substr(line, RSTART + 10, RLENGTH - 10)
       split(box[id], b, " ")
       count++
       x[count] = b[1]; y[count] = b[2]; w[count] = b[3]; h[count] = b[4]
+      attach_pending_warps()
       next
     }
-    line ~ /^wp_pointer_warp_v1#[0-9]+\.warp_pointer\(/ && count > 0 {
+    line ~ /^wp_pointer_warp_v1#[0-9]+\.warp_pointer\(/ {
       split(arguments(line), a, /, /)
-      warps[count] = warps[count] sprintf(" %g,%g", a[3], a[4])
-      if (a[3] >= x[count] && a[3] < x[count] + w[count] && a[4] >= y[count] && a[4] < y[count] + h[count]) landed[count] = 1
+      pending++
+      px[pending] = a[3]; py[pending] = a[4]
+      next
+    }
+    (line ~ /^wl_surface#[0-9]+\.commit\(/ || line ~ /^zwp_(confined|locked)_pointer_v1#[0-9]+\.destroy\(/) && count > 0 {
+      attach_pending_warps()
       next
     }
     END {
+      if (count > 0) attach_pending_warps()
       if (!scaled) { print "the surface never received preferred_scale(150): the isolated KWin did not stay at 125% scale"; exit 2 }
       if (count < 6) { printf "pointer confinements: %d, fewer than the 6 the test makes\n", count; exit 2 }
       for (n = 1; n <= count; n++) {
@@ -601,6 +622,43 @@ judge_one_pixel_clip() {
       }
       exit failures ? 1 : 0
     }' "$ONE_PIXEL_LOG"
+}
+
+judge_pointer_drag() {
+  awk '
+    function arguments(text) {
+      sub(/^[^(]*\(/, "", text)
+      sub(/\)$/, "", text)
+      return text
+    }
+    function distance(a, b) {
+      return a > b ? a - b : b - a
+    }
+    /\{pointer-drag-clip-test\.exe\} .*preferred_scale\(150\)/ { scaled = 1 }
+    /\{pointer-drag-clip-test\.exe\}  -> zwp_pointer_constraints_v1#[0-9]+\.confine_pointer\(/ { dragging = 1 }
+    /\{pointer-drag-clip-test\.exe\}  -> wp_pointer_warp_v1#[0-9]+\.warp_pointer\(/ && dragging {
+      split(arguments($0), a, /, /)
+      target_x = a[3]; target_y = a[4]
+      cycles++
+      next
+    }
+    /\{pointer-drag-clip-test\.exe\} zwp_relative_pointer_v1#[0-9]+\.relative_motion\(/ && cycles {
+      split(arguments($0), a, /, /)
+      if (a[3] != 0 || a[4] != 0) moved++
+      next
+    }
+    /\{pointer-drag-clip-test\.exe\} wl_pointer#[0-9]+\.motion\(/ && cycles {
+      split(arguments($0), a, /, /)
+      if (distance(a[2], target_x) > 3 || distance(a[3], target_y) > 3) strayed[cycles] = 1
+    }
+    END {
+      if (!scaled) { print "the surface never received preferred_scale(150): the isolated KWin did not stay at 125% scale"; exit 2 }
+      if (cycles < 50) { printf "drag cycles: %d, fewer than the 50 a 3-second drag makes\n", cycles; exit 2 }
+      if (moved < 1000) { printf "relative pointer motions during the drag: %d, so the virtual mouse hardly moved\n", moved; exit 2 }
+      for (n in strayed) count++
+      printf "drag cycles in which the pointer went more than 3 pixels from the clip: %d of %d\n", count, cycles
+      exit count * 4 > cycles ? 1 : 0
+    }' "$DRAG_LOG"
 }
 
 report_one_pixel_judgement() {
@@ -616,11 +674,11 @@ The isolated session did not reach the conditions this check needs, so nothing c
 
 missing="$(missing_for_private_kwin | tr '\n' ',')"
 if [ -n "$missing" ]; then
-  report_one_pixel_checks skipped "This check runs in a private KWin session with a virtual pointer, and it is missing: ${missing%,}."
+  report_private_kwin_checks skipped "This check runs in a private KWin session with a virtual pointer, and it is missing: ${missing%,}."
 else
   run_wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland /f > /dev/null || true
   status=0
-  output="$(run_isolated_one_pixel_session)" || status=$?
+  output="$(run_isolated_session one-pixel-clip-test.exe "$ONE_PIXEL_LOG")" || status=$?
   case "$status" in
     0)
       report_one_pixel_judgement "$ONE_PIXEL_REGION_CHECK" region
@@ -629,6 +687,15 @@ else
     2) report_one_pixel_checks skipped "${output:-no output}
 The private KWin session could not run the test window to the end, so nothing could be compared." ;;
     *) report_one_pixel_checks FAIL "${output:-no output}" ;;
+  esac
+  status=0
+  output="$(run_isolated_session pointer-drag-clip-test.exe "$DRAG_LOG" sweep)" || status=$?
+  [ "$status" -ne 0 ] || output="$(judge_pointer_drag)" || status=$?
+  case "$status" in
+    0) report "$DRAG_CHECK" ok "$output" ;;
+    2) report "$DRAG_CHECK" skipped "${output:-no output}
+The private KWin session could not run the drag to the end, so nothing could be compared." ;;
+    *) report "$DRAG_CHECK" FAIL "${output:-no output}" ;;
   esac
 fi
 

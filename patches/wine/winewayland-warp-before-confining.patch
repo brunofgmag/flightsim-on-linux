@@ -1,0 +1,76 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+winewayland: warp the pointer inside a small clip before confining it, and confine it anew instead of moving the region of a confinement it already has. KWin 6.7 decides whether a confinement takes hold only when the confinement is created or destroyed, and only if the pointer is inside its region at that moment; it does not look again after a warp or a commit, as KWin 6.8 does. winewayland-small-clip-warps-pointer-inside.patch warped after creating the confinement, so during a ChasePlane camera drag in an isolated KWin 6.7.5 only 2 of 97 one-pixel confinements took hold: the pointer moved with the mouse for 29 ms and the warp pulled it back every 30 ms, and the arrow shook in place. Moving the region of a confinement in place failed under both KWin versions when the new region did not contain the pointer: the warp was held back by the old region, and the confinement let go once the new region applied.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/winewayland.drv/wayland_pointer.c
++++ b/dlls/winewayland.drv/wayland_pointer.c
+@@ -1025,7 +1025,8 @@
+ static BOOL wayland_pointer_update_constraint(struct wl_surface *wl_surface,
+                                               RECT *confine_rect,
+                                               BOOL force_lock,
+-                                              BOOL covers_window)
++                                              BOOL covers_window,
++                                              const POINT *warp_to)
+ {
+     struct wayland_pointer *pointer = &process_wayland.pointer;
+     BOOL needs_lock, needs_confine, is_visible, changed = FALSE;
+@@ -1068,6 +1069,21 @@
+         HWND hwnd = wl_surface_get_user_data(wl_surface);
+         struct wl_region *region;
+ 
++        if (warp_to)
++        {
++            if (pointer->zwp_confined_pointer_v1)
++            {
++                zwp_confined_pointer_v1_destroy(pointer->zwp_confined_pointer_v1);
++                pointer->zwp_confined_pointer_v1 = NULL;
++            }
++            wp_pointer_warp_v1_warp_pointer(process_wayland.wp_pointer_warp_v1,
++                                            wl_surface, pointer->wl_pointer,
++                                            wl_fixed_from_int(warp_to->x),
++                                            wl_fixed_from_int(warp_to->y),
++                                            pointer->enter_serial);
++            TRACE("warping inside clip to wayland_xy=%s\n", wine_dbgstr_point(warp_to));
++        }
++
+         region = wl_compositor_create_region(process_wayland.wl_compositor);
+         wl_region_add(region, confine_rect->left, confine_rect->top,
+                       confine_rect->right - confine_rect->left,
+@@ -1128,7 +1144,7 @@
+ 
+ void wayland_pointer_clear_constraint(void)
+ {
+-    wayland_pointer_update_constraint(NULL, NULL, FALSE, FALSE);
++    wayland_pointer_update_constraint(NULL, NULL, FALSE, FALSE, NULL);
+ }
+ 
+ /***********************************************************************
+@@ -1256,7 +1272,7 @@
+     pthread_mutex_lock(&pointer->mutex);
+     if (wl_surface && pointer->pending_warp)
+     {
+-        changed = wayland_pointer_update_constraint(wl_surface, NULL, TRUE, FALSE);
++        changed = wayland_pointer_update_constraint(wl_surface, NULL, TRUE, FALSE, NULL);
+         pointer->pending_warp = FALSE;
+     }
+ 
+@@ -1281,17 +1297,9 @@
+     * so we can access it without having the win data lock. */
+     if (wayland_pointer_update_constraint(wl_surface,
+                                           (clip && wl_surface) ? &confine_rect : NULL,
+-                                          FALSE, covers_window))
++                                          FALSE, covers_window,
++                                          warp_inside ? &inside : NULL))
+         changed = TRUE;
+-    if (warp_inside && wl_surface && pointer->zwp_confined_pointer_v1)
+-    {
+-        wp_pointer_warp_v1_warp_pointer(process_wayland.wp_pointer_warp_v1,
+-                                        wl_surface, pointer->wl_pointer,
+-                                        wl_fixed_from_int(inside.x),
+-                                        wl_fixed_from_int(inside.y),
+-                                        pointer->enter_serial);
+-        TRACE("warping inside clip to wayland_xy=%s\n", wine_dbgstr_point(&inside));
+-    }
+     pthread_mutex_unlock(&pointer->mutex);
+ 
+     if (changed && wl_surface && (data = wayland_win_data_get(hwnd)))

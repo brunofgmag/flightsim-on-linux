@@ -22,6 +22,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/process-memory-after-eperm-test.exe" "$HERE/
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-cursor-clip-test.exe" "$HERE/src/hidden-cursor-clip-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/pointer-constraint-commit-test.exe" "$HERE/src/pointer-constraint-commit-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/one-pixel-clip-test.exe" "$HERE/src/one-pixel-clip-test.c" -lgdi32 -luser32
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/pointer-drag-clip-test.exe" "$HERE/src/pointer-drag-clip-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-gl-swap-pacing-test.exe" "$HERE/src/hidden-gl-swap-pacing-test.c" -lopengl32 -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/applicationdata-no-package-test.exe" "$HERE/src/applicationdata-no-package-test.c" -lruntimeobject
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/wintrust-create-indirect-data-test.exe" "$HERE/src/wintrust-create-indirect-data-test.c" -lwintrust -lcrypt32 -lbcrypt

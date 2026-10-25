@@ -12,6 +12,16 @@
 #include <unistd.h>
 
 #define EIS_CAPABILITIES (EI_DEVICE_CAP_POINTER | EI_DEVICE_CAP_POINTER_ABSOLUTE | EI_DEVICE_CAP_BUTTON)
+#define SWEEP_INTERVAL_NS 1000000
+#define SWEEP_WIDTH 40
+
+struct sweep
+{
+    struct ei_device *device;
+    int position;
+    int direction;
+    uint64_t next;
+};
 
 static volatile sig_atomic_t terminated;
 
@@ -62,7 +72,25 @@ static bool is_pointer(struct ei_device *device)
            ei_device_has_capability(device, EI_DEVICE_CAP_POINTER_ABSOLUTE);
 }
 
-static bool handle_event(struct ei_event *event, const char *ready_file, bool *ready)
+static uint64_t now_ns(void)
+{
+    struct timespec now;
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (uint64_t)now.tv_sec * 1000000000 + now.tv_nsec;
+}
+
+static void sweep_step(struct ei *ei, struct sweep *sweep)
+{
+    if (!sweep->device || now_ns() < sweep->next) return;
+    if (sweep->position == SWEEP_WIDTH / 2 || sweep->position == -SWEEP_WIDTH / 2) sweep->direction = -sweep->direction;
+    sweep->position += sweep->direction;
+    ei_device_pointer_motion(sweep->device, sweep->direction, 0);
+    ei_device_frame(sweep->device, ei_now(ei));
+    sweep->next = now_ns() + SWEEP_INTERVAL_NS;
+}
+
+static bool handle_event(struct ei_event *event, const char *ready_file, bool *ready, struct sweep *sweep)
 {
     struct ei_device *device;
 
@@ -78,6 +106,7 @@ static bool handle_event(struct ei_event *event, const char *ready_file, bool *r
     case EI_EVENT_DEVICE_RESUMED:
         device = ei_event_get_device(event);
         ei_device_start_emulating(device, 0);
+        if (sweep && !sweep->device && ei_device_has_capability(device, EI_DEVICE_CAP_POINTER)) sweep->device = device;
         if (!*ready && is_pointer(device)) *ready = create_ready_file(ready_file);
         break;
     default:
@@ -86,23 +115,23 @@ static bool handle_event(struct ei_event *event, const char *ready_file, bool *r
     return true;
 }
 
-static bool drain_events(struct ei *ei, const char *ready_file, bool *ready)
+static bool drain_events(struct ei *ei, const char *ready_file, bool *ready, struct sweep *sweep)
 {
     struct ei_event *event;
     bool alive = true;
 
     while (alive && (event = ei_get_event(ei)))
     {
-        alive = handle_event(event, ready_file, ready);
+        alive = handle_event(event, ready_file, ready, sweep);
         ei_event_unref(event);
     }
     return alive;
 }
 
-static int run(struct ei *ei, const char *ready_file, const sigset_t *waiting_mask)
+static int run(struct ei *ei, const char *ready_file, struct sweep *sweep, const sigset_t *waiting_mask)
 {
     struct pollfd poll_fd = {.fd = ei_get_fd(ei), .events = POLLIN};
-    struct timespec interval = {.tv_nsec = 100000000};
+    struct timespec interval = {.tv_nsec = sweep ? SWEEP_INTERVAL_NS / 4 : 100000000};
     bool ready = false;
 
     while (!terminated)
@@ -114,7 +143,8 @@ static int run(struct ei *ei, const char *ready_file, const sigset_t *waiting_ma
             return 1;
         }
         ei_dispatch(ei);
-        if (!drain_events(ei, ready_file, &ready)) return 1;
+        if (!drain_events(ei, ready_file, &ready, sweep)) return 1;
+        if (sweep) sweep_step(ei, sweep);
         ei_dispatch(ei);
     }
     return 0;
@@ -124,13 +154,14 @@ int main(int argc, char **argv)
 {
     struct sigaction action = {.sa_handler = on_terminate};
     sigset_t blocked, original;
+    struct sweep sweep = {.direction = 1};
     struct ei *ei;
     sd_bus *bus = NULL;
     int socket_fd, status;
 
-    if (argc != 2)
+    if (argc != 2 && (argc != 3 || strcmp(argv[2], "sweep")))
     {
-        fprintf(stderr, "usage: eis-pointer <file to create once a pointer is ready>\n");
+        fprintf(stderr, "usage: eis-pointer <file to create once a pointer is ready> [sweep]\n");
         return 2;
     }
     sigemptyset(&action.sa_mask);
@@ -162,7 +193,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    status = run(ei, argv[1], &original);
+    status = run(ei, argv[1], argc == 3 ? &sweep : NULL, &original);
     ei_unref(ei);
     sd_bus_unref(bus);
     return status;
