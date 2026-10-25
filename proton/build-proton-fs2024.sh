@@ -33,6 +33,7 @@ PATCHES=(
   "$ROOT/patches/wine/winewayland-commit-pointer-constraint-changes.patch"
   "$ROOT/patches/wine/winewayland-small-clip-warps-pointer-inside.patch"
   "$ROOT/patches/wine/winewayland-clip-at-least-one-pixel.patch"
+  "$ROOT/patches/wine/winewayland-pace-hidden-gl-swaps.patch"
   "$ROOT/patches/wine/windows-storage-applicationdata-no-package.patch"
   "$ROOT/patches/wine/wintrust-create-indirect-data.patch"
   "$ROOT/patches/wine/ntdll-globalroot-device-paths.patch"

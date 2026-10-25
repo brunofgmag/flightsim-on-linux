@@ -333,6 +333,22 @@ else
   report "$name" skipped "This check needs the Wayland driver, and WAYLAND_DISPLAY is '${WAYLAND_DISPLAY:-unset}'. Run the check from your desktop session."
 fi
 
+name="winewayland paces vsync swaps on a hidden OpenGL window (BBS Nest taking GPU from the simulator)"
+if wayland_socket; then
+  run_wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland /f > /dev/null || true
+  stop_prefix
+  status=0
+  output="$(WINE_USE_EGL=1 run_wine_wayland "$(windows_path "$WORK/hidden-gl-swap-pacing-test.exe")")" || status=$?
+  case "$status" in
+    0) report "$name" ok "$output" ;;
+    2) report "$name" skipped "${output:-no output}
+The test could not draw with OpenGL in a hidden window, so nothing could be counted." ;;
+    *) report "$name" FAIL "${output:-no output}" ;;
+  esac
+else
+  report "$name" skipped "This check needs the Wayland driver, and WAYLAND_DISPLAY is '${WAYLAND_DISPLAY:-unset}'. Run the check from your desktop session."
+fi
+
 pointer_constraint_between() {
   awk -v start="$2" -v stop="$3" '
     index($0, start) && /debugstr/ { inside = 1; next }

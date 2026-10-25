@@ -1,0 +1,59 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine winewayland: pace an OpenGL swap that asks for vsync on a surface no visible window holds to the primary monitor refresh. Wine turns the driver swap interval off on Wayland and waits for frame callbacks instead, and a hidden window gets none, so the BBS Nest renderer behind the BlueBird 757 swapped about 200 times a second and took a fifth of the GPU from the simulator.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/winewayland.drv/opengl.c b/dlls/winewayland.drv/opengl.c
+index 80b0ec716ef..6ebf8c25615 100644
+--- a/dlls/winewayland.drv/opengl.c
++++ b/dlls/winewayland.drv/opengl.c
+@@ -50,6 +50,7 @@ struct wayland_gl_drawable
+ {
+     struct opengl_drawable base;
+     struct wl_egl_window *wl_egl_window;
++    LONGLONG next_present;
+ };
+ 
+ static struct wayland_gl_drawable *impl_from_opengl_drawable(struct opengl_drawable *base)
+@@ -170,6 +171,34 @@ static const struct wl_callback_listener gl_throttle_listener =
+     wayland_gl_frame_done,
+ };
+ 
++static LONGLONG primary_refresh_period(LONGLONG ticks_per_second)
++{
++    DEVMODEW mode = {.dmSize = sizeof(mode)};
++
++    if (NtUserEnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &mode, 0) && mode.dmDisplayFrequency > 1)
++        return ticks_per_second / mode.dmDisplayFrequency;
++    return ticks_per_second / 60;
++}
++
++static void wayland_gl_drawable_pace(struct wayland_gl_drawable *gl, int interval)
++{
++    LARGE_INTEGER now, frequency, delay;
++    LONGLONG period;
++
++    NtQueryPerformanceCounter(&now, &frequency);
++    period = primary_refresh_period(frequency.QuadPart) * interval;
++
++    if (gl->next_present <= now.QuadPart || gl->next_present - now.QuadPart > period)
++    {
++        gl->next_present = now.QuadPart + period;
++        return;
++    }
++
++    delay.QuadPart = -((gl->next_present - now.QuadPart) * 10000000 / frequency.QuadPart);
++    NtDelayExecution(FALSE, &delay);
++    gl->next_present += period;
++}
++
+ static BOOL wayland_drawable_swap(struct opengl_drawable *base)
+ {
+     struct wayland_gl_drawable *gl = impl_from_opengl_drawable(base);
+@@ -194,6 +223,7 @@ static BOOL wayland_drawable_swap(struct opengl_drawable *base)
+         surface->wl_callback = wl_surface_frame(surface->wl_surface);
+         wl_callback_add_listener(surface->wl_callback, &gl_throttle_listener, base->client);
+     }
++    else if (base->interval) wayland_gl_drawable_pace(gl, base->interval);
+     funcs->p_eglSwapBuffers(egl->display, gl->base.surface);
+ 
+     return TRUE;
