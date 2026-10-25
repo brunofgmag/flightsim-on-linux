@@ -1,0 +1,201 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine expand.exe: accept /R and /F:<filespec> anywhere on the command line, and extract a cabinet into a folder (the destination, or the source's folder) under the names it stores, keeping only the files that match the filespec. LuminaXP for X-Plane 12 unpacks its DLSS 5 model with expand.exe -R -F:nvngx_dlssnr.dll <cabinet> <folder>; Wine read "-R" as the input file and exited with 1.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/programs/expand/expand.c
++++ b/programs/expand/expand.c
+@@ -20,6 +20,7 @@
+ 
+ #define WIN32_LEAN_AND_MEAN
+ 
++#include <ctype.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include <windows.h>
+@@ -41,6 +42,38 @@ static int WINAPIV myprintf(const char* format, ...)
+     return w;
+ }
+ 
++struct cabinet_target
++{
++    const char *dir;
++    const char *filter;
++    unsigned int extracted;
++};
++
++static BOOL match_filter( const char *name, const char *filter )
++{
++    if (!*filter) return !*name;
++    if (*filter == '*')
++    {
++        while (*filter == '*') filter++;
++        if (!*filter) return TRUE;
++        for (; *name; name++)
++            if (match_filter( name, filter )) return TRUE;
++        return FALSE;
++    }
++    if (!*name) return FALSE;
++    if (*filter != '?' && tolower( (unsigned char)*filter ) != tolower( (unsigned char)*name ))
++        return FALSE;
++    return match_filter( name + 1, filter + 1 );
++}
++
++static const char *base_name( const char *path )
++{
++    const char *p, *ret = path;
++    for (p = path; *p; p++)
++        if (*p == '\\' || *p == '/') ret = p + 1;
++    return ret;
++}
++
+ static UINT CALLBACK set_outfile( PVOID context, UINT notification, UINT_PTR param1, UINT_PTR param2 )
+ {
+     FILE_IN_CABINET_INFO_A *info = (FILE_IN_CABINET_INFO_A *)param1;
+@@ -82,32 +115,71 @@ static UINT CALLBACK extract_callback( PVOID context, UINT notification, UINT_PT
+     }
+ }
+ 
++static UINT CALLBACK extract_to_dir_callback( PVOID context, UINT notification, UINT_PTR param1, UINT_PTR param2 )
++{
++    FILE_IN_CABINET_INFO_A *info = (FILE_IN_CABINET_INFO_A *)param1;
++    struct cabinet_target *target = context;
++
++    switch (notification)
++    {
++    case SPFILENOTIFY_FILEINCABINET:
++    {
++        const char *name = base_name( info->NameInCabinet );
++
++        if (target->filter && !match_filter( name, target->filter )) return FILEOP_SKIP;
++        if (strlen( target->dir ) + 1 + strlen( name ) >= sizeof(info->FullTargetName)) return FILEOP_SKIP;
++        sprintf( info->FullTargetName, "%s\\%s", target->dir, name );
++        target->extracted++;
++        return FILEOP_DOIT;
++    }
++    default: return NO_ERROR;
++    }
++}
++
+ static BOOL option_equal(LPCSTR str1, LPCSTR str2)
+ {
+     if (str1[0] != '/' && str1[0] != '-')
+         return FALSE;
+-    return !lstrcmpA( str1 + 1, str2 );
++    return !lstrcmpiA( str1 + 1, str2 );
++}
++
++static BOOL is_filter_option( LPCSTR str )
++{
++    return (str[0] == '/' || str[0] == '-') && (str[1] == 'F' || str[1] == 'f') && str[2] == ':';
++}
++
++static BOOL is_directory( LPCSTR path )
++{
++    DWORD attributes = GetFileAttributesA( path );
++    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY);
+ }
+ 
+ int __cdecl main(int argc, char *argv[])
+ {
+-    int ret = 0;
++    int ret = 0, i, count = 0;
+     char infile[MAX_PATH], outfile[MAX_PATH], actual_name[MAX_PATH];
+-    char outfile_basename[MAX_PATH], *basename_index;
++    char outfile_basename[MAX_PATH], dir[MAX_PATH], *basename_index;
++    const char *paths[2] = {NULL, NULL}, *filter = NULL;
++    BOOL rename = FALSE, to_dir;
+     UINT comp;
+ 
+-    if (argc < 3)
++    for (i = 1; i < argc; i++)
++    {
++        if (option_equal( argv[i], "R" )) rename = TRUE;
++        else if (is_filter_option( argv[i] )) filter = argv[i] + 3;
++        else if (count < 2) paths[count++] = argv[i];
++    }
++
++    if (!count || (count == 1 && !rename && !filter))
+     {
+         myprintf( "Usage:\n" );
+         myprintf( "\t%s infile outfile\n", argv[0] );
+         myprintf( "\t%s /r infile\n", argv[0] );
++        myprintf( "\t%s [/r] [/f:filespec] cabinet [destination]\n", argv[0] );
+         return 1;
+     }
+ 
+-    if (argc == 3 && (option_equal(argv[1], "R") || option_equal(argv[1], "r")))
+-        GetFullPathNameA( argv[2], sizeof(infile), infile, NULL );
+-    else
+-        GetFullPathNameA( argv[1], sizeof(infile), infile, NULL );
++    GetFullPathNameA( paths[0], sizeof(infile), infile, NULL );
+ 
+     if (!SetupGetFileCompressionInfoExA( infile, actual_name, sizeof(actual_name), NULL, NULL, NULL, &comp ))
+     {
+@@ -115,7 +187,42 @@ int __cdecl main(int argc, char *argv[])
+         return 1;
+     }
+ 
+-    if (argc == 3 && (option_equal(argv[1], "R") || option_equal(argv[1], "r")))
++    to_dir = filter || (count == 2 && is_directory( paths[1] ));
++
++    if (comp == FILE_COMPRESSION_MSZIP && (to_dir || rename))
++    {
++        struct cabinet_target target;
++
++        if (count == 2) GetFullPathNameA( paths[1], sizeof(dir), dir, NULL );
++        else
++        {
++            GetFullPathNameA( infile, sizeof(dir), dir, &basename_index );
++            *basename_index = 0;
++        }
++        i = strlen( dir );
++        if (i && (dir[i - 1] == '\\' || dir[i - 1] == '/')) dir[i - 1] = 0;
++        if (!is_directory( dir ))
++        {
++            myprintf( "%s: destination %s is not a folder\n", argv[0], dir );
++            return 1;
++        }
++        target.dir = dir;
++        target.filter = filter;
++        target.extracted = 0;
++        if (!SetupIterateCabinetA( infile, 0, extract_to_dir_callback, &target ))
++        {
++            myprintf( "%s: cabinet extraction failed\n", argv[0] );
++            return 1;
++        }
++        if (!target.extracted)
++        {
++            myprintf( "%s: no file in %s matches %s\n", argv[0], infile, filter ? filter : "*" );
++            return 1;
++        }
++        return 0;
++    }
++
++    if (count == 1)
+     {
+         switch (comp)
+         {
+@@ -138,8 +245,22 @@ int __cdecl main(int argc, char *argv[])
+             return 1;
+         }
+     }
++    else if (to_dir)
++    {
++        GetFullPathNameA( paths[1], sizeof(dir), dir, NULL );
++        if (rename && comp == FILE_COMPRESSION_WINLZA) GetExpandedNameA( infile, outfile_basename );
++        else strcpy( outfile_basename, infile );
++        i = strlen( dir );
++        if (i && (dir[i - 1] == '\\' || dir[i - 1] == '/')) dir[i - 1] = 0;
++        if (strlen( dir ) + 1 + strlen( base_name( outfile_basename ) ) >= sizeof(outfile))
++        {
++            myprintf( "%s: destination path too long\n", argv[0] );
++            return 1;
++        }
++        sprintf( outfile, "%s\\%s", dir, base_name( outfile_basename ) );
++    }
+     else
+-        GetFullPathNameA( argv[2], sizeof(outfile), outfile, NULL );
++        GetFullPathNameA( paths[1], sizeof(outfile), outfile, NULL );
+ 
+     if (!lstrcmpiA( infile, outfile ))
+     {

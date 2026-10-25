@@ -31,6 +31,8 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/device-path-current-directory-test.exe" "$HE
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/heap-read-slack-test.exe" "$HERE/src/heap-read-slack-test.c"
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/bcrypt-pbkdf2-alg-handle-test.exe" "$HERE/src/bcrypt-pbkdf2-alg-handle-test.c" -lbcrypt
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/ncrypt-ecdh-p256-test.exe" "$HERE/src/ncrypt-ecdh-p256-test.c" -lncrypt -lbcrypt
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/ncrypt-ecdsa-p256-test.exe" "$HERE/src/ncrypt-ecdsa-p256-test.c" -lncrypt -lbcrypt
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/expand-cabinet-filter-test.exe" "$HERE/src/expand-cabinet-filter-test.c" -lcabinet
 if pkg-config --exists libei-1.0 libsystemd; then
   read -r -a EIS_FLAGS < <(pkg-config --cflags --libs libei-1.0 libsystemd)
   gcc -O2 -Wall -o "$OUT/eis-pointer" "$HERE/src/eis-pointer.c" "${EIS_FLAGS[@]}"

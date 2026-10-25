@@ -1,0 +1,185 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine ncrypt: create and import ECDSA P-256, P-384 and P-521 keys next to the ECDH ones, with "ECDSA" as their algorithm group, so ECDsaCng in .NET Framework 4.8 can import a public key and verify a signature. LuminaXP for X-Plane 12 checks its release signature this way; ncrypt rejected the ECS1 blob as an unhandled key magic.
+Applies to wine-cachyos after ncrypt-ecdh-secret-agreement.patch with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/ncrypt/ncrypt_internal.h
++++ b/dlls/ncrypt/ncrypt_internal.h
+@@ -29,6 +29,9 @@
+     ECDH_P256,
+     ECDH_P384,
+     ECDH_P521,
++    ECDSA_P256,
++    ECDSA_P384,
++    ECDSA_P521,
+ };
+ 
+ struct key
+--- a/dlls/ncrypt/main.c
++++ b/dlls/ncrypt/main.c
+@@ -126,61 +126,68 @@
+     return ERROR_SUCCESS;
+ }
+ 
+-static const struct ecdh_curve
++static const struct ec_curve
+ {
+     enum algid algid;
+     const WCHAR *name;
++    const WCHAR *group;
+     const WCHAR *curve_name;
+     BCRYPT_ALG_HANDLE alg_handle;
+     DWORD bitlen;
+     ULONG public_magic;
+     ULONG private_magic;
+ }
+-ecdh_curves[] =
++ec_curves[] =
+ {
+-    { ECDH_P256, BCRYPT_ECDH_P256_ALGORITHM, L"nistP256", BCRYPT_ECDH_P256_ALG_HANDLE, 256,
++    { ECDH_P256, BCRYPT_ECDH_P256_ALGORITHM, BCRYPT_ECDH_ALGORITHM, L"nistP256", BCRYPT_ECDH_P256_ALG_HANDLE, 256,
+       BCRYPT_ECDH_PUBLIC_P256_MAGIC, BCRYPT_ECDH_PRIVATE_P256_MAGIC },
+-    { ECDH_P384, BCRYPT_ECDH_P384_ALGORITHM, L"nistP384", BCRYPT_ECDH_P384_ALG_HANDLE, 384,
++    { ECDH_P384, BCRYPT_ECDH_P384_ALGORITHM, BCRYPT_ECDH_ALGORITHM, L"nistP384", BCRYPT_ECDH_P384_ALG_HANDLE, 384,
+       BCRYPT_ECDH_PUBLIC_P384_MAGIC, BCRYPT_ECDH_PRIVATE_P384_MAGIC },
+-    { ECDH_P521, BCRYPT_ECDH_P521_ALGORITHM, L"nistP521", BCRYPT_ECDH_P521_ALG_HANDLE, 521,
++    { ECDH_P521, BCRYPT_ECDH_P521_ALGORITHM, BCRYPT_ECDH_ALGORITHM, L"nistP521", BCRYPT_ECDH_P521_ALG_HANDLE, 521,
+       BCRYPT_ECDH_PUBLIC_P521_MAGIC, BCRYPT_ECDH_PRIVATE_P521_MAGIC },
++    { ECDSA_P256, BCRYPT_ECDSA_P256_ALGORITHM, BCRYPT_ECDSA_ALGORITHM, L"nistP256", BCRYPT_ECDSA_P256_ALG_HANDLE, 256,
++      BCRYPT_ECDSA_PUBLIC_P256_MAGIC, BCRYPT_ECDSA_PRIVATE_P256_MAGIC },
++    { ECDSA_P384, BCRYPT_ECDSA_P384_ALGORITHM, BCRYPT_ECDSA_ALGORITHM, L"nistP384", BCRYPT_ECDSA_P384_ALG_HANDLE, 384,
++      BCRYPT_ECDSA_PUBLIC_P384_MAGIC, BCRYPT_ECDSA_PRIVATE_P384_MAGIC },
++    { ECDSA_P521, BCRYPT_ECDSA_P521_ALGORITHM, BCRYPT_ECDSA_ALGORITHM, L"nistP521", BCRYPT_ECDSA_P521_ALG_HANDLE, 521,
++      BCRYPT_ECDSA_PUBLIC_P521_MAGIC, BCRYPT_ECDSA_PRIVATE_P521_MAGIC },
+ };
+ 
+-static const struct ecdh_curve *ecdh_curve_from_algid(enum algid algid)
++static const struct ec_curve *ec_curve_from_algid(enum algid algid)
+ {
+     unsigned int i;
+-    for (i = 0; i < ARRAY_SIZE(ecdh_curves); i++)
+-        if (ecdh_curves[i].algid == algid) return &ecdh_curves[i];
++    for (i = 0; i < ARRAY_SIZE(ec_curves); i++)
++        if (ec_curves[i].algid == algid) return &ec_curves[i];
+     return NULL;
+ }
+ 
+-static const struct ecdh_curve *ecdh_curve_from_name(const WCHAR *name)
++static const struct ec_curve *ec_curve_from_name(const WCHAR *name)
+ {
+     unsigned int i;
+-    for (i = 0; i < ARRAY_SIZE(ecdh_curves); i++)
+-        if (!lstrcmpiW(ecdh_curves[i].name, name)) return &ecdh_curves[i];
++    for (i = 0; i < ARRAY_SIZE(ec_curves); i++)
++        if (!lstrcmpiW(ec_curves[i].name, name)) return &ec_curves[i];
+     return NULL;
+ }
+ 
+-static const struct ecdh_curve *ecdh_curve_from_curve_name(const WCHAR *name)
++static const struct ec_curve *ec_curve_from_curve_name(const WCHAR *name)
+ {
+     unsigned int i;
+-    for (i = 0; i < ARRAY_SIZE(ecdh_curves); i++)
+-        if (!lstrcmpiW(ecdh_curves[i].curve_name, name)) return &ecdh_curves[i];
++    for (i = 0; i < ARRAY_SIZE(ec_curves); i++)
++        if (!lstrcmpiW(ec_curves[i].curve_name, name)) return &ec_curves[i];
+     return NULL;
+ }
+ 
+-static const struct ecdh_curve *ecdh_curve_from_magic(ULONG magic)
++static const struct ec_curve *ec_curve_from_magic(ULONG magic)
+ {
+     unsigned int i;
+-    for (i = 0; i < ARRAY_SIZE(ecdh_curves); i++)
+-        if (ecdh_curves[i].public_magic == magic || ecdh_curves[i].private_magic == magic) return &ecdh_curves[i];
++    for (i = 0; i < ARRAY_SIZE(ec_curves); i++)
++        if (ec_curves[i].public_magic == magic || ec_curves[i].private_magic == magic) return &ec_curves[i];
+     return NULL;
+ }
+ 
+ static struct object *create_key_object(enum algid algid, NCRYPT_PROV_HANDLE provider)
+ {
+-    const struct ecdh_curve *curve;
++    const struct ec_curve *curve;
+     NCRYPT_SUPPORTED_LENGTHS supported_lengths = {512, 16384, 8, 1024};
+     struct object *object;
+     DWORD dw_value;
+@@ -206,14 +213,17 @@
+     case ECDH_P256:
+     case ECDH_P384:
+     case ECDH_P521:
+-        curve = ecdh_curve_from_algid(algid);
++    case ECDSA_P256:
++    case ECDSA_P384:
++    case ECDSA_P521:
++        curve = ec_curve_from_algid(algid);
+         if (!(object = allocate_object(KEY))) return NULL;
+ 
+         object->key.algid = algid;
+         set_object_property(object, NCRYPT_ALGORITHM_PROPERTY, (BYTE *)curve->name,
+                             (lstrlenW(curve->name) + 1) * sizeof(WCHAR));
+-        set_object_property(object, NCRYPT_ALGORITHM_GROUP_PROPERTY, (BYTE *)BCRYPT_ECDH_ALGORITHM,
+-                            sizeof(BCRYPT_ECDH_ALGORITHM));
++        set_object_property(object, NCRYPT_ALGORITHM_GROUP_PROPERTY, (BYTE *)curve->group,
++                            (lstrlenW(curve->group) + 1) * sizeof(WCHAR));
+         set_object_property(object, BCRYPT_ECC_CURVE_NAME, (BYTE *)curve->curve_name,
+                             (lstrlenW(curve->curve_name) + 1) * sizeof(WCHAR));
+         set_object_property(object, NCRYPT_LENGTH_PROPERTY, (BYTE *)&curve->bitlen, sizeof(curve->bitlen));
+@@ -238,7 +248,7 @@
+ SECURITY_STATUS WINAPI NCryptCreatePersistedKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_HANDLE *key,
+                                                 const WCHAR *algid, const WCHAR *name, DWORD keyspec, DWORD flags)
+ {
+-    const struct ecdh_curve *curve;
++    const struct ec_curve *curve;
+     struct object *object;
+ 
+     TRACE("(%#Ix, %p, %s, %s, %#lx, %#lx)\n", provider, key, wine_dbgstr_w(algid),
+@@ -270,7 +280,7 @@
+         set_object_property(object, NCRYPT_LENGTH_PROPERTY, (BYTE *)&default_bitlen, sizeof(default_bitlen));
+         set_object_property(object, BCRYPT_PUBLIC_KEY_LENGTH, (BYTE *)&default_bitlen, sizeof(default_bitlen));
+     }
+-    else if ((curve = ecdh_curve_from_name(algid)))
++    else if ((curve = ec_curve_from_name(algid)))
+     {
+         NTSTATUS status;
+ 
+@@ -475,7 +485,7 @@
+                                        BYTE *data, DWORD datasize, DWORD flags)
+ {
+     BCRYPT_KEY_BLOB *header = (BCRYPT_KEY_BLOB *)data;
+-    const struct ecdh_curve *param_curve = NULL;
++    const struct ec_curve *param_curve = NULL;
+     struct object *object;
+     ULONG i;
+ 
+@@ -492,7 +502,7 @@
+         NCryptBuffer *buffer = &params->pBuffers[i];
+ 
+         if (buffer->BufferType == NCRYPTBUFFER_ECC_CURVE_NAME && buffer->pvBuffer &&
+-            (param_curve = ecdh_curve_from_curve_name(buffer->pvBuffer))) continue;
++            (param_curve = ec_curve_from_curve_name(buffer->pvBuffer))) continue;
+         FIXME("Parameter type %lu not implemented\n", buffer->BufferType);
+         return NTE_NOT_SUPPORTED;
+     }
+@@ -541,13 +551,20 @@
+     case BCRYPT_ECDH_PRIVATE_P521_MAGIC:
+     case BCRYPT_ECDH_PUBLIC_GENERIC_MAGIC:
+     case BCRYPT_ECDH_PRIVATE_GENERIC_MAGIC:
++    case BCRYPT_ECDSA_PUBLIC_P256_MAGIC:
++    case BCRYPT_ECDSA_PRIVATE_P256_MAGIC:
++    case BCRYPT_ECDSA_PUBLIC_P384_MAGIC:
++    case BCRYPT_ECDSA_PRIVATE_P384_MAGIC:
++    case BCRYPT_ECDSA_PUBLIC_P521_MAGIC:
++    case BCRYPT_ECDSA_PRIVATE_P521_MAGIC:
+     {
+-        const struct ecdh_curve *curve = ecdh_curve_from_magic(header->Magic);
++        const struct ec_curve *curve = ec_curve_from_magic(header->Magic);
+         BCRYPT_KEY_BLOB *blob = header;
+         NTSTATUS status;
+ 
+         if (!curve) curve = param_curve;
+-        if (!curve || (param_curve && param_curve != curve)) return NTE_INVALID_PARAMETER;
++        if (!curve || (param_curve && lstrcmpiW(param_curve->curve_name, curve->curve_name)))
++            return NTE_INVALID_PARAMETER;
+ 
+         if (header->Magic == BCRYPT_ECDH_PUBLIC_GENERIC_MAGIC || header->Magic == BCRYPT_ECDH_PRIVATE_GENERIC_MAGIC)
+         {

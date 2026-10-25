@@ -1,0 +1,24 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine setupapi: open a file with FILE_SHARE_READ to detect its compression type and read its size, as Windows does, so SetupGetFileCompressionInfoEx works on a cabinet another program holds open for reading. LuminaXP for X-Plane 12 keeps its DLSS 5 model cabinet open while expand.exe unpacks it; setupapi asked for exclusive access and could not open the file.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/setupapi/misc.c
++++ b/dlls/setupapi/misc.c
+@@ -862,7 +862,7 @@ static UINT detect_compression_type( LPCWSTR file )
+     static const BYTE NTCAB_MAGIC[] = { 0x4d, 0x53, 0x43, 0x46 };
+     BYTE buffer[8];
+ 
+-    handle = CreateFileW( file, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL );
++    handle = CreateFileW( file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL );
+     if (handle == INVALID_HANDLE_VALUE)
+     {
+         ERR("cannot open file %s\n", debugstr_w(file));
+@@ -885,7 +885,7 @@ static BOOL get_file_size( LPCWSTR file, DWORD *size )
+ {
+     HANDLE handle;
+ 
+-    handle = CreateFileW( file, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL );
++    handle = CreateFileW( file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL );
+     if (handle == INVALID_HANDLE_VALUE)
+     {
+         ERR("cannot open file %s\n", debugstr_w(file));

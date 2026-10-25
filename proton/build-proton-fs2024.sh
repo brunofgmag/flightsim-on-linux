@@ -41,6 +41,9 @@ PATCHES=(
   "$ROOT/patches/wine/ntdll-device-path-current-directory.patch"
   "$ROOT/patches/wine/bcrypt-pbkdf2-pseudo-handle.patch"
   "$ROOT/patches/wine/ncrypt-ecdh-secret-agreement.patch"
+  "$ROOT/patches/wine/ncrypt-ecdsa-keys.patch"
+  "$ROOT/patches/wine/expand-cabinet-filter-to-folder.patch"
+  "$ROOT/patches/wine/setupapi-cabinet-open-share-read.patch"
   "$ROOT/patches/wine/ntdll-fenix-gateway-loader-case.patch"
   "$ROOT/patches/wine/ntdll-heap-read-slack.patch"
 )
@@ -64,6 +67,8 @@ MODULES=(
   "dlls/wintrust/x86_64-windows/wintrust.dll:lib/wine/x86_64-windows/wintrust.dll"
   "dlls/bcrypt/x86_64-windows/bcrypt.dll:lib/wine/x86_64-windows/bcrypt.dll"
   "dlls/ncrypt/x86_64-windows/ncrypt.dll:lib/wine/x86_64-windows/ncrypt.dll"
+  "dlls/setupapi/x86_64-windows/setupapi.dll:lib/wine/x86_64-windows/setupapi.dll"
+  "programs/expand/x86_64-windows/expand.exe:lib/wine/x86_64-windows/expand.exe"
 )
 
 VKD3D_URL="https://github.com/HansKristian-Work/vkd3d-proton"
