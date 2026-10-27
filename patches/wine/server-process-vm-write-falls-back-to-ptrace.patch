@@ -1,0 +1,14 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+wineserver: when process_vm_writev cannot write the whole range, write it with ptrace for that call. process_vm_writev obeys the Linux protection of the target page, and an image page Wine reports as PAGE_EXECUTE_WRITECOPY can be mapped r-x underneath; Windows copies such a page on write, ptrace does the same through FOLL_FORCE. On the test machine the REX Atmos Core hook pointer in FlightSimulator2024.exe was such a page, WriteProcessMemory returned ERROR_PARTIAL_COPY and the Rayleigh and particle sliders did nothing.
+Applies to wine-cachyos after server-process-vm-eperm-per-call.patch with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/server/ptrace.c
++++ b/server/ptrace.c
+@@ -403,6 +403,7 @@
+         return -1;
+     }
+     if (len < 0 && errno == EPERM) return -1;
++    if (len != size && (len >= 0 || errno == EFAULT)) return -1;
+ 
+     if (written) *written = max( len, 0 );
+     if (len != size) set_error( STATUS_PARTIAL_COPY );

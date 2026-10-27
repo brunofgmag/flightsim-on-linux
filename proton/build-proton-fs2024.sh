@@ -29,6 +29,7 @@ PATCHES=(
   "$ROOT/patches/wine/d2d1-free-figure-vertex-types.patch"
   "$ROOT/patches/wine/d2d1-bezier-split-ceiling.patch"
   "$ROOT/patches/wine/server-process-vm-eperm-per-call.patch"
+  "$ROOT/patches/wine/server-process-vm-write-falls-back-to-ptrace.patch"
   "$ROOT/patches/wine/winewayland-hidden-cursor-window-clip-confines.patch"
   "$ROOT/patches/wine/winewayland-commit-pointer-constraint-changes.patch"
   "$ROOT/patches/wine/winewayland-small-clip-warps-pointer-inside.patch"

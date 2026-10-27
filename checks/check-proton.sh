@@ -226,6 +226,17 @@ else
   report "$name" skipped "This check makes the EPERM through Yama, and /proc/sys/kernel/yama/ptrace_scope is not 1 here."
 fi
 
+name="another process writes an image page Wine reports as writable but Linux maps r-x (REX Atmos Core atmosphere sliders)"
+stop_prefix
+status=0
+output="$(run_wine "$(windows_path "$WORK/process-memory-write-readonly-image-page-test.exe")")" || status=$?
+case "$status" in
+  0) report "$name" ok "$output" ;;
+  2) report "$name" skipped "${output:-no output}
+The test could not leave its image page PAGE_EXECUTE_WRITECOPY with a read-only Linux mapping." ;;
+  *) report "$name" FAIL "${output:-no output}" ;;
+esac
+
 FENCE_CHECK="D3D12 fence shared between processes (Fenix displays in GPU mode)"
 EXIT_CHECK="exit after sharing a D3D12 fence, without a crash (Fenix displays leaving core dumps)"
 FENCE_RUNS=3

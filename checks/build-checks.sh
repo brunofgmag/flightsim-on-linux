@@ -19,6 +19,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d12-identical-root-signature-test.exe" "$H
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d12-descriptor-heap-addresses-test.exe" "$HERE/src/d3d12-descriptor-heap-addresses-test.c" -ld3d12 -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d3d11-keyed-mutex-test.exe" "$HERE/src/d3d11-keyed-mutex-test.c" -ld3d11 -ldxgi -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/process-memory-after-eperm-test.exe" "$HERE/src/process-memory-after-eperm-test.c" -Wl,--disable-dynamicbase
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/process-memory-write-readonly-image-page-test.exe" "$HERE/src/process-memory-write-readonly-image-page-test.c" -Wl,--disable-dynamicbase
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/hidden-cursor-clip-test.exe" "$HERE/src/hidden-cursor-clip-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/pointer-constraint-commit-test.exe" "$HERE/src/pointer-constraint-commit-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/one-pixel-clip-test.exe" "$HERE/src/one-pixel-clip-test.c" -lgdi32 -luser32
