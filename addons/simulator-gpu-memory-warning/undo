@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+backup=""
+[ -z "${FSOL_COMPATDATA:-}" ] || backup="$FSOL_COMPATDATA/flightsim-on-linux-backup/simulator-gpu-memory-warning"
+python3 -I "$HERE/parts/warning.py" undo "${FSOL_SIM_INSTALL:-}" "${FSOL_COMMUNITY:-}" "$backup"

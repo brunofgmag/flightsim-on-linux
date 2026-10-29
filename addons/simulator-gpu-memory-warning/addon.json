@@ -1,0 +1,10 @@
+{
+  "name": "MSFS 2024 GPU memory warning",
+  "tested_version": "1.9.21.0",
+  "tested_on": "2026-10-29",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "sim": ["FlightSimulator2024.exe"]
+  }
+}
