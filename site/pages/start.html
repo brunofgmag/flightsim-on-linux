@@ -30,7 +30,7 @@ description: Step-by-step setup of Microsoft Flight Simulator 2024 on Linux for 
     <h3>Build Proton FS2024</h3>
     <p>Close the simulator. In the helper app, pick <em>Build Proton FS2024</em>. In the terminal it is:</p>
     <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux proton build</code></pre>
-    <p>It downloads Proton-CachyOS (about 350 MB) and the Wine source, applies the patches, compiles 20 Wine modules and the <code>d3d12core.dll</code> of vkd3d-proton, runs the thirty-one checks on the result and installs it as the Steam compatibility tool <em>Proton FS2024</em>. You need about 3 GB free in your home folder. On a 16-thread CPU the compile took about a minute; slower machines take longer. The Proton you use now stays untouched. When you build again later, the new build replaces <em>Proton FS2024</em> and the one before it stays in <code>~/.cache/flightsim-on-linux/previous</code>.</p>
+    <p>It downloads Proton-CachyOS (about 350 MB) and the Wine source, applies the patches, compiles 20 Wine modules, the <code>d3d12core.dll</code> of vkd3d-proton and the <code>dxgi.dll</code> of DXVK, runs the thirty-three checks on the result and installs it as the Steam compatibility tool <em>Proton FS2024</em>. You need about 3 GB free in your home folder. On a 16-thread CPU the compile took about a minute; slower machines take longer. The Proton you use now stays untouched. When you build again later, the new build replaces <em>Proton FS2024</em> and the one before it stays in <code>~/.cache/flightsim-on-linux/previous</code>.</p>
   </li>
   <li>
     <h3>Pick it in Steam</h3>
@@ -40,7 +40,7 @@ description: Step-by-step setup of Microsoft Flight Simulator 2024 on Linux for 
     <h3>Check it</h3>
     <p>Run the helper again and pick <em>Check the Proton the simulator uses</em>, or:</p>
     <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux proton check</code></pre>
-    <p>It creates a throwaway prefix, runs twenty-eight small test programs and deletes the prefix. You should see <code>All 31 checks passed.</code> Each check names the add-on it protects, so a failure tells you what will break.</p>
+    <p>It creates a throwaway prefix, runs thirty small test programs and deletes the prefix. You should see <code>All 33 checks passed.</code> Each check names the add-on it protects, so a failure tells you what will break.</p>
   </li>
 </ol>
 

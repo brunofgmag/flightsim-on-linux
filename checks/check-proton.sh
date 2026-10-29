@@ -332,9 +332,64 @@ check_vkd3d_proton() {
   esac
 }
 
+BUDGET_CHECK="DXVK dxgi takes dxgi.videoMemoryBudgetReserve off the VRAM budget, never below half (simulator told it has less VRAM)"
+BUDGET_RESERVE_MIB=2048
+BUDGET_EXCESS_MIB=65536
+BUDGET_TOLERANCE_MIB=32
+
+query_budget() {
+  local -x DXVK_CONFIG="$1"
+  local output
+  output="$(run_wine_gpu "$GPU" "$(windows_path "$WORK/dxgi-video-memory-budget-test.exe")")" || return 1
+  sed -n 's/^budget \([0-9][0-9]*\) MiB$/\1/p' <<< "$output" | grep . || { echo "$output"; return 1; }
+}
+
+reserved_budget() {
+  local base="$1" reserve="$2" floor=$(($1 / 2))
+  if [ "$base" -gt $((floor + reserve)) ]; then
+    echo $((base - reserve))
+  else
+    echo "$floor"
+  fi
+}
+
+close_to() {
+  local difference=$(($1 - $2))
+  [ "${difference#-}" -le "$BUDGET_TOLERANCE_MIB" ]
+}
+
+run_budget_test() {
+  local base reserved excess expected_reserved expected_excess
+  stop_prefix
+  base="$(query_budget "")" || { echo "$base"; return 1; }
+  reserved="$(query_budget "dxgi.videoMemoryBudgetReserve=$BUDGET_RESERVE_MIB")" || { echo "$reserved"; return 1; }
+  excess="$(query_budget "dxgi.videoMemoryBudgetReserve=$BUDGET_EXCESS_MIB")" || { echo "$excess"; return 1; }
+  expected_reserved="$(reserved_budget "$base" "$BUDGET_RESERVE_MIB")"
+  expected_excess="$(reserved_budget "$base" "$BUDGET_EXCESS_MIB")"
+  echo "without the option: budget $base MiB"
+  echo "reserve $BUDGET_RESERVE_MIB MiB: budget $reserved MiB, expected $expected_reserved ± $BUDGET_TOLERANCE_MIB"
+  echo "reserve $BUDGET_EXCESS_MIB MiB: budget $excess MiB, expected half, $expected_excess ± $BUDGET_TOLERANCE_MIB"
+  close_to "$reserved" "$expected_reserved" && close_to "$excess" "$expected_excess"
+}
+
+check_video_memory_budget() {
+  local status=0 output
+  case "$GPU_STATUS" in
+    0)
+      install_gpu_libraries
+      output="$(run_budget_test)" || status=$?
+      [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+      report "$BUDGET_CHECK" "$verdict" "${output:-no output}"
+      ;;
+    2 | 3) report "$BUDGET_CHECK" skipped "$GPU" ;;
+    *) report "$BUDGET_CHECK" FAIL "$GPU" ;;
+  esac
+}
+
 choose_gpu
 check_shared_fence
 check_vkd3d_proton
+check_video_memory_budget
 
 name="win32u child window drawn by another process (WebView2 in SayIntentions, GSX, REX)"
 if wayland_socket; then
@@ -344,6 +399,32 @@ if wayland_socket; then
   output="$(run_wine_wayland "$(windows_path "$WORK/cross-process-child-test.exe")")" || status=$?
   [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
   report "$name" "$verdict" "${output:-no output}"
+else
+  report "$name" skipped "This check needs the Wayland driver, and WAYLAND_DISPLAY is '${WAYLAND_DISPLAY:-unset}'. Run the check from your desktop session."
+fi
+
+run_hdr_output_test() {
+  local -x WINEDLLOVERRIDES="$WINEDLLOVERRIDES;d3d11,d3d10core,dxgi,d3d12,d3d12core=n"
+  local -x DXVK_LOG_PATH=none DXVK_FILTER_DEVICE_NAME="$GPU" WINE_USE_EGL=1 DXVK_CONFIG="" DXVK_HDR="" DXVK_NO_HDR=""
+  run_wine_wayland "$(windows_path "$WORK/dxgi-hdr-output-test.exe")"
+}
+
+name="DXVK dxgi reports HDR10 on every output Wine sees in HDR (simulator HDR option)"
+if [ "$GPU_STATUS" -ne 0 ]; then
+  report "$name" skipped "$GPU"
+elif wayland_socket; then
+  run_wine reg add 'HKCU\Software\Wine\Drivers' /v Graphics /d wayland /f > /dev/null || true
+  install_gpu_libraries
+  stop_prefix
+  status=0
+  output="$(run_hdr_output_test)" || status=$?
+  case "$status" in
+    0) report "$name" ok "$output" ;;
+    2) report "$name" skipped "${output:-no output}
+No output is in HDR, so nothing could be compared. Turn HDR on in the display settings and run the check again." ;;
+    *) report "$name" FAIL "${output:-no output}
+Without the HDR detection patch of the Proton-CachyOS release, DXGI reports SDR and the simulator greys out its HDR option." ;;
+  esac
 else
   report "$name" skipped "This check needs the Wayland driver, and WAYLAND_DISPLAY is '${WAYLAND_DISPLAY:-unset}'. Run the check from your desktop session."
 fi

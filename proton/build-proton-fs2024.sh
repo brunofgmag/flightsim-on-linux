@@ -81,6 +81,13 @@ VKD3D_TARGET="libs/d3d12core/d3d12core.dll"
 VKD3D_MODULE="lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll"
 IDL_COMPILERS=(widl widl-stable x86_64-w64-mingw32-widl)
 
+DXVK_URL="https://github.com/doitsujin/dxvk"
+DXVK_PATCHES=(
+  "$ROOT/patches/dxvk/dxgi-video-memory-budget-reserve.patch"
+)
+DXVK_TARGET="src/dxgi/dxgi.dll"
+DXVK_MODULE="lib/wine/dxvk/x86_64-windows/dxgi.dll"
+
 CONFIGURE=(--enable-win64 --disable-tests --enable-silent-rules --without-ffmpeg --without-unwind)
 
 USER_SETTINGS=(
@@ -165,7 +172,7 @@ check_preconditions() {
   done
   has_idl_compiler || die "missing program: ${IDL_COMPILERS[*]} (any one of them), which vkd3d-proton needs"
   local patch
-  for patch in "${PATCHES[@]:1}" "${VKD3D_PATCHES[@]}"; do
+  for patch in "${PATCHES[@]:1}" "${VKD3D_PATCHES[@]}" "${DXVK_PATCHES[@]}"; do
     [ -f "$patch" ] || die "missing patch $patch"
   done
   STEAM="$(find_steam)"
@@ -333,6 +340,76 @@ install_vkd3d() {
   echo "$(sha256sum "$target" | cut -d' ' -f1)  $VKD3D_MODULE"
 }
 
+find_dxvk_commit() {
+  step "Finding the DXVK commit of the release"
+  local version="$STAGE/files/lib/wine/dxvk/version" rest
+  [ -f "$version" ] || die "the release has no lib/wine/dxvk/version"
+  read -r DXVK_COMMIT rest < "$version" || true
+  [[ "$DXVK_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "lib/wine/dxvk/version of the release does not start with a commit: $DXVK_COMMIT"
+  echo "dxvk $DXVK_COMMIT"
+}
+
+download_release_dxvk_patches() {
+  step "Downloading the DXVK patches release $RELEASE applies"
+  local answer name url
+  RELEASE_DXVK_PATCHES="$WORK/release-dxvk-patches"
+  mkdir "$RELEASE_DXVK_PATCHES"
+  answer="$(curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/CachyOS/proton-cachyos/contents/patches/dxvk?ref=$RELEASE")"
+  while read -r name url; do
+    [[ "$name" =~ ^[A-Za-z0-9._-]+[.]patch$ ]] || die "release $RELEASE lists an odd patch name in patches/dxvk: $name"
+    curl -fsSL --retry 3 -o "$RELEASE_DXVK_PATCHES/$name" "$url"
+    echo "-- $name"
+  done < <(python3 -I -c 'import json, sys
+for d in json.load(sys.stdin):
+    if d.get("type") == "file" and d.get("name", "").endswith(".patch"):
+        print(d["name"], d["download_url"])' <<< "$answer")
+  [ -n "$(release_dxvk_patches)" ] || die "release $RELEASE has no patches in patches/dxvk; its dxgi.dll would lose the HDR detection they add"
+}
+
+release_dxvk_patches() {
+  find "$RELEASE_DXVK_PATCHES" -maxdepth 1 -name '*.patch' | sort
+}
+
+fetch_dxvk_source() {
+  step "Fetching DXVK $DXVK_COMMIT"
+  DXVK_SOURCE="$WORK/dxvk"
+  git init -q "$DXVK_SOURCE"
+  git -C "$DXVK_SOURCE" fetch -q --depth=1 "$DXVK_URL" "$DXVK_COMMIT"
+  git -C "$DXVK_SOURCE" -c advice.detachedHead=false checkout -q FETCH_HEAD
+  git -C "$DXVK_SOURCE" submodule update -q --init --recursive --depth=1
+}
+
+apply_dxvk_patches() {
+  step "Applying the DXVK patches, the release ones first"
+  cd "$DXVK_SOURCE"
+  local patch
+  while read -r patch; do
+    echo "-- $(basename "$patch")"
+    patch --batch --forward --fuzz=0 -p1 --dry-run -i "$patch" > /dev/null || die "$(basename "$patch") does not apply to DXVK $DXVK_COMMIT"
+    patch --batch --forward --fuzz=0 -p1 -i "$patch"
+  done < <(release_dxvk_patches; printf '%s\n' "${DXVK_PATCHES[@]}")
+}
+
+compile_dxvk() {
+  step "Compiling the 64-bit dxgi.dll of DXVK"
+  cd "$DXVK_SOURCE"
+  meson setup --cross-file build-win64.txt --buildtype release --strip -Db_ndebug=if-release "$WORK/dxvk-objects" > "$WORK/dxvk-meson.log" 2>&1 || die "meson setup failed; see $WORK/dxvk-meson.log"
+  ninja -C "$WORK/dxvk-objects" -j"$JOBS" "$DXVK_TARGET" > "$WORK/dxvk-ninja.log" 2>&1 || die "ninja failed; see $WORK/dxvk-ninja.log"
+}
+
+install_dxvk() {
+  step "Swapping dxgi.dll in the release copy"
+  local source="$WORK/dxvk-objects/$DXVK_TARGET" target="$STAGE/files/$DXVK_MODULE" mode
+  [ -f "$source" ] || die "ninja did not produce $DXVK_TARGET"
+  [ -f "$target" ] && [ ! -L "$target" ] || die "the release has no regular file $DXVK_MODULE"
+  mode="$(stat -c %a "$target")"
+  rm -f "$target"
+  install -m 0755 "$source" "$target"
+  x86_64-w64-mingw32-strip --strip-all "$target"
+  chmod "$mode" "$target"
+  echo "$(sha256sum "$target" | cut -d' ' -f1)  $DXVK_MODULE"
+}
+
 needed_libraries() {
   readelf -d "$1" | sed -n 's/.*(NEEDED).*Shared library: \[\(.*\)\]/\1/p' | sort -u
 }
@@ -445,16 +522,24 @@ write_record() {
     echo "protocol $PROTOCOL"
     echo "overlay fenix-a320-linux-patch $OVERLAY_TAG $OVERLAY_VARIANT"
     echo "vkd3d-proton $VKD3D_COMMIT"
+    echo "dxvk $DXVK_COMMIT"
     for patch in "${PATCHES[@]}"; do
       echo "patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
     done
     for patch in "${VKD3D_PATCHES[@]}"; do
       echo "vkd3d-patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
     done
+    while read -r patch; do
+      echo "dxvk-release-patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
+    done < <(release_dxvk_patches)
+    for patch in "${DXVK_PATCHES[@]}"; do
+      echo "dxvk-patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
+    done
     for module in "${MODULES[@]}"; do
       echo "module $(sha256sum "$STAGE/files/$(module_target "$module")" | cut -d' ' -f1) $(module_target "$module")"
     done
     echo "module $(sha256sum "$STAGE/files/$VKD3D_MODULE" | cut -d' ' -f1) $VKD3D_MODULE"
+    echo "module $(sha256sum "$STAGE/files/$DXVK_MODULE" | cut -d' ' -f1) $DXVK_MODULE"
   } > "$record"
 }
 
@@ -507,9 +592,15 @@ find_vkd3d_commit
 fetch_vkd3d_source
 apply_vkd3d_patches
 compile_vkd3d
+find_dxvk_commit
+download_release_dxvk_patches
+fetch_dxvk_source
+apply_dxvk_patches
+compile_dxvk
 check_libraries
 install_modules
 install_vkd3d
+install_dxvk
 write_settings
 check_runtime
 write_record

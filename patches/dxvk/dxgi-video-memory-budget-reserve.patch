@@ -1,0 +1,46 @@
+diff --git a/src/dxgi/dxgi_adapter.cpp b/src/dxgi/dxgi_adapter.cpp
+index 259c782..b6a5d6f 100644
+--- a/src/dxgi/dxgi_adapter.cpp
++++ b/src/dxgi/dxgi_adapter.cpp
+@@ -312,6 +312,16 @@ namespace dxvk {
+       pVideoMemoryInfo->AvailableForReservation += memInfo.heaps[i].heapSize / 2;
+     }
+ 
++    if (MemorySegmentGroup == DXGI_MEMORY_SEGMENT_GROUP_LOCAL) {
++      const VkDeviceSize budgetReserve = m_factory->GetOptions()->videoMemoryBudgetReserve;
++      const VkDeviceSize budgetFloor = pVideoMemoryInfo->Budget / 2;
++
++      if (budgetReserve)
++        pVideoMemoryInfo->Budget = pVideoMemoryInfo->Budget > budgetFloor + budgetReserve
++          ? pVideoMemoryInfo->Budget - budgetReserve
++          : budgetFloor;
++    }
++
+     // We don't implement reservation, but the observable
+     // behaviour should match that of Windows drivers
+     uint32_t segmentId = uint32_t(MemorySegmentGroup);
+diff --git a/src/dxgi/dxgi_options.cpp b/src/dxgi/dxgi_options.cpp
+index d83342e..99d0596 100644
+--- a/src/dxgi/dxgi_options.cpp
++++ b/src/dxgi/dxgi_options.cpp
+@@ -168,6 +168,7 @@ namespace dxvk {
+     // Interpret the memory limits as Megabytes
+     this->maxDeviceMemory = VkDeviceSize(config.getOption<int32_t>("dxgi.maxDeviceMemory", 0)) << 20;
+     this->maxSharedMemory = VkDeviceSize(config.getOption<int32_t>("dxgi.maxSharedMemory", 0)) << 20;
++    this->videoMemoryBudgetReserve = VkDeviceSize(std::max<int32_t>(config.getOption<int32_t>("dxgi.videoMemoryBudgetReserve", 0), 0)) << 20;
+ 
+     this->maxFrameRate     = config.getOption<int32_t>("dxvk.maxFrameRate",
+                              config.getOption<int32_t>("dxgi.maxFrameRate", 0));
+diff --git a/src/dxgi/dxgi_options.h b/src/dxgi/dxgi_options.h
+index c61c574..af0d4a0 100644
+--- a/src/dxgi/dxgi_options.h
++++ b/src/dxgi/dxgi_options.h
+@@ -39,6 +39,8 @@ namespace dxvk {
+     VkDeviceSize maxDeviceMemory;
+     VkDeviceSize maxSharedMemory;
+ 
++    VkDeviceSize videoMemoryBudgetReserve;
++
+     /// Reports Nvidia GPUs running on the proprietary driver as a different
+     /// vendor (usually AMD). Proton will generally disable this option.
+     bool hideNvidiaGpu;
