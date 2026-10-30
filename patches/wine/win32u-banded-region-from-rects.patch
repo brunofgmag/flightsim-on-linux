@@ -1,0 +1,103 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine win32u: ExtCreateRegion takes rectangles that are already y-x banded, as gdiplus produces them for every filled path, in one pass instead of uniting them one by one. The FSLabs displays spent about 18% of the simulator's cycles uniting these rectangles.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/win32u/region.c b/dlls/win32u/region.c
+--- a/dlls/win32u/region.c
++++ b/dlls/win32u/region.c
+@@ -366,6 +366,7 @@
+ static BOOL REGION_SubtractRegion(WINEREGION *d, WINEREGION *s1, WINEREGION *s2);
+ static BOOL REGION_XorRegion(WINEREGION *d, WINEREGION *s1, WINEREGION *s2);
+ static BOOL REGION_UnionRectWithRegion(const RECT *rect, WINEREGION *rgn);
++static void REGION_SetExtents(WINEREGION *pReg);
+ 
+ /***********************************************************************
+  *            get_region_type
+@@ -890,6 +891,66 @@
+  * NOTES
+  *   See GetRegionData().
+  */
++static BOOL same_band_spans( const RECT *a, const RECT *b, INT count )
++{
++    INT i;
++
++    for (i = 0; i < count; i++)
++        if (a[i].left != b[i].left || a[i].right != b[i].right) return FALSE;
++    return TRUE;
++}
++
++static INT coalesce_last_band( RECT *rects, INT count, INT prev_band, INT band )
++{
++    INT i, width = count - band;
++
++    if (prev_band < 0 || band - prev_band != width) return count;
++    if (rects[prev_band].bottom != rects[band].top) return count;
++    if (!same_band_spans( rects + prev_band, rects + band, width )) return count;
++    for (i = prev_band; i < band; i++) rects[i].bottom = rects[band].bottom;
++    return band;
++}
++
++static BOOL set_banded_rects( WINEREGION *reg, const RECT *rects, DWORD count )
++{
++    INT n = 0, band = -1, prev_band = -1;
++    DWORD i;
++
++    for (i = 0; i < count; i++)
++    {
++        const RECT *rect = &rects[i];
++
++        if (rect->left >= rect->right || rect->top >= rect->bottom) continue;
++
++        if (band >= 0 && rect->top == reg->rects[band].top && rect->bottom == reg->rects[band].bottom)
++        {
++            if (rect->left < reg->rects[n - 1].right) return FALSE;
++            if (rect->left == reg->rects[n - 1].right)
++            {
++                reg->rects[n - 1].right = rect->right;
++                continue;
++            }
++        }
++        else
++        {
++            if (band >= 0)
++            {
++                if (rect->top < reg->rects[band].bottom) return FALSE;
++                n = coalesce_last_band( reg->rects, n, prev_band, band );
++                if (n == band) band = prev_band;
++                prev_band = band;
++            }
++            band = n;
++        }
++        reg->rects[n++] = *rect;
++    }
++    if (band >= 0) n = coalesce_last_band( reg->rects, n, prev_band, band );
++
++    reg->numRects = n;
++    REGION_SetExtents( reg );
++    return TRUE;
++}
++
+ HRGN WINAPI NtGdiExtCreateRegion( const XFORM *xform, DWORD count, const RGNDATA *rgndata )
+ {
+     HRGN hrgn = 0;
+@@ -935,12 +996,16 @@
+ 
+     if (!(obj = alloc_region( rgndata->rdh.nCount ))) return 0;
+ 
+-    pEndRect = (const RECT *)rgndata->Buffer + rgndata->rdh.nCount;
+-    for(pCurRect = (const RECT *)rgndata->Buffer; pCurRect < pEndRect; pCurRect++)
++    if (!set_banded_rects( obj, (const RECT *)rgndata->Buffer, rgndata->rdh.nCount ))
+     {
+-        if (pCurRect->left < pCurRect->right && pCurRect->top < pCurRect->bottom)
++        empty_region( obj );
++        pEndRect = (const RECT *)rgndata->Buffer + rgndata->rdh.nCount;
++        for(pCurRect = (const RECT *)rgndata->Buffer; pCurRect < pEndRect; pCurRect++)
+         {
+-            if (!REGION_UnionRectWithRegion( pCurRect, obj )) goto done;
++            if (pCurRect->left < pCurRect->right && pCurRect->top < pCurRect->bottom)
++            {
++                if (!REGION_UnionRectWithRegion( pCurRect, obj )) goto done;
++            }
+         }
+     }
+     hrgn = alloc_gdi_handle( &obj->obj, NTGDI_OBJ_REGION, &region_funcs );

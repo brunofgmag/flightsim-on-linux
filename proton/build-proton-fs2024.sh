@@ -28,6 +28,7 @@ PATCHES=(
   "$ROOT/patches/wine/win32u-cross-process-d3d12-fence.patch"
   "$ROOT/patches/wine/win32u-signaller-stops-at-exit.patch"
   "$ROOT/patches/wine/win32u-larger-font-caches.patch"
+  "$ROOT/patches/wine/win32u-banded-region-from-rects.patch"
   "$ROOT/patches/wine/d2d1-non-finite-geometry.patch"
   "$ROOT/patches/wine/d2d1-free-figure-vertex-types.patch"
   "$ROOT/patches/wine/d2d1-bezier-split-ceiling.patch"
