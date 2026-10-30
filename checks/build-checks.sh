@@ -10,6 +10,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/notifyicon-guid-test.exe" "$HERE/src/notifyi
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/pathgradient-test.exe" "$HERE/src/pathgradient-test.c" -lgdiplus
 x86_64-w64-mingw32-gcc -O2 -municode -o "$OUT/centered-point-test.exe" "$HERE/src/centered-point-test.c" -lgdiplus -lgdi32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/gdiplus-nested-containers-test.exe" "$HERE/src/gdiplus-nested-containers-test.c" -lgdiplus
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/gdiplus-sourcecopy-text-test.exe" "$HERE/src/gdiplus-sourcecopy-text-test.c" -lgdiplus -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/cross-process-child-test.exe" "$HERE/src/cross-process-child-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-geometry-leak-test.exe" "$HERE/src/d2d1-geometry-leak-test.c" -ld2d1 -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-non-finite-close-test.exe" "$HERE/src/d2d1-non-finite-close-test.c" -ld2d1 -luuid

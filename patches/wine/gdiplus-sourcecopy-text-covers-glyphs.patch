@@ -1,0 +1,86 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine gdiplus: in CompositingModeSourceCopy, text drawn in software writes only the pixels its glyphs cover instead of the whole text rectangle. The FSLabs displays draw their text in SourceCopy on 32-bit bitmaps, and every label had a transparent black box around it.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/gdiplus/graphics.c b/dlls/gdiplus/graphics.c
+--- a/dlls/gdiplus/graphics.c
++++ b/dlls/gdiplus/graphics.c
+@@ -739,6 +739,63 @@
+     return alpha_blend_pixels_hrgn(graphics, dst_x, dst_y, src, src_width, src_height, src_stride, NULL, fmt);
+ }
+ 
++static GpStatus alpha_blend_covered_pixels(GpGraphics *graphics, INT dst_x, INT dst_y,
++    const BYTE *src, INT src_width, INT src_height, INT src_stride)
++{
++    RGNDATA *data;
++    RECT *rects;
++    HRGN covered, clip;
++    INT x, y, start, count = 0;
++    GpStatus stat;
++
++    data = malloc(sizeof(RGNDATAHEADER) + sizeof(RECT) * ((src_width + 1) / 2) * src_height);
++    if (!data)
++        return OutOfMemory;
++    rects = (RECT *)data->Buffer;
++
++    for (y = 0; y < src_height; y++)
++    {
++        const BYTE *alpha = src + src_stride * y + 3;
++
++        for (x = 0; x < src_width;)
++        {
++            if (!alpha[x * 4])
++            {
++                x++;
++                continue;
++            }
++            start = x;
++            while (x < src_width && alpha[x * 4]) x++;
++            SetRect(&rects[count++], dst_x + start, dst_y + y, dst_x + x, dst_y + y + 1);
++        }
++    }
++
++    data->rdh.dwSize = sizeof(RGNDATAHEADER);
++    data->rdh.iType = RDH_RECTANGLES;
++    data->rdh.nCount = count;
++    data->rdh.nRgnSize = count * sizeof(RECT);
++    SetRect(&data->rdh.rcBound, dst_x, dst_y, dst_x + src_width, dst_y + src_height);
++
++    covered = ExtCreateRegion(NULL, data->rdh.dwSize + data->rdh.nRgnSize, data);
++    free(data);
++    if (!covered)
++        return OutOfMemory;
++
++    stat = get_clip_hrgn(graphics, &clip);
++    if (stat == Ok && clip)
++    {
++        CombineRgn(covered, covered, clip, RGN_AND);
++        DeleteObject(clip);
++    }
++
++    if (stat == Ok)
++        stat = alpha_blend_pixels_hrgn(graphics, dst_x, dst_y, src, src_width, src_height, src_stride,
++                                       covered, PixelFormat32bppARGB);
++
++    DeleteObject(covered);
++    return stat;
++}
++
+ static ARGB blend_colors(ARGB start, ARGB end, REAL position)
+ {
+     INT start_a, end_a, final_a;
+@@ -8260,8 +8317,12 @@
+     gdi_transform_acquire(graphics);
+ 
+     /* draw the result */
+-    stat = alpha_blend_pixels(graphics, min_x, min_y, pixel_data, pixel_area.Width,
+-        pixel_area.Height, pixel_data_stride, PixelFormat32bppARGB);
++    if (graphics->compmode == CompositingModeSourceCopy)
++        stat = alpha_blend_covered_pixels(graphics, min_x, min_y, pixel_data, pixel_area.Width,
++            pixel_area.Height, pixel_data_stride);
++    else
++        stat = alpha_blend_pixels(graphics, min_x, min_y, pixel_data, pixel_area.Width,
++            pixel_area.Height, pixel_data_stride, PixelFormat32bppARGB);
+ 
+     gdi_transform_release(graphics);
+ 
