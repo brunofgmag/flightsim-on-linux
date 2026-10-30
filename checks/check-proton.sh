@@ -178,6 +178,11 @@ output="$(run_wine "$(windows_path "$WORK/gdiplus-sourcecopy-text-test.exe")")" 
 report "gdiplus SourceCopy text keeps the background around the glyphs (FSLabs black boxes behind labels)" "$verdict" "${output:-no output}"
 
 status=0
+output="$(run_wine "$(windows_path "$WORK/font-cache-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "win32u font caches hold sixty fonts (FSLabs display CPU)" "$verdict" "${output:-no output}"
+
+status=0
 output="$(run_wine "$(windows_path "$WORK/d2d1-geometry-leak-test.exe")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "d2d1 path geometry gives its memory back (Fenix displays slowing down and freezing)" "$verdict" "${output:-no output}"

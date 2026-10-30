@@ -1,0 +1,84 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine win32u: keep 256 unused realized fonts and the glyph bitmaps of 256 unused fonts instead of 10 and 5, and stop reusing a cached font once a face was added or removed. The FSLabs displays cycle through 59 fonts, and the small caches made win32u realize about 790 fonts a second under its global font lock.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/win32u/ntgdi_private.h b/dlls/win32u/ntgdi_private.h
+--- a/dlls/win32u/ntgdi_private.h
++++ b/dlls/win32u/ntgdi_private.h
+@@ -271,6 +271,7 @@
+     struct list            child_fonts;
+     DWORD                  handle;
+     DWORD                  cache_num;
++    DWORD                  generation;
+     DWORD                  hash;
+     UINT                   charset;
+     UINT                   codepage;
+diff --git a/dlls/win32u/font.c b/dlls/win32u/font.c
+--- a/dlls/win32u/font.c
++++ b/dlls/win32u/font.c
+@@ -1055,11 +1055,14 @@
+     set_default_family( FF_SWISS, ff_swiss_default );
+ }
+ 
++static unsigned int font_set_generation;
++
+ static void release_face( struct gdi_font_face *face )
+ {
+     if (--face->refcount) return;
+     if (face->family)
+     {
++        font_set_generation++;
+         if (face->flags & ADDFONT_ADD_TO_CACHE) remove_face_from_cache( face );
+         list_remove( &face->entry );
+         release_family( face->family );
+@@ -1159,6 +1162,7 @@
+                 face->family = family;
+                 family->refcount++;
+                 face->refcount++;
++                font_set_generation++;
+                 if (face_is_in_full_name_tree( cursor ))
+                 {
+                     wine_rb_replace( &face_full_name_tree, &cursor->full_name_entry, &face->full_name_entry );
+@@ -1178,6 +1182,7 @@
+     face->family = family;
+     family->refcount++;
+     face->refcount++;
++    font_set_generation++;
+     return TRUE;
+ }
+ 
+@@ -2820,12 +2825,13 @@
+ static struct list gdi_font_list = LIST_INIT( gdi_font_list );
+ static struct list unused_gdi_font_list = LIST_INIT( unused_gdi_font_list );
+ static unsigned int unused_font_count;
+-#define UNUSED_CACHE_SIZE 10
++#define UNUSED_CACHE_SIZE 256
+ 
+ static BOOL fontcmp( const struct gdi_font *font, DWORD hash, const LOGFONTW *lf,
+                      const FMAT2 *matrix, BOOL can_use_bitmap )
+ {
+     if (font->hash != hash) return TRUE;
++    if (font->generation != font_set_generation) return TRUE;
+     if (memcmp( &font->matrix, matrix, sizeof(*matrix))) return TRUE;
+     if (memcmp( &font->lf, lf, offsetof(LOGFONTW, lfFaceName))) return TRUE;
+     if (!font->can_use_bitmap != !can_use_bitmap) return TRUE;
+@@ -2862,6 +2868,7 @@
+     static DWORD cache_num = 1;
+ 
+     font->cache_num = cache_num++;
++    font->generation = font_set_generation;
+     font->hash = hash_font( &font->lf, &font->matrix, font->can_use_bitmap );
+     list_add_head( &gdi_font_list, &font->entry );
+     TRACE( "font %p\n", font );
+diff --git a/dlls/win32u/dibdrv/graphics.c b/dlls/win32u/dibdrv/graphics.c
+--- a/dlls/win32u/dibdrv/graphics.c
++++ b/dlls/win32u/dibdrv/graphics.c
+@@ -585,7 +585,7 @@
+         }
+     }
+ 
+-    if (i > 5)  /* keep at least 5 of the most-recently used fonts around */
++    if (i > 256)  /* keep at least 256 of the most-recently used fonts around */
+     {
+         ptr = last_unused;
+         for (i = 0; i < GLYPH_NBTYPES; i++)
