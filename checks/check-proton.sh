@@ -188,6 +188,11 @@ output="$(run_wine "$(windows_path "$WORK/banded-region-test.exe")")" || status=
 report "win32u builds a region from banded rectangles in one pass (FSLabs display CPU)" "$verdict" "${output:-no output}"
 
 status=0
+output="$(run_wine "$(windows_path "$WORK/font-family-lookup-test.exe")" "$(windows_path "$TOOL/files/share/fonts/arial.ttf")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "gdiplus finds a font family without enumerating the fonts (FSLabs display CPU)" "$verdict" "${output:-no output}"
+
+status=0
 output="$(run_wine "$(windows_path "$WORK/d2d1-geometry-leak-test.exe")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "d2d1 path geometry gives its memory back (Fenix displays slowing down and freezing)" "$verdict" "${output:-no output}"

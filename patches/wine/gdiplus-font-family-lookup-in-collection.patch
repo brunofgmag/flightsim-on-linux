@@ -1,0 +1,45 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine gdiplus: GdipCreateFontFamilyFromName returns a family that is in the collection without enumerating the system fonts, and compares the first letter before the locale-aware comparison. The FSLabs displays look up their font families for every string they draw.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/gdiplus/font.c b/dlls/gdiplus/font.c
+--- a/dlls/gdiplus/font.c
++++ b/dlls/gdiplus/font.c
+@@ -676,6 +676,18 @@
+     return TRUE;
+ }
+ 
++static WCHAR ascii_upper(WCHAR c)
++{
++    return c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
++}
++
++static BOOL family_name_matches(const WCHAR *name, const WCHAR *family_name)
++{
++    if (name[0] < 0x80 && family_name[0] < 0x80 && ascii_upper(name[0]) != ascii_upper(family_name[0]))
++        return FALSE;
++    return !wcsicmp(name, family_name);
++}
++
+ static GpStatus find_font_family(GpFontCollection *collection, const WCHAR *name,
+                                  GpFontFamily **family)
+ {
+@@ -684,7 +696,7 @@
+ 
+     for (i = 0; i < collection->count; i++)
+     {
+-        if (!wcsicmp(name, collection->FontFamilies[i]->FamilyName))
++        if (family_name_matches(name, collection->FontFamilies[i]->FamilyName))
+         {
+             status = GdipCloneFontFamily(collection->FontFamilies[i], family);
+             TRACE("<-- %p\n", *family);
+@@ -757,7 +769,8 @@
+         if (status != Ok) return status;
+     }
+ 
+-    status = FontFamilyNotFound;
++    status = find_font_family(collection, name, family);
++    if (status != FontFamilyNotFound) return status;
+ 
+     hdc = CreateCompatibleDC(0);
+ 
