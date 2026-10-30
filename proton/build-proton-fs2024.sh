@@ -26,6 +26,7 @@ PATCHES=(
   "$ROOT/patches/wine/gdiplus-nested-containers.patch"
   "$ROOT/patches/wine/gdiplus-font-family-lookup-in-collection.patch"
   "$ROOT/patches/wine/gdiplus-sourcecopy-text-covers-glyphs.patch"
+  "$ROOT/patches/wine/gdiplus-premultiply-sse2.patch"
   "$ROOT/patches/wine/win32u-cross-process-d3d12-fence.patch"
   "$ROOT/patches/wine/win32u-signaller-stops-at-exit.patch"
   "$ROOT/patches/wine/win32u-larger-font-caches.patch"

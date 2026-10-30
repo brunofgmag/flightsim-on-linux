@@ -198,6 +198,11 @@ output="$(run_wine "$(windows_path "$WORK/alpha-blend-row-test.exe")")" || statu
 report "win32u blends rows of pixels with SSE2 and the same result (FSLabs display CPU)" "$verdict" "${output:-no output}"
 
 status=0
+output="$(run_wine "$(windows_path "$WORK/premultiply-row-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report "gdiplus premultiplies rows of pixels with SSE2 and the same result (FSLabs display CPU)" "$verdict" "${output:-no output}"
+
+status=0
 output="$(run_wine "$(windows_path "$WORK/d2d1-geometry-leak-test.exe")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "d2d1 path geometry gives its memory back (Fenix displays slowing down and freezing)" "$verdict" "${output:-no output}"

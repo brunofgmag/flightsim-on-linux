@@ -1,0 +1,88 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine gdiplus: convert_32bppARGB_to_32bppPARGB, which runs for every image drawn, converts four pixels at a time with SSE2 and writes the same bytes as the scalar code. The FSLabs displays spent about 3% of the simulator's cycles in this loop.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/gdiplus/gdiplus.c b/dlls/gdiplus/gdiplus.c
+--- a/dlls/gdiplus/gdiplus.c
++++ b/dlls/gdiplus/gdiplus.c
+@@ -18,6 +18,9 @@
+ 
+ #include <stdarg.h>
+ #include <math.h>
++#ifdef __SSE2__
++#include <emmintrin.h>
++#endif
+ 
+ #include "windef.h"
+ #include "winbase.h"
+@@ -442,23 +445,57 @@ BOOL lengthen_path(GpPath *path, INT len)
+     return TRUE;
+ }
+ 
++#ifdef __SSE2__
++static inline __m128i premultiply_pair(__m128i pixels)
++{
++    __m128i alpha = _mm_shufflehi_epi16(_mm_shufflelo_epi16(pixels, 0xff), 0xff);
++    __m128i factors = _mm_or_si128(alpha, _mm_set_epi16(255, 0, 0, 0, 255, 0, 0, 0));
++    __m128i rounded = _mm_add_epi16(_mm_mullo_epi16(pixels, factors), _mm_set1_epi16(127));
++    __m128i biased = _mm_add_epi16(_mm_add_epi16(rounded, _mm_srli_epi16(rounded, 8)), _mm_set1_epi16(1));
++    return _mm_srli_epi16(biased, 8);
++}
++#endif
++
++static void premultiply_row(BYTE *dst, const BYTE *src, UINT width)
++{
++    UINT x = 0;
++#ifdef __SSE2__
++    const __m128i zero = _mm_setzero_si128();
++    const __m128i ones = _mm_set1_epi32(-1);
++
++    for (; x + 4 <= width; x += 4)
++    {
++        __m128i pixels = _mm_loadu_si128((const __m128i *)(src + 4 * x));
++
++        if ((_mm_movemask_epi8(_mm_cmpeq_epi8(pixels, ones)) & 0x8888) == 0x8888)
++            _mm_storeu_si128((__m128i *)(dst + 4 * x), pixels);
++        else if ((_mm_movemask_epi8(_mm_cmpeq_epi8(pixels, zero)) & 0x8888) == 0x8888)
++            _mm_storeu_si128((__m128i *)(dst + 4 * x), zero);
++        else
++            _mm_storeu_si128((__m128i *)(dst + 4 * x),
++                _mm_packus_epi16(premultiply_pair(_mm_unpacklo_epi8(pixels, zero)),
++                                 premultiply_pair(_mm_unpackhi_epi8(pixels, zero))));
++    }
++#endif
++    for (; x < width; x++)
++    {
++        const BYTE *pixel = src + 4 * x;
++        BYTE *out = dst + 4 * x;
++        BYTE alpha = pixel[3];
++
++        out[0] = (pixel[0] * alpha + 127) / 255;
++        out[1] = (pixel[1] * alpha + 127) / 255;
++        out[2] = (pixel[2] * alpha + 127) / 255;
++        out[3] = alpha;
++    }
++}
++
+ void convert_32bppARGB_to_32bppPARGB(UINT width, UINT height,
+     BYTE *dst_bits, INT dst_stride, const BYTE *src_bits, INT src_stride)
+ {
+-    INT x, y;
++    INT y;
+     for (y=0; y<height; y++)
+-    {
+-        const BYTE *src=src_bits+y*src_stride;
+-        BYTE *dst=dst_bits+y*dst_stride;
+-        for (x=0; x<width; x++)
+-        {
+-            BYTE alpha=src[3];
+-            *dst++ = (*src++ * alpha + 127) / 255;
+-            *dst++ = (*src++ * alpha + 127) / 255;
+-            *dst++ = (*src++ * alpha + 127) / 255;
+-            *dst++ = *src++;
+-        }
+-    }
++        premultiply_row(dst_bits+y*dst_stride, src_bits+y*src_stride, width);
+ }
+ 
+ /* recursive deletion of GpRegion nodes */
