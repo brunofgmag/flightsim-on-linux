@@ -14,6 +14,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/gdiplus-sourcecopy-text-test.exe" "$HERE/src
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/font-cache-test.exe" "$HERE/src/font-cache-test.c" -lgdi32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/banded-region-test.exe" "$HERE/src/banded-region-test.c" -lgdi32
 x86_64-w64-mingw32-gcc -O2 -municode -o "$OUT/font-family-lookup-test.exe" "$HERE/src/font-family-lookup-test.c" -lgdiplus
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/alpha-blend-row-test.exe" "$HERE/src/alpha-blend-row-test.c" -lgdi32 -lmsimg32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/cross-process-child-test.exe" "$HERE/src/cross-process-child-test.c" -lgdi32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-geometry-leak-test.exe" "$HERE/src/d2d1-geometry-leak-test.c" -ld2d1 -luuid
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/d2d1-non-finite-close-test.exe" "$HERE/src/d2d1-non-finite-close-test.c" -ld2d1 -luuid
