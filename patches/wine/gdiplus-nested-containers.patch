@@ -1,0 +1,363 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine gdiplus: BeginContainer starts a nested container, with a world transform relative to the outer one and a clip inside the outer clip, as Windows does. Fixes the FSLabs PFD attitude sky and ground cut by a tilted edge in turns.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+diff --git a/dlls/gdiplus/gdiplus_private.h b/dlls/gdiplus/gdiplus_private.h
+--- a/dlls/gdiplus/gdiplus_private.h
++++ b/dlls/gdiplus/gdiplus_private.h
+@@ -288,8 +288,10 @@
+     REAL scale;     /* page scale */
+     REAL xres, yres;
+     GpMatrix worldtrans; /* world transform */
++    GpMatrix container_trans;
+     BOOL busy;      /* hdc handle obtained by GdipGetDC */
+     GpRegion *clip; /* in device coords */
++    GpRegion *container_clip;
+     UINT textcontrast; /* not used yet. get/set only */
+     struct list containers;
+     GraphicsContainer contid; /* last-issued container ID */
+diff --git a/dlls/gdiplus/font.c b/dlls/gdiplus/font.c
+--- a/dlls/gdiplus/font.c
++++ b/dlls/gdiplus/font.c
+@@ -465,6 +465,7 @@
+         return InvalidParameter;
+ 
+     matrix = graphics->worldtrans;
++    GdipMultiplyMatrix(&matrix, &graphics->container_trans, MatrixOrderAppend);
+ 
+     if (font->unit == UnitPixel || font->unit == UnitWorld)
+     {
+diff --git a/dlls/gdiplus/graphics.c b/dlls/gdiplus/graphics.c
+--- a/dlls/gdiplus/graphics.c
++++ b/dlls/gdiplus/graphics.c
+@@ -305,10 +305,12 @@
+     }
+     else{
+         REAL scale_x, scale_y;
++        GpMatrix world = graphics->worldtrans;
++        GdipMultiplyMatrix(&world, &graphics->container_trans, MatrixOrderAppend);
+         /* Get an estimate for the amount the pen width is affected by the world
+          * transform. (This is similar to what some of the wine drivers do.) */
+-        scale_x = graphics->worldtrans.matrix[0] + graphics->worldtrans.matrix[2];
+-        scale_y = graphics->worldtrans.matrix[1] + graphics->worldtrans.matrix[3];
++        scale_x = world.matrix[0] + world.matrix[2];
++        scale_y = world.matrix[1] + world.matrix[3];
+ 
+         width = hypotf(scale_x, scale_y) / sqrt(2.0);
+ 
+@@ -2307,7 +2309,9 @@
+     PixelOffsetMode pixeloffset;
+     UINT textcontrast;
+     GpMatrix worldtrans;
++    GpMatrix container_trans;
+     GpRegion* clip;
++    GpRegion* container_clip;
+     INT origin_x, origin_y;
+ } GraphicsContainerItem;
+ 
+@@ -2334,6 +2338,7 @@
+     (*container)->origin_x = graphics->origin_x;
+     (*container)->origin_y = graphics->origin_y;
+     (*container)->worldtrans = graphics->worldtrans;
++    (*container)->container_trans = graphics->container_trans;
+ 
+     sts = GdipCloneRegion(graphics->clip, &(*container)->clip);
+     if(sts != Ok){
+@@ -2342,28 +2347,84 @@
+         return sts;
+     }
+ 
++    if (graphics->container_clip)
++    {
++        sts = GdipCloneRegion(graphics->container_clip, &(*container)->container_clip);
++        if (sts != Ok)
++        {
++            GdipDeleteRegion((*container)->clip);
++            free(*container);
++            *container = NULL;
++            return sts;
++        }
++    }
++
+     return Ok;
+ }
+ 
+ static void delete_container(GraphicsContainerItem* container)
+ {
+     GdipDeleteRegion(container->clip);
++    if (container->container_clip)
++        GdipDeleteRegion(container->container_clip);
+     free(container);
+ }
+ 
++static GpStatus nest_container(GpGraphics *graphics)
++{
++    GpRegion *container_clip;
++    GpStatus sts;
++
++    sts = GdipCloneRegion(graphics->clip, &container_clip);
++    if (sts != Ok)
++        return sts;
++
++    if (graphics->container_clip)
++        GdipDeleteRegion(graphics->container_clip);
++    graphics->container_clip = container_clip;
++
++    GdipMultiplyMatrix(&graphics->container_trans, &graphics->worldtrans, MatrixOrderPrepend);
++    GdipSetMatrixElements(&graphics->worldtrans, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
++
++    return Ok;
++}
++
++static GpStatus clip_to_container(GpGraphics *graphics)
++{
++    if (!graphics->container_clip)
++        return Ok;
++
++    return GdipCombineRegionRegion(graphics->clip, graphics->container_clip, CombineModeIntersect);
++}
++
+ static GpStatus restore_container(GpGraphics* graphics,
+         GDIPCONST GraphicsContainerItem* container){
+     GpStatus sts;
+-    GpRegion *newClip;
++    GpRegion *newClip, *newContainerClip = NULL;
+ 
+     sts = GdipCloneRegion(container->clip, &newClip);
+     if(sts != Ok) return sts;
+ 
++    if (container->container_clip)
++    {
++        sts = GdipCloneRegion(container->container_clip, &newContainerClip);
++        if (sts != Ok)
++        {
++            GdipDeleteRegion(newClip);
++            return sts;
++        }
++    }
++
+     graphics->worldtrans = container->worldtrans;
++    graphics->container_trans = container->container_trans;
+ 
+     GdipDeleteRegion(graphics->clip);
+     graphics->clip = newClip;
+ 
++    if (graphics->container_clip)
++        GdipDeleteRegion(graphics->container_clip);
++    graphics->container_clip = newContainerClip;
++
+     graphics->contid = container->contid - 1;
+ 
+     graphics->smoothing = container->smoothing;
+@@ -2570,6 +2631,7 @@
+     if(!*graphics)  return OutOfMemory;
+ 
+     GdipSetMatrixElements(&(*graphics)->worldtrans, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
++    GdipSetMatrixElements(&(*graphics)->container_trans, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+ 
+     if((retval = GdipCreateRegion(&(*graphics)->clip)) != Ok){
+         free(*graphics);
+@@ -2622,6 +2684,7 @@
+     if(!*graphics)  return OutOfMemory;
+ 
+     GdipSetMatrixElements(&(*graphics)->worldtrans, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
++    GdipSetMatrixElements(&(*graphics)->container_trans, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+     GdipSetMatrixElements(&(*graphics)->gdi_transform, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+ 
+     if((retval = GdipCreateRegion(&(*graphics)->clip)) != Ok){
+@@ -2743,6 +2806,8 @@
+     }
+ 
+     GdipDeleteRegion(graphics->clip);
++    if (graphics->container_clip)
++        GdipDeleteRegion(graphics->container_clip);
+ 
+     DeleteObject(graphics->gdi_clip);
+ 
+@@ -6487,6 +6552,9 @@
+             return stat;
+     }
+ 
++    if (graphics->container_clip)
++        return GdipCombineRegionRegion(graphics->clip, graphics->container_clip, CombineModeReplace);
++
+     return GdipSetInfinite(graphics->clip);
+ }
+ 
+@@ -6550,6 +6618,12 @@
+     if(sts != Ok)
+         return sts;
+ 
++    if (type == BEGIN_CONTAINER && (sts = nest_container(graphics)) != Ok)
++    {
++        delete_container(container);
++        return sts;
++    }
++
+     list_add_head(&graphics->containers, &container->entry);
+     *state = graphics->contid = container->contid;
+ 
+@@ -6593,6 +6667,12 @@
+     if(stat != Ok)
+         return stat;
+ 
++    if ((stat = nest_container(graphics)) != Ok)
++    {
++        delete_container(container);
++        return stat;
++    }
++
+     list_add_head(&graphics->containers, &container->entry);
+     *state = graphics->contid = container->contid;
+ 
+@@ -6611,7 +6691,7 @@
+     transform.matrix[4] = dstrect->X - scaled_srcrect.X;
+     transform.matrix[5] = dstrect->Y - scaled_srcrect.Y;
+ 
+-    GdipMultiplyMatrix(&graphics->worldtrans, &transform, MatrixOrderPrepend);
++    GdipMultiplyMatrix(&graphics->container_trans, &transform, MatrixOrderPrepend);
+ 
+     if (is_metafile_graphics(graphics))
+         METAFILE_BeginContainer((GpMetafile*)graphics->image, dstrect, srcrect, unit, container->contid);
+@@ -6728,12 +6808,17 @@
+ GpStatus WINGDIPAPI GdipSetClipGraphics(GpGraphics *graphics, GpGraphics *srcgraphics,
+     CombineMode mode)
+ {
++    GpStatus status;
++
+     TRACE("(%p, %p, %d)\n", graphics, srcgraphics, mode);
+ 
+     if(!graphics || !srcgraphics)
+         return InvalidParameter;
+ 
+-    return GdipCombineRegionRegion(graphics->clip, srcgraphics->clip, mode);
++    status = GdipCombineRegionRegion(graphics->clip, srcgraphics->clip, mode);
++    if (status == Ok)
++        status = clip_to_container(graphics);
++    return status;
+ }
+ 
+ GpStatus WINGDIPAPI GdipSetCompositingMode(GpGraphics *graphics,
+@@ -7097,6 +7182,9 @@
+         if (status == Ok)
+             status = GdipCombineRegionRegion(graphics->clip, region, mode);
+ 
++        if (status == Ok)
++            status = clip_to_container(graphics);
++
+         GdipDeleteRegion(region);
+     }
+     return status;
+@@ -7132,6 +7220,8 @@
+         status = GdipTransformPath(clip_path, &world_to_device);
+         if (status == Ok)
+             GdipCombineRegionPath(graphics->clip, clip_path, mode);
++        if (status == Ok)
++            status = clip_to_container(graphics);
+ 
+         GdipDeletePath(clip_path);
+     }
+@@ -7174,6 +7264,8 @@
+             status = GdipTransformRegion(region, &world_to_device);
+         if (status == Ok)
+             status = GdipCombineRegionRegion(graphics->clip, region, mode);
++        if (status == Ok)
++            status = clip_to_container(graphics);
+ 
+         GdipDeleteRegion(region);
+     }
+@@ -7228,6 +7320,8 @@
+             status = GdipTransformRegion(clip, &world_to_device);
+         if (status == Ok)
+             status = GdipCombineRegionRegion(graphics->clip, clip, mode);
++        if (status == Ok)
++            status = clip_to_container(graphics);
+ 
+         GdipDeleteRegion(clip);
+     }
+@@ -7607,6 +7701,7 @@
+             case CoordinateSpacePage:
+             {
+                 GpMatrix inverted_transform = graphics->worldtrans;
++                GdipMultiplyMatrix(&inverted_transform, &graphics->container_trans, MatrixOrderAppend);
+                 stat = GdipInvertMatrix(&inverted_transform);
+                 if (stat == Ok)
+                     GdipMultiplyMatrix(matrix, &inverted_transform, MatrixOrderAppend);
+@@ -7621,6 +7716,7 @@
+             {
+             case CoordinateSpaceWorld:
+                 memcpy(matrix->matrix, &graphics->worldtrans, sizeof(matrix->matrix));
++                GdipMultiplyMatrix(matrix, &graphics->container_trans, MatrixOrderAppend);
+                 if (dst_space == CoordinateSpacePage)
+                     break;
+                 /* else fall-through */
+@@ -7736,7 +7832,10 @@
+             return stat;
+     }
+ 
+-    return GdipTranslateRegion(graphics->clip, dx, dy);
++    stat = GdipTranslateRegion(graphics->clip, dx, dy);
++    if (stat == Ok)
++        stat = clip_to_container(graphics);
++    return stat;
+ }
+ 
+ /*****************************************************************************
+diff --git a/dlls/gdiplus/metafile.c b/dlls/gdiplus/metafile.c
+--- a/dlls/gdiplus/metafile.c
++++ b/dlls/gdiplus/metafile.c
+@@ -3055,7 +3055,7 @@
+                 return stat;
+             }
+ 
+-            stat = GdipBeginContainer2(metafile->playback_graphics, &cont->state);
++            stat = GdipSaveGraphics(metafile->playback_graphics, &cont->state);
+ 
+             if (stat != Ok)
+             {
+@@ -3109,10 +3109,7 @@
+                 return stat;
+             }
+ 
+-            if (recordType == EmfPlusRecordTypeBeginContainerNoParams)
+-                stat = GdipBeginContainer2(metafile->playback_graphics, &cont->state);
+-            else
+-                stat = GdipSaveGraphics(metafile->playback_graphics, &cont->state);
++            stat = GdipSaveGraphics(metafile->playback_graphics, &cont->state);
+ 
+             if (stat != Ok)
+             {
+@@ -3167,10 +3164,7 @@
+                     free(cont2);
+                 }
+ 
+-                if (type == BEGIN_CONTAINER)
+-                    GdipEndContainer(real_metafile->playback_graphics, cont->state);
+-                else
+-                    GdipRestoreGraphics(real_metafile->playback_graphics, cont->state);
++                GdipRestoreGraphics(real_metafile->playback_graphics, cont->state);
+ 
+                 *real_metafile->world_transform = cont->world_transform;
+                 real_metafile->page_unit = cont->page_unit;
+@@ -3867,10 +3861,11 @@
+     stat = GdipTransformPoints(graphics, CoordinateSpaceDevice, CoordinateSpaceWorld, real_metafile->playback_points, 3);
+ 
+     if (stat == Ok)
+-        stat = GdipBeginContainer2(graphics, &state);
++        stat = GdipSaveGraphics(graphics, &state);
+ 
+     if (stat == Ok)
+     {
++        GdipSetMatrixElements(&graphics->container_trans, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+         stat = GdipSetPageScale(graphics, 1.0);
+ 
+         if (stat == Ok)
+@@ -3959,7 +3954,7 @@
+             free(cont);
+         }
+ 
+-        GdipEndContainer(graphics, state);
++        GdipRestoreGraphics(graphics, state);
+     }
+ 
+     real_metafile->playback_graphics = NULL;

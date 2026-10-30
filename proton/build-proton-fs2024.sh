@@ -23,6 +23,7 @@ PATCHES=(
   "$ROOT/patches/wine/win32u-cross-process-child-windows.patch"
   "$ROOT/patches/wine/winewayland-opaque-xrgb.patch"
   "$ROOT/patches/wine/gdiplus-font-family-after-substitution.patch"
+  "$ROOT/patches/wine/gdiplus-nested-containers.patch"
   "$ROOT/patches/wine/win32u-cross-process-d3d12-fence.patch"
   "$ROOT/patches/wine/win32u-signaller-stops-at-exit.patch"
   "$ROOT/patches/wine/d2d1-non-finite-geometry.patch"
