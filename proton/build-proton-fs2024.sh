@@ -54,6 +54,7 @@ PATCHES=(
   "$ROOT/patches/wine/setupapi-cabinet-open-share-read.patch"
   "$ROOT/patches/wine/ntdll-fenix-gateway-loader-case.patch"
   "$ROOT/patches/wine/ntdll-heap-read-slack.patch"
+  "$ROOT/patches/wine/ntdll-heap-bounded-free-list-scan.patch"
 )
 
 MODULES=(

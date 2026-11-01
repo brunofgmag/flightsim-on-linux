@@ -245,6 +245,8 @@ report_windows_program 'expand.exe extracts one file of a cabinet held open by a
   expand-cabinet-filter-test.exe
 report_windows_program 'ntdll leaves readable memory after every heap block (Axis and Ohs crashing while it copies SimConnect messages)' \
   heap-read-slack-test.exe
+report_windows_program 'ntdll stops walking a free list of blocks that are too small (simulator stopping once a second with the FSLabs A321)' \
+  heap-free-list-scan-test.exe
 
 name="reading another process after an EPERM leaves its main thread running (stutter with ChasePlane)"
 if [ "$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null)" = 1 ]; then
