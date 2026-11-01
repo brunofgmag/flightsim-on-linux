@@ -1,0 +1,5 @@
+REGEDIT4
+
+[-HKEY_CLASSES_ROOT\CLSID\{660B90C8-73A9-4B58-8CAE-355B7F55341B}]
+
+[-HKEY_LOCAL_MACHINE\Software\Microsoft\WindowsRuntime\ActivatableClassId\Windows.UI.Notifications.ToastNotificationManager]

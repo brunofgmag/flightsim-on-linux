@@ -1,0 +1,23 @@
+{
+  "name": "FSDT GSX Pro",
+  "tested_version": "4.0.23",
+  "tested_on": "2026-10-17",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/Program Files (x86)/Addon Manager/Couatl_Updater2.exe"]
+  },
+  "install": {
+    "from": "http://www.fsdreamteam.com",
+    "paid": true,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "FSDT Installer",
+      "script": "launch",
+      "comment": "Opens the FSDT updater in the simulator's prefix to install or update GSX Pro",
+      "icon": {"place": "prefix", "glob": "drive_c/Program Files (x86)/Addon Manager/Couatl_Updater2.exe"}
+    }
+  ]
+}

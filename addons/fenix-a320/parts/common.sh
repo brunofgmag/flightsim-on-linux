@@ -7,8 +7,8 @@ FENIX_BACKUP="$FSOL_COMPATDATA/flightsim-on-linux-backup/fenix-a320"
 FENIX_CACHE_PATH_LIMIT=150
 export FENIX_PARTS FSOL_ROOT FENIX_DEPS FENIX_CONFIG FENIX_BACKUP
 
-# shellcheck source=/dev/null
-. "$FSOL_ROOT/tools/proton-runner.sh"
+# shellcheck source=tools/addon-launch.sh
+. "$FSOL_ROOT/tools/addon-launch.sh"
 
 ok() {
   echo "ok $*"
@@ -48,16 +48,7 @@ fenix_wineserver_kill() {
 }
 
 fenix_stash() {
-  local target="$1" backup="$FENIX_BACKUP/$2"
-  if [ -e "$backup" ] || [ -e "$backup.absent" ]; then
-    return 0
-  fi
-  mkdir -p "$(dirname "$backup")"
-  if [ -f "$target" ]; then
-    cp -p "$target" "$backup"
-  else
-    : > "$backup.absent"
-  fi
+  addon_stash "$1" "$FENIX_BACKUP/$(dirname "$2")"
 }
 
 fenix_restore() {

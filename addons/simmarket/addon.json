@@ -1,0 +1,24 @@
+{
+  "name": "simMarket",
+  "tested_version": "4.20.0",
+  "tested_on": "2026-10-14",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/simMarket/app-*/simMarket.exe"]
+  },
+  "install": {
+    "from": "simMarket's website: the Windows installer, a Squirrel package",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "simMarket",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts simMarket in the simulator's prefix",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/simMarket/app-*/simMarket.exe"}
+    }
+  ]
+}

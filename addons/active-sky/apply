@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/registry.sh
+. "$HERE/../../tools/registry.sh"
+# shellcheck source=addons/active-sky/parts/carlito.sh
+. "$HERE/parts/carlito.sh"
+# shellcheck source=addons/active-sky/parts/program.sh
+. "$HERE/parts/program.sh"
+
+if ! carlito_installed; then
+  echo "FAIL the Carlito font is not installed, and Calibri would have nothing to be replaced by; install the ttf-carlito package (Arch) or the package of your distribution that holds Carlito, then run apply again"
+  exit 1
+fi
+registry_set "$ACTIVE_SKY_KEY" Calibri Carlito
+registry_set "$ACTIVE_SKY_KEY" "Calibri Medium" Carlito

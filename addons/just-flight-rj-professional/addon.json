@@ -1,0 +1,15 @@
+{
+  "name": "Just Flight RJ Professional",
+  "tested_version": "0.1.6",
+  "tested_on": "2026-10-16",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["justflight-aircraft-rj/manifest.json"]
+  },
+  "install": {
+    "from": "your Just Flight account",
+    "paid": true,
+    "kind": "installer"
+  }
+}

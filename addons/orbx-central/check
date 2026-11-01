@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+exe="$(compgen -G "${FSOL_PREFIX:-/nonexistent}/drive_c/users/*/AppData/Local/Programs/orbx-central/Orbx Central.exe" | head -n 1 || true)"
+if [ -n "$exe" ]; then
+  echo "ok the Windows build of Orbx Central is installed in the prefix"
+else
+  echo "FAIL the Windows build of Orbx Central is not installed in the prefix; run: flightsim-on-linux addon install orbx-central <orbx-central installer.exe>"
+  exit 1
+fi

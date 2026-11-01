@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: this aircraft needs nothing in the prefix; it comes from the store and runs inside the simulator"

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: the RJ Professional needs nothing in the prefix once it is installed; the install command takes care of the one trap its installer has"

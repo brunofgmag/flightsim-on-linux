@@ -1,0 +1,15 @@
+{
+  "name": "Glass Cockpit DLSS Fix",
+  "tested_version": "1.0.2",
+  "tested_on": "2026-10-20",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "sim": ["glass-cockpit-dlss-fix.addon64"]
+  },
+  "install": {
+    "from": "https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases",
+    "paid": false,
+    "kind": "native"
+  }
+}

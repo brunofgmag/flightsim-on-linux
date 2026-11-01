@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: the 757 is installed by BBS Nest (addon install bbs-nest, then addon launch bbs-nest), and what it needs from Linux is in the bbs-nest add-on"

@@ -2,14 +2,12 @@ import contextlib
 import hashlib
 import importlib.util
 import io
-import json
 import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 ADDON = ROOT / "addons" / "fenix-a320"
@@ -34,6 +32,13 @@ FENIX_PROTON_FIXES = [
 BOM = b"\xef\xbb\xbf"
 
 
+from tests.test_dotnet48_addon import FAKE_WINE, FAKE_WINESERVER, PrefixCase, section  # noqa: E402
+
+
+def fenix_user_sections():
+    return [section(rf"Software\Wine\AppDefaults\{exe}\DllOverrides", {"mscoree": "native"}) for exe in overrides.FENIX_EXECUTABLES]
+
+
 def load_module(name, file):
     spec = importlib.util.spec_from_file_location(name, file)
     module = importlib.util.module_from_spec(spec)
@@ -42,7 +47,7 @@ def load_module(name, file):
 
 
 exe_xml = load_module("fsol_exe_xml", ROOT / "fsol" / "exe_xml.py")
-dotnet48 = load_module("fenix_dotnet48", PARTS / "dotnet48.py")
+overrides = load_module("fenix_overrides", PARTS / "overrides.py")
 
 
 def run_exe_xml(*args):
@@ -52,8 +57,8 @@ def run_exe_xml(*args):
     return code, output.getvalue().strip()
 
 
-def run_dotnet48(*args):
-    parsed = dotnet48.parser().parse_args(list(args))
+def run_overrides(*args):
+    parsed = overrides.parser().parse_args(list(args))
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
         code = parsed.run(parsed)
@@ -164,205 +169,57 @@ class ExeXmlTest(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
-def section(path, values):
-    lines = [f"[{path.replace(chr(92), chr(92) * 2)}] 1792018458", "#time=1dd5c2ef1c5b6e6"]
-    lines.extend(f'"{name}"="{value.replace(chr(92), chr(92) * 2)}"' for name, value in values.items())
-    return "\n".join(lines) + "\n\n"
+class FenixOverridesTest(PrefixCase):
+    def check(self):
+        return run_overrides("check", str(self.prefix))
 
-
-def registry_file(*sections):
-    return "WINE REGISTRY Version 2\n;; All keys relative to \\\\User\\\\S-1-5-21-0-0-0-1000\n\n" + "".join(sections)
-
-
-def fenix_user_sections():
-    sections = [section(r"Software\Wine\DllOverrides", {"mscoree": "builtin"}), section(r"Software\Wine\Mono\AsmOverrides", {"*": "gac=n"})]
-    sections.extend(section(rf"Software\Wine\AppDefaults\{exe}\DllOverrides", {"mscoree": "native"}) for exe in dotnet48.FENIX_EXECUTABLES)
-    return sections
-
-
-def fenix_system_sections():
-    return [
-        section(r"Software\Microsoft\.NETFramework", {"InstallRoot": "C:\\windows\\Microsoft.NET\\Framework64\\"}),
-        section(r"Software\Wow6432Node\Microsoft\.NETFramework", {"InstallRoot": "C:\\windows\\Microsoft.NET\\Framework\\"}),
-    ]
-
-
-def version_resource(version):
-    return b"MZ" + "ProductVersion".encode("utf-16le") + b"\0\0" + version.encode("utf-16le") + b"\0\0"
-
-
-class PrefixCase(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
-        self.prefix = self.root / "pfx"
-        self.prefix.mkdir()
-
-    def write_registry(self, user=None, system=None):
-        (self.prefix / "user.reg").write_text(registry_file(*(fenix_user_sections() if user is None else user)))
-        (self.prefix / "system.reg").write_text(registry_file(*(fenix_system_sections() if system is None else system)))
-
-    def write_clr(self, folder, version):
-        path = self.prefix / "drive_c/windows/Microsoft.NET" / folder / "v4.0.30319/clr.dll"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(version_resource(version))
-
-    def write_mscoree(self, folder, data):
-        path = self.prefix / "drive_c/windows" / folder / "mscoree.dll"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-
-    def check(self, *group):
-        return run_dotnet48("check", str(self.prefix), *group)
-
-
-class Dotnet48RegistryTest(PrefixCase):
     def test_a_complete_registry_is_all_ok(self):
-        self.write_registry()
-        code, output = self.check("registry")
+        self.write_registry(user=fenix_user_sections())
+        code, output = self.check()
         self.assertEqual(code, 0)
-        self.assertEqual(len(output.splitlines()), 9)
+        self.assertEqual(len(output.splitlines()), 5)
         self.assertTrue(all(line.startswith("ok ") for line in output.splitlines()))
 
     def test_each_missing_override_is_a_fail_line_naming_the_executable(self):
         sections = [item for item in fenix_user_sections() if "FenixDisplay.exe" not in item]
         self.write_registry(user=sections)
-        code, output = self.check("registry")
+        code, output = self.check()
         self.assertEqual(code, 1)
         fails = [line for line in output.splitlines() if line.startswith("FAIL ")]
         self.assertEqual(len(fails), 1)
         self.assertIn("FenixDisplay.exe", fails[0])
 
-    def test_a_global_native_override_is_a_fail(self):
-        sections = fenix_user_sections()
-        sections[0] = section(r"Software\Wine\DllOverrides", {"mscoree": "native"})
-        self.write_registry(user=sections)
-        code, output = self.check("registry")
-        self.assertEqual(code, 1)
-        self.assertIn("FAIL mscoree stays builtin", output)
-
-    def test_the_32_bit_install_root_is_read_from_the_wow6432node_key(self):
-        self.write_registry(system=fenix_system_sections()[:1])
-        code, output = self.check("registry")
-        self.assertEqual(code, 1)
-        self.assertIn("FAIL .NETFramework InstallRoot (32-bit view)", output)
-        self.assertIn("ok .NETFramework InstallRoot (64-bit view)", output)
-
-    def test_the_wow6432node_key_alone_satisfies_only_the_32_bit_line(self):
-        self.write_registry(system=fenix_system_sections()[1:])
-        code, output = self.check("registry")
-        self.assertEqual(code, 1)
-        self.assertIn("ok .NETFramework InstallRoot (32-bit view)", output)
-        self.assertIn("FAIL .NETFramework InstallRoot (64-bit view)", output)
-
     def test_a_prefix_without_registry_files_fails_every_line(self):
-        code, output = self.check("registry")
+        code, output = self.check()
         self.assertEqual(code, 1)
-        self.assertEqual([line[:5] for line in output.splitlines()], ["FAIL "] * 9)
+        self.assertEqual([line[:5] for line in output.splitlines()], ["FAIL "] * 5)
 
-    def test_the_missing_settings_come_back_as_reg_add_arguments_with_the_32_bit_view_marked(self):
-        self.write_registry(system=[])
-        _, output = run_dotnet48("missing", str(self.prefix))
-        lines = [line.split("\t") for line in output.splitlines()]
-        self.assertEqual(len(lines), 2)
-        self.assertIn(["reg", "add", r"HKLM\Software\Microsoft\.NETFramework", "/v", "InstallRoot", "/t", "REG_SZ", "/d", "C:\\windows\\Microsoft.NET\\Framework\\", "/f", "/reg:32"], lines)
-        self.assertIn(["reg", "add", r"HKLM\Software\Microsoft\.NETFramework", "/v", "InstallRoot", "/t", "REG_SZ", "/d", "C:\\windows\\Microsoft.NET\\Framework64\\", "/f"], lines)
+    def test_the_missing_overrides_come_back_as_reg_add_arguments(self):
+        self.write_registry(user=fenix_user_sections()[:3])
+        _, output = run_overrides("missing", str(self.prefix))
+        keys = [line.split("\t")[2] for line in output.splitlines()]
+        self.assertEqual(keys, [rf"HKCU\Software\Wine\AppDefaults\{exe}\DllOverrides" for exe in overrides.FENIX_EXECUTABLES[3:]])
+        self.assertTrue(all(line.split("\t")[7:9] == ["/d", "native"] for line in output.splitlines()))
 
     def test_nothing_is_missing_when_the_registry_is_complete(self):
-        self.write_registry()
-        self.assertEqual(run_dotnet48("missing", str(self.prefix)), (0, ""))
+        self.write_registry(user=fenix_user_sections())
+        self.assertEqual(run_overrides("missing", str(self.prefix)), (0, ""))
 
-    def test_only_the_app_overrides_that_exist_are_listed_for_removal(self):
-        self.write_registry(user=fenix_user_sections()[:4])
-        _, output = run_dotnet48("remove-overrides", str(self.prefix))
+    def test_only_the_overrides_that_exist_are_listed_for_removal(self):
+        self.write_registry(user=fenix_user_sections()[:2])
+        _, output = run_overrides("remove", str(self.prefix))
         keys = [line.split("\t")[2] for line in output.splitlines()]
-        self.assertEqual(keys, [rf"HKCU\Software\Wine\AppDefaults\{exe}\DllOverrides" for exe in dotnet48.FENIX_EXECUTABLES[:2]])
+        self.assertEqual(keys, [rf"HKCU\Software\Wine\AppDefaults\{exe}\DllOverrides" for exe in overrides.FENIX_EXECUTABLES[:2]])
 
-    def test_no_setting_touches_the_windows_version(self):
-        for setting in dotnet48.SETTINGS:
-            self.assertNotIn("Windows NT", setting.path)
-            self.assertNotEqual((setting.path.lower(), setting.name.lower()), (r"software\wine", "version"))
-
-
-WINDOWS_11 = {"ProductName": "Microsoft Windows 11", "CurrentVersion": "6.3", "CurrentBuild": "22000", "UBR": 588}
-WINDOWS_7 = {"ProductName": "Microsoft Windows 7", "CurrentVersion": "6.1", "CurrentBuild": "7601", "CSDVersion": "Service Pack 1"}
-CURRENT_VERSION = r"Software\Microsoft\Windows NT\CurrentVersion"
+    def test_the_overrides_are_the_only_settings_and_none_touches_the_general_ones(self):
+        self.assertEqual(len(overrides.SETTINGS), len(overrides.FENIX_EXECUTABLES))
+        for setting in overrides.SETTINGS:
+            self.assertIn("AppDefaults", setting.path)
+            self.assertEqual((setting.name, setting.value), ("mscoree", "native"))
 
 
-def typed_section(path, values):
-    lines = [f"[{path.replace(chr(92), chr(92) * 2)}] 1792018458", "#time=1dd5c2ef1c5b6e6"]
-    for name, value in values.items():
-        lines.append(f'"{name}"=dword:{value:08x}' if isinstance(value, int) else f'"{name}"="{value}"')
-    return "\n".join(lines) + "\n\n"
 
-
-class WindowsVersionTest(PrefixCase):
-    def write_version(self, system_values, wine_version=None):
-        system = [typed_section(CURRENT_VERSION, system_values), typed_section(CURRENT_VERSION.replace("Software\\", "Software\\Wow6432Node\\", 1), system_values)]
-        user = [] if wine_version is None else [section(r"Software\Wine", {"Version": wine_version})]
-        self.write_registry(user=user, system=system)
-
-    def restore(self, snapshot):
-        _, output = run_dotnet48("winver-restore", str(self.prefix), str(snapshot))
-        return [line.split("\t") for line in output.splitlines()]
-
-    def test_the_snapshot_restores_changed_values_deletes_added_ones_and_brings_back_removed_ones(self):
-        snapshot = self.root / "windows-version.json"
-        self.write_version(WINDOWS_11)
-        run_dotnet48("winver-save", str(self.prefix), str(snapshot))
-        self.assertEqual(self.restore(snapshot), [])
-        self.write_version(WINDOWS_7, wine_version="win7")
-        lines = self.restore(snapshot)
-        key = rf"HKLM\{CURRENT_VERSION}"
-        self.assertIn(["reg", "add", key, "/v", "CurrentBuild", "/t", "REG_SZ", "/d", "22000", "/f"], lines)
-        self.assertIn(["reg", "add", key, "/v", "UBR", "/t", "REG_DWORD", "/d", "588", "/f", "/reg:32"], lines)
-        self.assertIn(["reg", "delete", key, "/v", "CSDVersion", "/f"], lines)
-        self.assertIn(["reg", "delete", key, "/v", "CSDVersion", "/f", "/reg:32"], lines)
-        self.assertIn(["reg", "delete", r"HKCU\Software\Wine", "/v", "Version", "/f"], lines)
-
-    def test_a_wine_version_that_was_set_comes_back_as_it_was(self):
-        snapshot = self.root / "windows-version.json"
-        self.write_version(WINDOWS_11, wine_version="win10")
-        run_dotnet48("winver-save", str(self.prefix), str(snapshot))
-        self.write_version(WINDOWS_11, wine_version="win7")
-        self.assertEqual(self.restore(snapshot), [["reg", "add", r"HKCU\Software\Wine", "/v", "Version", "/t", "REG_SZ", "/d", "win10", "/f"]])
-
-    def test_other_values_of_the_wine_key_are_not_watched(self):
-        snapshot = self.root / "windows-version.json"
-        self.write_version(WINDOWS_11)
-        run_dotnet48("winver-save", str(self.prefix), str(snapshot))
-        self.write_registry(user=[section(r"Software\Wine", {"ShowDotFiles": "Y"})], system=[typed_section(CURRENT_VERSION, WINDOWS_11), typed_section(CURRENT_VERSION.replace("Software\\", "Software\\Wow6432Node\\", 1), WINDOWS_11)])
-        self.assertEqual(self.restore(snapshot), [])
-
-
-class Dotnet48FilesTest(PrefixCase):
-    def test_clr_dll_must_be_a_4_8_build_in_both_folders(self):
-        self.write_clr("Framework64", "4.8.3761.0")
-        self.write_clr("Framework", "4.7.3190.0")
-        code, output = self.check("clr")
-        self.assertEqual(code, 1)
-        self.assertIn("ok Framework64/v4.0.30319/clr.dll is .NET 4.8.x (4.8.3761.0)", output)
-        self.assertIn("FAIL Framework/v4.0.30319/clr.dll is .NET 4.8.x (found 4.7.3190.0)", output)
-
-    def test_a_missing_clr_dll_is_a_fail(self):
-        code, output = self.check("clr")
-        self.assertEqual(code, 1)
-        self.assertEqual(output.count("(found no file)"), 2)
-
-    def test_mscoree_is_judged_by_sha256(self):
-        good = b"microsoft"
-        wanted = {"system32": hashlib.sha256(good).hexdigest(), "syswow64": "0" * 64}
-        self.write_mscoree("system32", good)
-        self.write_mscoree("syswow64", b"wine builtin")
-        with mock.patch.dict(dotnet48.MSCOREE_SHA256, wanted):
-            code, output = self.check("mscoree")
-        self.assertEqual(code, 1)
-        self.assertIn("ok system32/mscoree.dll", output)
-        self.assertIn("FAIL syswow64/mscoree.dll", output)
-
-
-STUB_COMMON = '#!/usr/bin/env bash\necho "source:common" >> "$LOG"\n'
+STUB_COMMON = '#!/usr/bin/env bash\necho "source:common" >> "$LOG"\naddon_prefix_free_or_say() { [ -z "${BUSY:-}" ] || exit 1; }\n'
 STUB_PART = """#!/usr/bin/env bash
 echo "source:{part}" >> "$LOG"
 {part}_apply() {{
@@ -377,8 +234,8 @@ echo "source:{part}" >> "$LOG"
   echo "{part}:undo" >> "$LOG"
 }}
 """
-PART_ORDER = ["dotnet48", "geometry", "dxvk", "exe_xml"]
-CHECK_ORDER = PART_ORDER + ["proton"]
+PART_ORDER = ["dotnet", "geometry", "dxvk", "exe_xml"]
+CHECK_ORDER = PART_ORDER + ["proton", "community"]
 
 
 class ScriptOrderTest(unittest.TestCase):
@@ -405,14 +262,19 @@ class ScriptOrderTest(unittest.TestCase):
         self.assertEqual(calls[:5], ["source:common"] + [f"source:{part}" for part in PART_ORDER])
         self.assertEqual(calls[5:], [f"{part}:apply" for part in PART_ORDER])
 
+    def test_apply_changes_nothing_while_the_prefix_is_busy(self):
+        code, calls = self.run_action("apply", BUSY="1")
+        self.assertNotEqual(code, 0)
+        self.assertEqual([call for call in calls if call.endswith(":apply")], [])
+
     def test_apply_stops_at_the_first_failing_part_even_inside_the_function(self):
         code, calls = self.run_action("apply", BREAK="geometry")
         self.assertNotEqual(code, 0)
         applied = [call for call in calls if call.endswith(":apply") or call.endswith(":after-break")]
-        self.assertEqual(applied, ["dotnet48:apply", "geometry:apply"])
+        self.assertEqual(applied, ["dotnet:apply", "geometry:apply"])
 
     def test_check_runs_every_part_and_fails_if_any_failed(self):
-        code, calls = self.run_action("check", BREAK="dotnet48")
+        code, calls = self.run_action("check", BREAK="dotnet")
         self.assertEqual(code, 1)
         self.assertEqual([call for call in calls if call.endswith(":check")], [f"{part}:check" for part in CHECK_ORDER])
 
@@ -436,30 +298,14 @@ class ScriptOrderTest(unittest.TestCase):
         self.assertEqual([call for call in calls if call.endswith(":undo")], [f"{part}:undo" for part in reversed(PART_ORDER)])
 
 
-FAKE_WINE = '''#!/bin/sh
-printf '%s\\037' "$WINEPREFIX" "$WINEDLLOVERRIDES" "$@" >> "$WINE_LOG"
-printf '\\n' >> "$WINE_LOG"
-case "$1" in
-  *ndp48*)
-    for folder in Framework64 Framework; do
-      mkdir -p "$WINEPREFIX/drive_c/windows/Microsoft.NET/$folder/v4.0.30319"
-      printf 'installed' > "$WINEPREFIX/drive_c/windows/Microsoft.NET/$folder/v4.0.30319/fusion.dll"
-    done
-    exit "${INSTALLER_EXIT:-0}"
-    ;;
-esac
-'''
-FAKE_WINESERVER = '''#!/bin/sh
-printf 'wineserver|%s\\n' "$*" >> "$WINE_LOG"
-'''
-
-
 class PartsInBashTest(PrefixCase):
     def setUp(self):
         super().setUp()
         self.compatdata = self.root / "compatdata"
         self.base = self.root / "base"
         self.base.mkdir()
+        self.community = self.root / "community"
+        self.community.mkdir()
         self.cache = self.root / "cache"
         self.proton = self.root / "proton"
         wine = self.proton / "files/bin/wine"
@@ -477,6 +323,7 @@ class PartsInBashTest(PrefixCase):
             "FSOL_COMPATDATA": str(self.compatdata),
             "FSOL_PROTON": str(self.proton),
             "FSOL_BASE": str(self.base),
+            "FSOL_COMMUNITY": str(self.community),
             "FSOL_CACHE": str(self.cache),
             "WINE_LOG": str(self.wine_log),
             "WINEDLLOVERRIDES": "winemenubuilder.exe=d",
@@ -485,12 +332,58 @@ class PartsInBashTest(PrefixCase):
         self.env.pop("FSOL_STEAM", None)
 
     def bash(self, script):
-        text = f'set -euo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/dotnet48.sh\n. parts/exe_xml.sh\n{script}\n'
+        text = f'set -euo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/dotnet.sh\n. parts/exe_xml.sh\n{script}\n'
         return subprocess.run(["bash", "-c", text], env=self.env, capture_output=True, text=True)
 
     def proton_check(self):
         text = f'set -euo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/proton.sh\nproton_check\n'
         return subprocess.run(["bash", "-c", text], env=self.env, capture_output=True, text=True)
+
+    def community_check(self):
+        text = f'set -uo pipefail\ncd "{ADDON}"\n. parts/common.sh\n. parts/community.sh\ncommunity_check\n'
+        return subprocess.run(["bash", "-c", text], env=self.env, capture_output=True, text=True)
+
+    def test_community_passes_when_the_fenix_packages_are_real_folders(self):
+        for name in ("fnx-aircraft-320", "fnx-aircraft-319-321"):
+            (self.community / name).mkdir()
+        result = self.community_check()
+        self.assertEqual((result.returncode, result.stdout), (0, "ok no package named fnx-* in Community is a Linux link\n"))
+
+    def test_community_passes_without_any_fenix_package(self):
+        self.assertEqual(self.community_check().returncode, 0)
+
+    def test_a_fenix_package_that_is_a_link_fails_and_the_line_says_why(self):
+        target = self.root / "organiser/fnx-aircraft-320"
+        target.mkdir(parents=True)
+        (self.community / "fnx-aircraft-320").symlink_to(target)
+        (self.community / "fnx-aircraft-319-321").mkdir()
+        result = self.community_check()
+        self.assertEqual(result.returncode, 1)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("FAIL fnx-aircraft-320 in Community is a Linux link"))
+        for expected in ("replaces every file of the package", "deleted the folder behind a link", "delete the link with rm, not the folder"):
+            self.assertIn(expected, lines[0])
+
+    def test_every_linked_fenix_package_gets_its_own_line(self):
+        target = self.root / "organiser"
+        target.mkdir()
+        for name in ("fnx-aircraft-320", "fnx-aircraft-319-321"):
+            (self.community / name).symlink_to(target)
+        result = self.community_check()
+        self.assertEqual([line.split()[1] for line in result.stdout.splitlines()], ["fnx-aircraft-319-321", "fnx-aircraft-320"])
+
+    def test_a_link_to_another_package_is_not_the_checks_business(self):
+        target = self.root / "organiser"
+        target.mkdir()
+        (self.community / "gsx-profiles").symlink_to(target)
+        self.assertEqual(self.community_check().returncode, 0)
+
+    def test_a_community_folder_that_was_not_found_fails(self):
+        self.env["FSOL_COMMUNITY"] = ""
+        result = self.community_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("FAIL the Community folder was not found", result.stdout)
 
     def write_proton_build(self, stock=()):
         record = []
@@ -628,111 +521,170 @@ class PartsInBashTest(PrefixCase):
         self.bash("exe_xml_undo")
         self.assertFalse((self.base / "exe.xml").exists())
 
-    def backup_folder(self):
-        return self.compatdata / "flightsim-on-linux-backup/fenix-a320"
-
-    def outside_link(self, version, name):
-        target = self.root / "outside" / f"{version}-{name}"
-        target.parent.mkdir(exist_ok=True)
-        target.write_bytes(b"builtin")
-        return target
-
-    def test_the_installer_runs_after_windows_7_is_set_and_without_the_proton_symlinks(self):
-        self.write_registry()
-        outside = []
-        for version in ("Framework64", "Framework"):
-            folder = self.prefix / "drive_c/windows/Microsoft.NET" / version / "v4.0.30319"
-            folder.mkdir(parents=True)
-            builtin = self.outside_link(version, "fusion.dll")
-            (folder / "fusion.dll").symlink_to(builtin)
-            outside.append((folder / "fusion.dll", builtin))
-        result = self.bash("dotnet48_run_installer /cache/ndp48-x86-x64-allos-enu.exe")
+    def test_the_overrides_are_written_for_the_fenix_programs_only_after_the_base_add_on_did_its_part(self):
+        self.write_registry(user=[], system=[])
+        result = self.bash("dotnet48_apply() { echo base >> \"$WINE_LOG.order\"; }\ndotnet_apply")
         self.assertEqual(result.returncode, 0, result.stderr)
-        installer = "/cache/ndp48-x86-x64-allos-enu.exe"
-        self.assertEqual(self.wine_sequence(), [["winecfg", "-v", "win7"], "kill", [installer, "/q", "/norestart"], "kill", "kill"])
-        self.assertEqual(self.wine_calls()[2][1], "fusion=b")
-        for installed, builtin in outside:
-            self.assertEqual(builtin.read_bytes(), b"builtin")
-            self.assertFalse(installed.is_symlink())
-            self.assertEqual(installed.read_bytes(), b"installed")
-        self.assertFalse((self.backup_folder() / "windows-version.json").exists())
+        self.assertEqual((self.root / "wine.log.order").read_text().split(), ["base"])
+        added = [call[call.index("/v") - 1] for call in self.wine_arguments() if call[:2] == ["reg", "add"]]
+        self.assertEqual(added, [rf"HKCU\Software\Wine\AppDefaults\{exe}\DllOverrides" for exe in overrides.FENIX_EXECUTABLES])
+        self.assertIn("changed 5 registry values", result.stdout)
 
-    def test_the_windows_version_saved_by_an_earlier_run_is_restored_before_a_new_one_is_saved(self):
-        (self.prefix / "system.reg").write_text(registry_file(typed_section(CURRENT_VERSION, WINDOWS_7)))
-        (self.prefix / "user.reg").write_text(registry_file())
-        self.backup_folder().mkdir(parents=True)
-        saved = self.backup_folder() / "windows-version.json"
-        saved.write_text(json.dumps([WINDOWS_11, {}, {}]))
-        result = self.bash("dotnet48_run_installer /cache/ndp48-x86-x64-allos-enu.exe")
-        self.assertEqual(result.returncode, 2)
-        self.assertEqual(self.wine_calls()[0][2:5], ["reg", "add", rf"HKLM\{CURRENT_VERSION}"])
-        self.assertIn(["reg", "add", rf"HKLM\{CURRENT_VERSION}", "/v", "CurrentBuild", "/t", "REG_SZ", "/d", "22000", "/f"], self.wine_arguments())
-        self.assertNotIn(["winecfg", "-v", "win7"], self.wine_sequence())
-        self.assertEqual(json.loads(saved.read_text())[0], WINDOWS_11)
+    def test_the_overrides_are_not_written_again_and_the_user_registry_is_exported_first(self):
+        self.write_registry(user=[], system=[])
+        self.bash("dotnet48_apply() { :; }\ndotnet_apply")
+        exported = [call for call in self.wine_arguments() if call[:2] == ["reg", "export"]]
+        self.assertEqual([call[2] for call in exported], [r"HKCU\Software\Wine\AppDefaults"])
+        self.write_registry(user=fenix_user_sections())
+        self.wine_log.unlink()
+        result = self.bash("dotnet48_apply() { :; }\ndotnet_apply")
+        self.assertEqual(self.wine_arguments(), [])
+        self.assertIn("already mscoree native for the Fenix executables", result.stdout)
 
-    def test_a_symlink_to_the_builtin_mscoree_is_replaced_and_never_written_through(self):
-        outside = self.outside_link("system32", "mscoree.dll")
-        target = self.prefix / "drive_c/windows/system32/mscoree.dll"
-        target.parent.mkdir(parents=True)
-        target.symlink_to(outside)
-        source = self.root / "microsoft-mscoree.dll"
-        source.write_bytes(b"microsoft")
-        saved = self.backup_folder() / "mscoree/system32/mscoree.dll"
-        result = self.bash(f'dotnet48_verify_mscoree() {{ :; }}\ndotnet48_place_mscoree system32 "{source}"')
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(outside.read_bytes(), b"builtin")
-        self.assertFalse(target.is_symlink())
-        self.assertEqual(target.read_bytes(), b"microsoft")
-        self.assertTrue(saved.is_symlink())
-        self.assertEqual(os.readlink(saved), str(outside))
-        result = self.bash("dotnet48_restore_mscoree")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(target.is_symlink())
-        self.assertEqual(os.readlink(target), str(outside))
-        self.assertEqual(outside.read_bytes(), b"builtin")
-
-    def test_a_failing_installer_still_gives_back_the_windows_version_and_fails_apply(self):
-        self.write_registry()
-        self.env["INSTALLER_EXIT"] = "3"
-        result = self.bash("dotnet48_run_installer /cache/ndp48-x86-x64-allos-enu.exe")
-        self.assertEqual(result.returncode, 3)
-        self.assertFalse((self.backup_folder() / "windows-version.json").exists())
-
-    def test_a_run_that_was_interrupted_restores_the_saved_windows_version_first(self):
-        (self.prefix / "system.reg").write_text(registry_file(typed_section(CURRENT_VERSION, WINDOWS_7)))
-        (self.prefix / "user.reg").write_text(registry_file())
-        self.backup_folder().mkdir(parents=True)
-        (self.backup_folder() / "windows-version.json").write_text(json.dumps([WINDOWS_11, {}, {}]))
-        result = self.bash("dotnet48_restore_windows_version")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("did not go back", result.stderr)
-        self.assertIn(["reg", "add", rf"HKLM\{CURRENT_VERSION}", "/v", "CurrentBuild", "/t", "REG_SZ", "/d", "22000", "/f"], self.wine_arguments())
-
-    def test_dotnet48_undo_removes_the_app_overrides_restores_mscoree_and_leaves_net_and_gac(self):
-        self.write_registry()
-        self.write_mscoree("system32", b"microsoft 64")
-        self.write_mscoree("syswow64", b"microsoft 32")
-        saved = self.compatdata / "flightsim-on-linux-backup/fenix-a320/mscoree"
-        (saved / "system32").mkdir(parents=True)
-        (saved / "syswow64").mkdir(parents=True)
-        (saved / "system32/mscoree.dll").write_bytes(b"wine 64")
-        (saved / "syswow64/mscoree.dll").write_bytes(b"wine 32")
-        result = self.bash("dotnet48_undo")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        deleted = [call for call in self.wine_arguments() if call[:2] == ["reg", "delete"]]
-        self.assertEqual(deleted, [["reg", "delete", rf"HKCU\Software\Wine\AppDefaults\{exe}\DllOverrides", "/v", "mscoree", "/f"] for exe in dotnet48.FENIX_EXECUTABLES])
-        self.assertEqual((self.prefix / "drive_c/windows/system32/mscoree.dll").read_bytes(), b"wine 64")
-        self.assertEqual((self.prefix / "drive_c/windows/syswow64/mscoree.dll").read_bytes(), b"wine 32")
-        self.assertFalse((saved / "system32/mscoree.dll").exists())
-        self.assertIn("left .NET Framework 4.8 installed and gac=n", result.stdout)
-        self.assertFalse(any("gac" in argument or "NETFramework" in argument for call in self.wine_arguments() for argument in call))
-
-    def test_dotnet48_check_prints_one_line_per_thing_and_fails_on_an_empty_prefix(self):
-        result = self.bash("dotnet48_check || echo status=$?")
+    def test_check_has_the_base_lines_and_the_override_lines_and_fails_on_an_empty_prefix(self):
+        result = self.bash("dotnet_check || echo status=$?")
         lines = result.stdout.splitlines()
         self.assertEqual(lines[-1], "status=1")
         self.assertEqual(len(lines) - 1, 13)
         self.assertTrue(all(line.startswith(("ok ", "FAIL ")) for line in lines[:-1]))
+
+    def test_undo_removes_the_fenix_overrides_and_leaves_the_base_to_its_own_add_on(self):
+        self.write_registry(user=fenix_user_sections())
+        self.write_mscoree("system32", b"microsoft 64")
+        saved = self.compatdata / "flightsim-on-linux-backup/dotnet48/mscoree/system32"
+        saved.mkdir(parents=True)
+        (saved / "mscoree.dll").write_bytes(b"wine 64")
+        result = self.bash("dotnet_undo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        deleted = [call for call in self.wine_arguments() if call[:2] == ["reg", "delete"]]
+        self.assertEqual(deleted, [["reg", "delete", rf"HKCU\Software\Wine\AppDefaults\{exe}\DllOverrides", "/v", "mscoree", "/f"] for exe in overrides.FENIX_EXECUTABLES])
+        self.assertEqual((self.prefix / "drive_c/windows/system32/mscoree.dll").read_bytes(), b"microsoft 64")
+        self.assertIn("addon undo dotnet48", result.stdout)
+        self.assertFalse(any("gac" in argument or "NETFramework" in argument for call in self.wine_arguments() for argument in call))
+
+
+from fsol import addons as fsol_addons, desktop as fsol_desktop  # noqa: E402
+from tests.test_addons import RecordingTools  # noqa: E402
+from tests.test_machine import FakeMachine, write as write_text  # noqa: E402
+
+SETUP_NAME = "FenixInstaller-1.0.286-0763ce3.exe"
+
+
+def recording_stub(path, record, after=""):
+    write_text(path, f'#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "{record}"\nenv >> "{record}.env"\n{after}')
+    path.chmod(0o755)
+
+
+class InstallAndShortcutTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.fake = FakeMachine(self.root).build()
+        self.found = self.fake.discover()
+        self.record = self.root / "record"
+        recording_stub(self.fake.tool / "files/bin/wine", self.record)
+        recording_stub(self.fake.tool / "files/bin/wineserver", Path(f"{self.record}.server"))
+        self.setup = self.root / "downloads" / SETUP_NAME
+        write_text(self.setup, "MZ")
+
+    def install(self, **extra):
+        env = {
+            **os.environ,
+            "HOME": str(self.root / "home"),
+            "FSOL_PREFIX": str(self.found.prefix),
+            "FSOL_PROTON": str(self.found.proton),
+            "FSOL_CACHE": str(self.root / "cache"),
+            "FSOL_CLI": str(self.root / "cli"),
+            "FSOL_ADDON": "fenix-a320",
+            **extra,
+        }
+        return subprocess.run([str(ADDON / "install")], env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+
+    def recorded(self):
+        return self.record.read_text().splitlines() if self.record.exists() else []
+
+    def test_the_manifest_reports_the_versions_the_test_machine_has_and_where_to_get_the_installer(self):
+        addon = fsol_addons.load(ADDON)
+        self.assertEqual((addon.tested_version, addon.tested_on), ("3.0.0.7613", "2026-10-29"))
+        self.assertEqual(addon.install, {"from": "https://fenixsim.com", "paid": None, "kind": "installer"})
+        self.assertTrue(addon.can_install)
+
+    def test_the_setup_runs_alone_in_the_prefix_and_the_script_waits_for_the_prefix_to_end(self):
+        result = self.install(FSOL_INSTALLER=str(self.setup))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.recorded(), [f"{self.fake.tool}/files/bin/wine {self.setup}"])
+        self.assertTrue(Path(f"{self.record}.server").exists())
+        self.assertIn(f"WINEPREFIX={self.found.prefix}", Path(f"{self.record}.env").read_text().splitlines())
+
+    def test_the_setup_exit_code_is_the_script_exit_code(self):
+        recording_stub(self.fake.tool / "files/bin/wine", self.record, "exit 4\n")
+        self.assertEqual(self.install(FSOL_INSTALLER=str(self.setup)).returncode, 4)
+
+    def test_without_a_setup_file_the_script_says_how_to_give_one_and_starts_nothing(self):
+        result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("flightsim-on-linux addon install fenix-a320", result.stderr)
+        self.assertEqual(self.recorded(), [])
+
+    def test_the_variable_that_breaks_wine_installers_does_not_reach_the_setup(self):
+        self.install(FSOL_INSTALLER=str(self.setup), NoDefaultCurrentDirectoryInExePath="1")
+        names = {line.split("=", 1)[0] for line in Path(f"{self.record}.env").read_text().splitlines()}
+        self.assertIn("WINEPREFIX", names)
+        self.assertNotIn("NoDefaultCurrentDirectoryInExePath", names)
+
+    def test_the_menu_entry_runs_the_existing_installer_script_and_passes_the_desktop_validator(self):
+        addon = fsol_addons.load(ADDON)
+        self.assertEqual([(entry["title"], entry["script"]) for entry in addon.shortcuts], [("Fenix Installer", "installer")])
+        written = fsol_desktop.write_shortcuts(addon, self.found, ROOT / "bin" / "flightsim-on-linux", self.root / "data", RecordingTools(), lambda line: None)
+        self.assertIn(f'Exec="{ROOT / "bin" / "flightsim-on-linux"}" addon launch fenix-a320 installer', written[0].read_text())
+        if shutil.which("desktop-file-validate"):
+            checked = subprocess.run(["desktop-file-validate", str(written[0])], capture_output=True, text=True)
+            self.assertEqual((checked.returncode, checked.stdout + checked.stderr), (0, ""))
+
+    def test_the_icon_comes_from_the_program_the_installer_script_starts(self):
+        glob = fsol_addons.load(ADDON).shortcuts[0]["icon"]["glob"]
+        script = (ADDON / "installer").read_text()
+        self.assertIn('install_dir="$prefix/drive_c/users/steamuser/AppData/Local/FenixApp"', script)
+        self.assertIn('app_dir="$install_dir/current"', script)
+        self.assertIn('"$app_dir/FenixApp.exe"', script)
+        self.assertEqual(glob, "drive_c/users/*/AppData/Local/FenixApp/current/FenixApp.exe")
+
+
+class FenixPageTest(unittest.TestCase):
+    def setUp(self):
+        from tests.test_maddog_addon import page_problems
+
+        self.problems = page_problems("fenix-a320")
+        self.text = (ROOT / "site" / "pages" / "fenix-a320.html").read_text()
+
+    def test_the_page_follows_the_template(self):
+        self.assertEqual(self.problems, [])
+
+    def test_the_page_reports_the_versions_of_the_test_machine(self):
+        for needed in ("Fenix 3.0.0.7613", "Fenix Installer 1.0.359", "FenixInstaller-1.0.286-0763ce3.exe"):
+            self.assertIn(needed, self.text)
+        self.assertNotIn("3.0.0.7438 on 21 October", self.text)
+
+    def test_the_install_section_covers_the_installer_the_updater_and_the_linked_packages(self):
+        for needed in (
+            "addon install fenix-a320",
+            "addon launch fenix-a320 installer",
+            "addon shortcut fenix-a320",
+            "Velopack",
+            "Update.exe apply",
+            "Checking application pre-requisites",
+            "1.0.353",
+            "fnx-aircraft-320",
+            "fnx-aircraft-319-321",
+            "-name 'fnx-*' -type l",
+            "windows-storage-applicationdata-no-package.patch",
+        ):
+            self.assertIn(needed, self.text)
+
+    def test_the_page_names_no_personal_path(self):
+        for word in ("/home/", "brunom", "Jogos", "FlightAddons"):
+            self.assertNotIn(word, self.text)
 
 
 if __name__ == "__main__":

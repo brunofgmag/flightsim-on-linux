@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: FlightSim Dispatch does not talk to the simulator, so it needs nothing from the simulator's prefix and lives in its own"

@@ -4,7 +4,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from xml.sax.saxutils import unescape
+from xml.sax.saxutils import escape, unescape
 
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 ENTRY = re.compile(r"<Launch\.Addon>.*?</Launch\.Addon>", re.S)
@@ -60,6 +60,53 @@ def state(text, path):
     return "disabled" if DISABLED.search(match.group(0)) else "enabled"
 
 
+def entries_ending(text, suffix):
+    wanted = suffix.casefold()
+    for match in ENTRY.finditer(visible(text)):
+        found = PATH.search(match.group(0))
+        path = unescape(found.group(1)).strip() if found else ""
+        if path.casefold().endswith(wanted):
+            yield match.group(0), path
+
+
+def state_ending(file, suffix):
+    if not Path(file).is_file():
+        return "no-file", None
+    found = list(entries_ending(read_text(file), suffix))
+    if not found:
+        return "absent", None
+    for block, path in found:
+        if not DISABLED.search(block):
+            return "enabled", path
+    return "disabled", found[0][1]
+
+
+def drive_root(prefix, letter):
+    link = Path(prefix) / "dosdevices" / f"{letter.lower()}:"
+    if link.exists():
+        return link.resolve()
+    return Path(prefix) / "drive_c" if letter.lower() == "c" else None
+
+
+def find_ignoring_case(root, relative):
+    current = Path(root)
+    for part in [part for part in relative.replace("\\", "/").split("/") if part]:
+        if (current / part).exists():
+            current = current / part
+            continue
+        match = next((child for child in current.iterdir() if child.name.casefold() == part.casefold()), None) if current.is_dir() else None
+        if match is None:
+            return None
+        current = match
+    return current
+
+
+def linux_path(prefix, windows_path):
+    letter, separator, rest = windows_path.partition(":")
+    root = drive_root(prefix, letter) if len(letter) == 1 and separator else None
+    return find_ignoring_case(root, rest) if root else None
+
+
 def newline_of(text):
     return "\r\n" if "\r\n" in text else "\n"
 
@@ -87,9 +134,9 @@ def indents(text):
 def entry_lines(name, path, outer, inner):
     return [
         f"{outer}<Launch.Addon>",
-        f"{inner}<Name>{name}</Name>",
+        f"{inner}<Name>{escape(name)}</Name>",
         f"{inner}<Disabled>false</Disabled>",
-        f"{inner}<Path>{path}</Path>",
+        f"{inner}<Path>{escape(path)}</Path>",
         f"{outer}</Launch.Addon>",
     ]
 

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/dotnet48.sh"
+
+dotnet48_undo

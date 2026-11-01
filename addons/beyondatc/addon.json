@@ -1,0 +1,23 @@
+{
+  "name": "BeyondATC",
+  "tested_version": "1.8.23.EA",
+  "tested_on": "2026-10-30",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/BeyondATC/BeyondATC.exe"]
+  },
+  "install": {
+    "from": "https://www.beyondatc.net",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "BeyondATC",
+      "script": "launch",
+      "comment": "Starts BeyondATC inside the running simulator's container",
+      "icon": {"place": "prefix", "glob": "drive_c/BeyondATC/BeyondATC.exe"}
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+copy_loader() {
+  local source="$SI_APP/runtimes/win-x64/native/WebView2Loader.dll" target="$SI_APP/WebView2Loader.dll"
+  if [ ! -f "$source" ]; then
+    echo "SayIntentions is not installed yet, so there is no WebView2Loader.dll to copy; run apply again after the install"
+  elif cmp -s "$source" "$target"; then
+    echo "already WebView2Loader.dll beside SayIntentionsAI.exe"
+  else
+    addon_stash "$target" "$SI_BACKUP"
+    cp "$source" "$target"
+    echo "changed SayIntentionsAI folder: WebView2Loader.dll copied beside SayIntentionsAI.exe, where wine-mono looks for it"
+  fi
+}
+
+write_registry() {
+  local work count
+  work="$(mktemp -d "${TMPDIR:-/tmp}/sayintentions-reg.XXXXXX")"
+  mkdir -p "$SI_BACKUP"
+  count="$(python3 -I "$SI_PARTS/sayintentions.py" plan-apply "$FSOL_PREFIX" "$SI_BACKUP/registry.json" "$work/apply.reg")"
+  if [ "$count" -gt 0 ]; then
+    addon_alone regedit /S "$(addon_windows_path "$work/apply.reg")" > /dev/null || { rm -rf "$work"; si_die "regedit could not import the settings"; }
+    echo "changed the registry: $count setting(s) for the WebView2 browser, the .NET programs and the fonts of SayIntentions"
+  else
+    echo "already every registry setting SayIntentions needs"
+  fi
+  rm -rf "$work"
+}
+
+warn_without_net48() {
+  if [ "$(python3 -I "$SI_PARTS/sayintentions.py" net48 "$FSOL_PREFIX")" = missing ]; then
+    echo "the prefix has no .NET Framework 4.8, so si_telemetry.exe stays on wine-mono and the SayIntentions interface stays on its loading screen; run: flightsim-on-linux addon apply dotnet48, then run apply again"
+  fi
+}
+
+write_registry
+copy_loader
+warn_without_net48
+echo "left alone: the font substitutions for Segoe UI and Consolas, which flightsim-on-linux doctor offers; the Update Hub's links in Community, which the links watcher and the launch script look after"

@@ -102,6 +102,50 @@ class CheckCommandTest(unittest.TestCase):
 
 
 
+VKD3D_PATCH = "root-signature-reuse-identical-blob.patch"
+VKD3D_MODULE = "lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll"
+
+
+class VulkanPatchKindTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.proton = Path(self.temp.name) / "proton"
+        module = self.proton / "files" / VKD3D_MODULE
+        module.parent.mkdir(parents=True)
+        module.write_bytes(b"d3d12core of the build")
+
+    def record(self, kind="vkd3d-patch", patch_sha=None, module_sha=None):
+        patch_sha = patch_sha or sha256((ROOT / "patches" / "vkd3d-proton" / VKD3D_PATCH).read_bytes())
+        lines = [f"{kind} {patch_sha} {VKD3D_PATCH}", f"module {module_sha or sha256(b'd3d12core of the build')} {VKD3D_MODULE}"]
+        (self.proton / "fs2024-build.txt").write_text("\n".join(lines) + "\n")
+
+    def test_a_vkd3d_patch_is_listed_under_its_own_kind_in_its_own_folder(self):
+        self.record()
+        self.assertEqual(proton_build.patch_line(self.proton, VKD3D_PATCH, VKD3D_MODULE, GOOD, kind="vkd3d-patch"), (True, GOOD))
+
+    def test_the_same_name_listed_as_a_wine_patch_does_not_count(self):
+        self.record(kind="patch")
+        good, text = proton_build.patch_line(self.proton, VKD3D_PATCH, VKD3D_MODULE, GOOD, kind="vkd3d-patch")
+        self.assertFalse(good)
+        self.assertIn(f"does not list this repository's {VKD3D_PATCH}", text)
+
+    def test_another_version_of_the_vkd3d_patch_does_not_count(self):
+        self.record(patch_sha="0" * 64)
+        self.assertFalse(proton_build.patch_line(self.proton, VKD3D_PATCH, VKD3D_MODULE, GOOD, kind="vkd3d-patch")[0])
+
+    def test_the_default_kind_is_still_the_wine_patch_folder(self):
+        self.record()
+        self.assertFalse(proton_build.patch_line(self.proton, VKD3D_PATCH, VKD3D_MODULE, GOOD)[0])
+
+    def test_the_patch_and_the_module_are_looked_at_apart(self):
+        self.record(module_sha="0" * 64)
+        self.assertEqual(proton_build.listed_line(self.proton, VKD3D_PATCH, GOOD, "vkd3d-patch"), (True, GOOD))
+        good, text = proton_build.module_line(self.proton, VKD3D_MODULE, GOOD)
+        self.assertFalse(good)
+        self.assertEqual(text, f"{VKD3D_MODULE} in {self.proton / 'files'} is not the one its build record lists; run: flightsim-on-linux proton build")
+
+
 OTHER = "lib/wine/x86_64-windows/wintrust.dll"
 
 

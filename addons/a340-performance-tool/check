@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+status=0
+
+if [ -z "${FSOL_BASE:-}" ]; then
+  echo "FAIL no base folder found; run: flightsim-on-linux machine"
+  exit 1
+fi
+if [ -L "$A340_WORK" ] || [ ! -d "$A340_WORK" ]; then
+  echo "FAIL the A340 work folder $A340_WORK does not exist or is a link; load the A340 once"
+  exit 1
+fi
+echo "ok the A340 work folder is a real folder"
+if [ -L "$A340_PREVLOG" ] || [ ! -f "$A340_PREVLOG" ]; then
+  echo "FAIL ToLissPrevLog.txt does not exist or is a link; fly the A340 once and close the simulator"
+  exit 1
+fi
+if [ -f "$A340_SESSION" ]; then
+  if [ -w "$A340_PREVLOG" ]; then
+    echo "FAIL a session is on but ToLissPrevLog.txt is writable; run: flightsim-on-linux addon launch a340-performance-tool off"
+    status=1
+  elif a340_watcher_alive "$(a340_session_value id)"; then
+    echo "ok the tool is on: ToLissPrevLog.txt is read-only and the watcher is waiting for the simulator"
+  else
+    echo "FAIL a session is on but its watcher is gone; close the simulator and run: flightsim-on-linux addon launch a340-performance-tool off"
+    status=1
+  fi
+elif [ ! -w "$A340_PREVLOG" ]; then
+  echo "FAIL ToLissPrevLog.txt is read-only and no session of this tool is on; something else left it so (chmod u+w restores it)"
+  status=1
+else
+  echo "ok the tool is off and ToLissPrevLog.txt is writable"
+fi
+exit "$status"

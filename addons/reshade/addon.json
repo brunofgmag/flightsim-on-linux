@@ -1,0 +1,15 @@
+{
+  "name": "ReShade",
+  "tested_version": "6.8.0",
+  "tested_on": "2026-10-14",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "sim": ["dxgi.dll"]
+  },
+  "install": {
+    "from": "reshade.me, installed on a Windows machine, then copied from that install: there is no Linux installer",
+    "paid": false,
+    "kind": "installer"
+  }
+}

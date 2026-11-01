@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+exec python3 -I "$HERE/parts/simconnect_tcp.py" undo "${FSOL_BASE:?FSOL_BASE is not set}" "${FSOL_COMPATDATA:?FSOL_COMPATDATA is not set}/flightsim-on-linux-backup/simconnect-tcp" "${FSOL_CACHE:?FSOL_CACHE is not set}/simconnect"

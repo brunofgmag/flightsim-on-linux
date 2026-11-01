@@ -1,0 +1,23 @@
+{
+  "name": "PMDG Operations Center 3",
+  "tested_version": "3.0.289",
+  "tested_on": "2026-10-13",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/Programs/pmdg-oc3/PMDG OC3.exe"]
+  },
+  "install": {
+    "from": "PMDG's public update manifest, https://cdn.pmdg.com/oc3-client-releases/prod.yml; run: flightsim-on-linux addon launch pmdg-oc3 update, which downloads the installer, checks it and installs it",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "PMDG OC3",
+      "script": "launch",
+      "comment": "Starts PMDG Operations Center 3 with the two options that let it open and draw in place",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Programs/pmdg-oc3/PMDG OC3.exe"}
+    }
+  ]
+}

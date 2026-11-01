@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to undo: apply changes nothing; addon shortcut ifly-737-max8 --remove takes out the menu entry"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -u
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/links.sh"
+POLL="${FSOL_LINKS_POLL:-1}"
+
+si_need_attr_tools || exit 1
+trap 'si_restore_links; exit 0' TERM INT
+
+echo "[sayintentions-links] started at $(date)"
+while true; do
+  if pgrep -f -- "$SI_HUB_PATTERN" > /dev/null; then
+    pgrep -f -- "$SI_SIMULATOR_PATTERN" > /dev/null || si_stash_links
+  else
+    si_restore_links
+  fi
+  sleep "$POLL"
+done

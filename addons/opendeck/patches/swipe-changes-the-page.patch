@@ -1,0 +1,78 @@
+diff --git a/src-tauri/src/elgato.rs b/src-tauri/src/elgato.rs
+index fbdc3e6..70b16c7 100644
+--- a/src-tauri/src/elgato.rs
++++ b/src-tauri/src/elgato.rs
+@@ -139,6 +139,28 @@ pub async fn wake_deeply_sleeping_devices() {
+ 	}
+ }
+ 
++async fn swipe_page(device_id: &str, forward: bool) -> Result<(), anyhow::Error> {
++	let current = crate::store::profiles::DEVICE_STORES.write().await.get_selected_profile(device_id)?;
++	let Some((group, _)) = current.rsplit_once('/') else { return Ok(()) };
++	let prefix = format!("{group}/Page ");
++	let mut pages: Vec<String> = crate::store::profiles::get_device_profiles(device_id)?
++		.into_iter()
++		.filter(|id| id.starts_with(&prefix) && !id.ends_with(".bak") && !id.ends_with(".temp"))
++		.collect();
++	pages.sort();
++	pages.dedup();
++	let Some(index) = pages.iter().position(|id| *id == current) else { return Ok(()) };
++	let target = if forward { (index + 1) % pages.len() } else { (index + pages.len() - 1) % pages.len() };
++	if target == index {
++		return Ok(());
++	}
++	crate::events::inbound::misc::switch_profile(crate::events::inbound::misc::SwitchProfileEvent {
++		device: device_id.to_owned(),
++		profile: pages[target].clone(),
++	})
++	.await
++}
++
+ async fn init(device: AsyncStreamDeck, device_id: String) {
+ 	if ELGATO_DEVICES.read().await.contains_key(&device_id) {
+ 		return;
+@@ -219,6 +241,10 @@ async fn init(device: AsyncStreamDeck, device_id: String) {
+ 					};
+ 					inbound::devices::touchscreen_press(touchscreen_press(position, x, y, false)).await
+ 				}
++				DeviceStateUpdate::TouchScreenSwipe((start_x, _), (end_x, _)) => match kind {
++					Kind::Plus | Kind::PlusXl if start_x != end_x => swipe_page(&device_id, end_x < start_x).await,
++					_ => continue,
++				},
+ 				DeviceStateUpdate::TouchScreenLongPress(x, y) => {
+ 					let (position, x, y) = match kind {
+ 						Kind::Plus | Kind::PlusXl => ((x / 200) as u8, x % 200, y),
+@@ -226,7 +252,6 @@ async fn init(device: AsyncStreamDeck, device_id: String) {
+ 					};
+ 					inbound::devices::touchscreen_press(touchscreen_press(position, x, y, true)).await
+ 				}
+-				_ => Ok(()),
+ 			} {
+ 				Ok(_) => (),
+ 				Err(error) => log::warn!("Failed to process device event {update:?}: {error}"),
+diff --git a/src-tauri/src/events/inbound/misc.rs b/src-tauri/src/events/inbound/misc.rs
+index 2e13047..3bf2b9e 100644
+--- a/src-tauri/src/events/inbound/misc.rs
++++ b/src-tauri/src/events/inbound/misc.rs
+@@ -44,8 +44,8 @@ pub async fn show_ok(event: ContextEvent) -> Result<(), anyhow::Error> {
+ 
+ #[derive(Clone, Serialize, Deserialize)]
+ pub struct SwitchProfileEvent {
+-	device: String,
+-	profile: String,
++	pub(crate) device: String,
++	pub(crate) profile: String,
+ }
+ 
+ pub async fn switch_profile(event: SwitchProfileEvent) -> Result<(), anyhow::Error> {
+diff --git a/src-tauri/src/events/inbound/mod.rs b/src-tauri/src/events/inbound/mod.rs
+index 06f4605..d105a7f 100644
+--- a/src-tauri/src/events/inbound/mod.rs
++++ b/src-tauri/src/events/inbound/mod.rs
+@@ -1,5 +1,5 @@
+ pub(crate) mod devices;
+-mod misc;
++pub(crate) mod misc;
+ mod property_inspector;
+ mod settings;
+ mod states;

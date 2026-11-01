@@ -66,7 +66,7 @@ addon_prefix_run() {
   shift 2
   runtime="$(TOOL="$FSOL_PROTON" STEAM_DIR="${STEAM_DIR:-${FSOL_STEAM:-}}" find_runtime)"
   [ -z "$runtime" ] || runner=("$runtime" --)
-  "${runner[@]}" env WINEPREFIX="$prefix" WINEDEBUG=-all \
+  "${runner[@]}" env WINEPREFIX="$prefix" WINEDEBUG="${WINEDEBUG:--all}" \
     WINEDLLPATH="$FSOL_PROTON/files/lib/vkd3d:$FSOL_PROTON/files/lib/wine" \
     "$FSOL_PROTON/files/bin/$program" "$@" < /dev/null
 }

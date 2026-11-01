@@ -1,0 +1,24 @@
+{
+  "name": "Orbx Central",
+  "tested_version": "4.5.50",
+  "tested_on": "2026-10-16",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/Programs/orbx-central/Orbx Central.exe"]
+  },
+  "install": {
+    "from": "Orbx's website: the Windows installer of Orbx Central, not the Linux AppImage",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Orbx Central",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts Orbx Central in the simulator's prefix, with the simulator closed",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Programs/orbx-central/Orbx Central.exe"}
+    }
+  ]
+}

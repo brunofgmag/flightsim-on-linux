@@ -1,0 +1,36 @@
+{
+  "name": "Maddog MD-80 (Leonardo)",
+  "tested_version": "2.1 b283",
+  "tested_on": "2026-10-22",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/Maddog X Files/MSFS 2024/MDClient/MDClient.exe"],
+    "community": ["lsh-maddogx-aircraft/manifest.json"]
+  },
+  "install": {
+    "from": "https://www.flythemaddog.com",
+    "paid": true,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Maddog Manager",
+      "script": "maddog-manager",
+      "comment": "Opens the native Maddog Manager: liveries, options and panel state",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Maddog X Files/Maddog Manager/Maddog Manager.exe"}
+    },
+    {
+      "title": "Maddog registration",
+      "script": "register",
+      "comment": "Opens the Maddog Load Manager to register the MD-80; the simulator and every other program of the prefix must be closed",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Maddog X Files/Load Manager/maddog_lm.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^C:.*\\\\MDClient\\\\MDClient\\.exe",
+    "script": "launch-mdclient",
+    "trigger": {"aircraft": "Maddog"},
+    "stop": "on_other_aircraft"
+  }
+}

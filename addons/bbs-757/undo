@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to undo: apply changes nothing; remove the aircraft with BBS Nest"

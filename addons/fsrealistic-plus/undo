@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$(cd "$HERE/../.." && pwd)"
+EXE_XML="${FSOL_BASE:?no base folder found; run: flightsim-on-linux machine}/exe.xml"
+MARK="$FSOL_COMPATDATA/flightsim-on-linux-backup/fsrealistic-plus/exe-xml-entry"
+
+if [ ! -f "$MARK" ]; then
+  echo "already no entry of ours in exe.xml; an entry you or the installer wrote stays"
+  exit 0
+fi
+{ read -r result; read -r windows; } < "$MARK"
+if [ "$result" = created ]; then
+  python3 -I "$ROOT/fsol/exe_xml.py" remove --delete-if-empty "$EXE_XML" "$windows" > /dev/null
+else
+  python3 -I "$ROOT/fsol/exe_xml.py" remove "$EXE_XML" "$windows" > /dev/null
+fi
+rm -f "$MARK"
+echo "removed the FSRealistic+ entry that apply added to exe.xml"

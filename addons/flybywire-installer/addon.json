@@ -1,0 +1,15 @@
+{
+  "name": "FlyByWire Installer",
+  "tested_version": "3.7.2",
+  "tested_on": "2026-10-14",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["flybywire-*", "fsltl-traffic-*"]
+  },
+  "install": {
+    "from": "FlyByWire Simulations' website: the Linux AppImage of the FlyByWire Installer",
+    "paid": null,
+    "kind": "native"
+  }
+}

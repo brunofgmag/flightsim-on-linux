@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+if [ -f "$(mono_copy_dir)/$MONO_WINDOWSBASE" ] && [ "$(python3 -I "$MONO_PARTS/clr.py" state "$(mono_copy_dir)/$MONO_WINDOWSBASE" dispatcher-timer 2> /dev/null)" = patched ]; then
+  mono_restore_original axis-and-ohs "$MONO_WINDOWSBASE"
+else
+  rm -f "$AAO_BACKUP/mono/$MONO_WINDOWSBASE"
+  echo "already no timer patch in WindowsBase.dll"
+fi
+mono_copy_release axis-and-ohs
+
+if [ -f "$AAO_ASM_OVERRIDE_ADDED" ]; then
+  current="$(python3 -I "$AAO_PARTS/aao.py" asm-override "$FSOL_PREFIX")"
+  if [ "$current" = "gac=n" ] && python3 -I "$FSOL_ROOT/addons/dotnet48/parts/dotnet48.py" check "$FSOL_PREFIX" clr > /dev/null 2>&1; then
+    echo "left *=gac=n alone: .NET Framework 4.8 is installed, and without it wine-mono programs load Microsoft's WPF and crash"
+  elif [ "$current" = "gac=n" ]; then
+    addon_alone reg delete 'HKCU\Software\Wine\Mono\AsmOverrides' /v '*' /f > /dev/null || aao_die "reg delete failed"
+    echo "changed the registry: *=gac=n removed from HKCU\\Software\\Wine\\Mono\\AsmOverrides"
+  else
+    echo "left * alone: it is '$current' in HKCU\\Software\\Wine\\Mono\\AsmOverrides now, not the gac=n this tool wrote"
+  fi
+  rm -f "$AAO_ASM_OVERRIDE_ADDED"
+else
+  echo "left *=gac=n alone: it was there before this tool, or another add-on set it"
+fi
+[ ! -d "$AAO_BACKUP" ] || find "$AAO_BACKUP" -depth -type d -empty -delete

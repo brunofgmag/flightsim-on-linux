@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/community-packages.sh
+. "$HERE/../../tools/community-packages.sh"
+
+community_packages_check "the store's library was moved or deleted" "install it again from the Contrail store" "install the aircraft from the Contrail store" fss-aircraft-e19x fss-aircraft-e19xfreighter

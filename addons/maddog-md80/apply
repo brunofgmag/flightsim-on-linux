@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+KEY='HKCU\Software\Wine\AppDefaults\MDClient.exe\DllOverrides'
+prefix="${FSOL_PREFIX:?FSOL_PREFIX is not set}"
+
+dotnet="$(python3 -I "$HERE/parts/maddog.py" dotnet "$prefix")"
+state="$(python3 -I "$HERE/parts/maddog.py" override "$prefix")"
+case "$state" in
+  native) echo "already MDClient.exe runs on .NET Framework 4.8 (mscoree is native for it)" ;;
+  other:*)
+    echo "maddog-md80: MDClient.exe already has mscoree set to ${state#other:}; left it as it is" >&2
+    exit 2
+    ;;
+  absent)
+    if [ "$dotnet" != present ]; then
+      echo "left MDClient.exe on wine-mono: the prefix has no .NET Framework 4.8 with Microsoft's mscoree.dll; add it with: flightsim-on-linux addon apply dotnet48, then run apply again"
+      exit 0
+    fi
+    addon_alone reg add "$KEY" /v mscoree /t REG_SZ /d native /f > /dev/null
+    echo "changed MDClient.exe now runs on .NET Framework 4.8 (mscoree is native for it)"
+    ;;
+esac

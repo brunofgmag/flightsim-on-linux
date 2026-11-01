@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*REX Atmos Core\\weathercreator\.exe'
+exe="$FSOL_PREFIX/drive_c/REX Atmos Core/weathercreator.exe"
+
+addon_need_simulator
+addon_refuse_second "$PATTERN"
+if [ ! -f "$exe" ]; then
+  addon_say rex-atmos-core "REX Atmos Core is not installed; its Install it section, at https://brunofgmag.github.io/flightsim-on-linux/rex-atmos-core.html, says how"
+  exit 1
+fi
+log="$(addon_log_file rex-atmos-core)"
+
+EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+disown

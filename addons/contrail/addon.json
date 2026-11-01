@@ -1,0 +1,24 @@
+{
+  "name": "Contrail",
+  "tested_version": "2.4.6",
+  "tested_on": "2026-10-14",
+  "needs": [],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/ContrailApp/app-*/Contrail.exe"]
+  },
+  "install": {
+    "from": "Contrail's website: ContrailSetup.exe, a Squirrel installer",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Contrail",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts Contrail in the simulator's prefix with its winhttp stand-in",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/ContrailApp/app-*/Contrail.exe"}
+    }
+  ]
+}

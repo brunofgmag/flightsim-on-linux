@@ -2,8 +2,10 @@
 set -uo pipefail
 
 CLI="$(dirname "$(readlink -f "$0")")/flightsim-on-linux"
+ADDONS="${FSOL_ADDONS:-$(dirname "$CLI")/../addons}"
 TITLE="Flightsim on Linux"
 LOG="$(mktemp "${TMPDIR:-/tmp}/flightsim-on-linux-gui.XXXXXX")"
+RESULTS="$LOG.results"
 trap 'rm -f "$LOG"' EXIT
 
 if [ -n "${FSOL_DIALOG:-}" ]; then
@@ -35,92 +37,263 @@ show_text() {
 choose() {
   case "$DIALOG" in
     zenity)
-      zenity --list --radiolist --width=620 --height=380 --title="$TITLE" \
+      zenity --list --radiolist --width=620 --height=470 --title="$TITLE" \
         --text="What do you want to do?" --column=" " --column=Action --column=Task --hide-column=3 --print-column=3 \
         TRUE "Fix my add-ons (apply and check)" addons \
+        FALSE "Install an add-on" install \
+        FALSE "Add menu shortcuts" shortcuts \
+        FALSE "Start add-ons with the simulator" watchers \
         FALSE "Check the Proton the simulator uses" check \
         FALSE "Build Proton FS2024 (takes a few minutes)" build \
         FALSE "Run the setup check again" doctor
       ;;
     kdialog)
-      kdialog --title "$TITLE" --geometry 620x320 --radiolist "What do you want to do?" \
+      kdialog --title "$TITLE" --geometry 620x400 --radiolist "What do you want to do?" \
         addons "Fix my add-ons (apply and check)" on \
+        install "Install an add-on" off \
+        shortcuts "Add menu shortcuts" off \
+        watchers "Start add-ons with the simulator" off \
         check "Check the Proton the simulator uses" off \
         build "Build Proton FS2024 (takes a few minutes)" off \
         doctor "Run the setup check again" off
       ;;
     *)
       echo "1) Fix my add-ons (apply and check)" >&2
-      echo "2) Check the Proton the simulator uses" >&2
-      echo "3) Build Proton FS2024" >&2
-      echo "4) Run the setup check again" >&2
+      echo "2) Install an add-on" >&2
+      echo "3) Add menu shortcuts" >&2
+      echo "4) Start add-ons with the simulator" >&2
+      echo "5) Check the Proton the simulator uses" >&2
+      echo "6) Build Proton FS2024" >&2
+      echo "7) Run the setup check again" >&2
       read -r -p "Choice: " answer
-      case "$answer" in 1) echo addons ;; 2) echo check ;; 3) echo build ;; 4) echo doctor ;; esac
+      case "$answer" in 1) echo addons ;; 2) echo install ;; 3) echo shortcuts ;; 4) echo watchers ;; 5) echo check ;; 6) echo build ;; 7) echo doctor ;; esac
       ;;
   esac
 }
 
 ADDON_TEXT="Pick the add-ons you have installed, or want to install now. Each one gets its fix, then a check that it works."
+INSTALL_TEXT="Pick the add-on to install. The next window says where to get it, then you choose the file you downloaded."
+SHORTCUT_TEXT="Pick the add-ons to put in the application menu. An entry that is already there is written again."
+WATCHER_TEXT="Tick the add-ons that should start with the simulator. An add-on you leave unticked is switched off."
+NEEDS_FILE="then run:"
+
+declare -A NAMES=() NOW=()
+declare -a IDS=()
 
 addon_rows() {
-  "$CLI" addon list --json | python3 -I -c 'import json, sys
+  "$CLI" addon list --json | python3 -I -c 'import json, os, sys
+folder, feature = sys.argv[1:3]
+keys = {"shortcut": "shortcuts", "watcher": "watcher"}
+def applies(row):
+    if feature == "install":
+        return row["can_install"]
+    if not feature:
+        return True
+    try:
+        with open(os.path.join(folder, row["id"], "addon.json")) as handle:
+            return bool(json.load(handle).get(keys[feature]))
+    except (OSError, ValueError):
+        return False
 for row in json.load(sys.stdin):
-    print("\t".join((row["id"], row["name"], row["status"])))'
+    if applies(row):
+        print("\t".join((row["id"], row["name"], row["status"], "1" if row.get(feature) else "0")))' "$ADDONS" "${1:-}"
+}
+
+load_rows() {
+  local id name status flag
+  NAMES=()
+  NOW=()
+  IDS=()
+  while IFS=$'\t' read -r id name status flag; do
+    IDS+=("$id")
+    NAMES[$id]="$name"
+    NOW[$id]="$flag"
+  done < <(addon_rows "${1:-}")
+}
+
+row_detail() {
+  local feature="$1" status="$2" flag="$3" note=""
+  case "$feature" in
+    shortcut) note="$([ "$flag" = 1 ] && echo "in the menu" || echo "not in the menu")" ;;
+    watcher) note="$([ "$flag" = 1 ] && echo "starts with the simulator" || echo "does not start with the simulator")" ;;
+  esac
+  echo "$status${note:+, $note}"
+}
+
+preselected() {
+  case "$1" in
+    install) [ "$4" -eq 1 ] ;;
+    shortcut) [ "$2" != "not installed" ] && [ "$3" = 0 ] ;;
+    watcher) [ "$3" = 1 ] ;;
+    *) [ "$2" = "installed, not fixed" ] ;;
+  esac
+}
+
+terminal_prompt() {
+  case "$1" in
+    install) echo "Number of the add-on to install (Enter goes back): " ;;
+    shortcut) echo "Numbers to put in the menu, separated by spaces (Enter goes back): " ;;
+    watcher) echo "Numbers that should start with the simulator, separated by spaces (none switches all off, Enter goes back): " ;;
+    *) echo "Numbers to set up, separated by spaces (Enter goes back): " ;;
+  esac
+}
+
+ids_from_numbers() {
+  local mode="$1" answer="$2" choice
+  shift 2
+  local -a ids=("$@")
+  for choice in $answer; do
+    [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#ids[@]}" ] || continue
+    echo "${ids[$((choice - 1))]}"
+    [ "$mode" = checklist ] || break
+  done
+  return 0
 }
 
 pick_addons() {
-  local id name status rows=() number=0
-  local -a ids=()
-  while IFS=$'\t' read -r id name status; do
+  local feature="${1:-}" text="${2:-$ADDON_TEXT}" mode="${3:-checklist}"
+  local id name status flag detail rows=() number=0
+  local -a ids=() separate=()
+  while IFS=$'\t' read -r id name status flag; do
     ids+=("$id")
+    number=$((number + 1))
+    detail="$(row_detail "$feature" "$status" "$flag")"
     case "$DIALOG" in
-      zenity) rows+=("$([ "$status" = "installed, not fixed" ] && echo TRUE || echo FALSE)" "$name" "$status" "$id") ;;
-      kdialog) rows+=("$id" "$name: $status" "$([ "$status" = "installed, not fixed" ] && echo on || echo off)") ;;
-      *) number=$((number + 1)); printf '%2d) %-32s %s\n' "$number" "$name" "$status" >&2 ;;
+      zenity) rows+=("$(preselected "$feature" "$status" "$flag" "$number" && echo TRUE || echo FALSE)" "$name" "$detail" "$id") ;;
+      kdialog) rows+=("$id" "$name: $detail" "$(preselected "$feature" "$status" "$flag" "$number" && echo on || echo off)") ;;
+      *) printf '%2d) %-32s %s\n' "$number" "$name" "$detail" >&2 ;;
     esac
-  done < <(addon_rows)
+  done < <(addon_rows "$feature")
   [ "${#ids[@]}" -gt 0 ] || return 2
   case "$DIALOG" in
     zenity)
-      zenity --list --checklist --width=720 --height=460 --title="$TITLE" --text="$ADDON_TEXT" \
+      zenity --list --"$mode" --width=720 --height=460 --title="$TITLE" --text="$text" \
         --column=" " --column=Add-on --column=Status --column=id --hide-column=4 --print-column=4 --separator=$'\n' "${rows[@]}"
       ;;
     kdialog)
-      kdialog --title "$TITLE" --separate-output --checklist "$ADDON_TEXT" "${rows[@]}"
+      [ "$mode" != checklist ] || separate=(--separate-output)
+      kdialog --title "$TITLE" "${separate[@]}" --"$mode" "$text" "${rows[@]}"
       ;;
     *)
-      local answer choice
-      read -r -p "Numbers to set up, separated by spaces: " answer
-      for choice in $answer; do
-        [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#ids[@]}" ] && echo "${ids[$((choice - 1))]}"
-      done
+      local answer
+      read -r -p "$(terminal_prompt "$feature")" answer
+      [ -n "$answer" ] || return 1
+      ids_from_numbers "$mode" "$answer" "${ids[@]}"
       ;;
   esac
 }
 
+pick_file() {
+  local start path
+  start="$(xdg-user-dir DOWNLOAD 2> /dev/null)"
+  [ -d "$start" ] || start="$HOME"
+  case "$DIALOG" in
+    zenity) zenity --file-selection --title="$TITLE: the file you downloaded" --filename="$start/" ;;
+    kdialog) kdialog --title "$TITLE" --getopenfilename "$start" ;;
+    *)
+      read -e -r -p "Path of the file you downloaded (Enter goes back): " path
+      echo "${path/#\~/$HOME}"
+      ;;
+  esac
+}
+
+nothing_to_offer() {
+  echo "$2" > "$LOG"
+  show_text "$1" "$LOG"
+}
+
+run_each() {
+  local verb="$1" subcommand="$2" flag="$3" id
+  shift 3
+  for id in "$@"; do
+    [ -n "$id" ] || continue
+    run_with_progress "$verb ${NAMES[$id]:-$id}" "$CLI" addon "$subcommand" "$id" ${flag:+"$flag"}
+    { cat "$LOG"; echo; } >> "$RESULTS"
+  done
+}
+
+show_results() {
+  show_text "results" "$RESULTS"
+  rm -f "$RESULTS"
+}
+
 set_up_addons() {
-  local chosen id name results status
-  local -A names=()
-  while IFS=$'\t' read -r id name status; do
-    names[$id]="$name"
-  done < <(addon_rows)
+  local chosen status
+  local -a ids
+  load_rows
   chosen="$(pick_addons)"
   status=$?
   if [ "$status" -eq 2 ]; then
-    echo "No add-on fixes are in this version yet. The add-on list on the website says what is coming." > "$LOG"
-    show_text "add-ons" "$LOG"
+    nothing_to_offer "add-ons" "No add-on fixes are in this version yet. The add-on list on the website says what is coming."
     return
   fi
   [ -n "$chosen" ] || return
-  results="$LOG.results"
-  : > "$results"
-  while IFS= read -r id; do
-    [ -n "$id" ] || continue
-    run_with_progress "Setting up ${names[$id]:-$id}" "$CLI" addon apply "$id"
-    { cat "$LOG"; echo; } >> "$results"
-  done <<< "$chosen"
-  show_text "results" "$results"
-  rm -f "$results"
+  mapfile -t ids <<< "$chosen"
+  : > "$RESULTS"
+  run_each "Setting up" apply "" "${ids[@]}"
+  show_results
+}
+
+install_addon() {
+  local chosen status file name
+  load_rows install
+  chosen="$(pick_addons install "$INSTALL_TEXT" radiolist)"
+  status=$?
+  if [ "$status" -eq 2 ]; then
+    nothing_to_offer "install" "No add-on in this version has an installer script yet. The page of each add-on on the website says how to install it."
+    return
+  fi
+  [ -n "$chosen" ] || return
+  name="${NAMES[$chosen]:-$chosen}"
+  run_with_progress "Getting $name ready" "$CLI" addon install "$chosen"
+  show_text "install $name" "$LOG"
+  grep -q "$NEEDS_FILE" "$LOG" || return
+  file="$(pick_file)"
+  [ -n "$file" ] || return
+  run_with_progress "Installing $name" "$CLI" addon install "$chosen" "$file"
+  show_text "install $name" "$LOG"
+}
+
+add_shortcuts() {
+  local chosen status
+  local -a ids
+  load_rows shortcut
+  chosen="$(pick_addons shortcut "$SHORTCUT_TEXT")"
+  status=$?
+  if [ "$status" -eq 2 ]; then
+    nothing_to_offer "menu shortcuts" "No add-on in this version has a menu entry yet. The add-on list on the website says what is coming."
+    return
+  fi
+  [ -n "$chosen" ] || return
+  mapfile -t ids <<< "$chosen"
+  : > "$RESULTS"
+  run_each "Adding the menu entries of" shortcut "" "${ids[@]}"
+  show_results
+}
+
+switch_watchers() {
+  local chosen status id
+  local -a on=() off=()
+  load_rows watcher
+  chosen="$(pick_addons watcher "$WATCHER_TEXT")"
+  status=$?
+  if [ "$status" -eq 2 ]; then
+    nothing_to_offer "start with the simulator" "No add-on in this version has a watcher yet. The add-on list on the website says what is coming."
+    return
+  fi
+  [ "$status" -eq 0 ] || return
+  for id in "${IDS[@]}"; do
+    if grep -qx -- "$id" <<< "$chosen"; then
+      [ "${NOW[$id]}" = 1 ] || on+=("$id")
+    else
+      [ "${NOW[$id]}" != 1 ] || off+=("$id")
+    fi
+  done
+  [ "${#on[@]}" -gt 0 ] || [ "${#off[@]}" -gt 0 ] || return
+  : > "$RESULTS"
+  run_each "Switching on the watcher of" watcher "" "${on[@]}"
+  run_each "Switching off the watcher of" watcher --off "${off[@]}"
+  show_results
 }
 
 terminal_command() {
@@ -255,6 +428,15 @@ main() {
     case "$task" in
       addons)
         set_up_addons
+        ;;
+      install)
+        install_addon
+        ;;
+      shortcuts)
+        add_shortcuts
+        ;;
+      watchers)
+        switch_watchers
         ;;
       check)
         run_with_progress "Testing Proton in a throwaway prefix" "$CLI" proton check

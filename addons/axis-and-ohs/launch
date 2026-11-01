@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\LorbyAxisAndOhs_MSFS2024\.exe'
+APP_FOLDER="$FSOL_PREFIX/drive_c/Program Files/LorbyAxisAndOhs_MSFS24"
+ATTEMPTS=3
+DEADLOCKED=75
+KEEP_LOGS=20
+WATCH_SECONDS="${FSOL_AAO_WATCH:-180}"
+STEP_SECONDS="${FSOL_AAO_STEP:-5}"
+LOGS="${FSOL_CACHE:?FSOL_CACHE is not set}/logs/axis-and-ohs"
+
+if [ ! -f "$APP_FOLDER/LorbyAxisAndOhs_MSFS2024.exe" ]; then
+  addon_say axis-and-ohs "Axis and Ohs is not installed; run: flightsim-on-linux addon install axis-and-ohs <installer>"
+  exit 1
+fi
+addon_refuse_second "$PATTERN"
+
+(umask 077 && mkdir -p "$LOGS")
+mapfile -t old_logs < <(find "$LOGS" -maxdepth 1 -name 'aao-*.log' -printf '%f\n' | sort)
+if [ "${#old_logs[@]}" -ge "$KEEP_LOGS" ]; then
+  for name in "${old_logs[@]:0:${#old_logs[@]}-KEEP_LOGS+1}"; do
+    find "$LOGS" -maxdepth 1 -name "$name" -delete
+  done
+fi
+stamp="$(date +%Y%m%d-%H%M%S)"
+
+run_aao() {
+  if [ "${FSOL_SIM_RUNNING:-0}" != 1 ]; then
+    cd "$APP_FOLDER"
+  fi
+  WINEDEBUG=err+all EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator "$(addon_windows_path "$APP_FOLDER/LorbyAxisAndOhs_MSFS2024.exe")"
+}
+
+attempt_log() {
+  if [ "$1" -eq 1 ]; then
+    echo "$LOGS/aao-$stamp.log"
+  else
+    echo "$LOGS/aao-$stamp-$1.log"
+  fi
+}
+
+attempt() {
+  local log="$ATTEMPT_LOG" status=0 watched=0 pid
+  echo "[axis-and-ohs] opened at $(date '+%F %T')"
+  run_aao &
+  pid=$!
+  while kill -0 "$pid" 2> /dev/null && [ "$watched" -lt "$WATCH_SECONDS" ]; do
+    sleep "$STEP_SECONDS"
+    watched=$((watched + STEP_SECONDS))
+    if python3 -I "$HERE/parts/deadlock.py" "$log" > /dev/null; then
+      echo "[axis-and-ohs] Mono deadlock at startup at $(date '+%F %T'); closing Axis and Ohs to open it again"
+      pkill -f -- "$PATTERN" || true
+      wait "$pid" || true
+      return "$DEADLOCKED"
+    fi
+  done
+  wait "$pid" || status=$?
+  echo "[axis-and-ohs] exited with code $status at $(date '+%F %T')"
+  return 0
+}
+
+(
+  for number in $(seq 1 "$ATTEMPTS"); do
+    ATTEMPT_LOG="$(attempt_log "$number")"
+    status=0
+    (umask 077 && : > "$ATTEMPT_LOG")
+    attempt >> "$ATTEMPT_LOG" 2>&1 || status=$?
+    [ "$status" -eq "$DEADLOCKED" ] || exit 0
+  done
+  addon_say axis-and-ohs "Axis and Ohs hung at startup $ATTEMPTS times in a row; open it again from the menu"
+) > /dev/null 2>&1 &
+disown

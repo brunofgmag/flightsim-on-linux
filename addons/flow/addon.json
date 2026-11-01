@@ -1,0 +1,23 @@
+{
+  "name": "Flow Pro",
+  "tested_version": "2026.44.2.7",
+  "tested_on": "2026-10-28",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["p42-util-flow-pro/manifest.json"]
+  },
+  "install": {
+    "from": "Parallel 42's website, the Flow Pro installer for MSFS 2024",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Flow Pro",
+      "script": "launch",
+      "comment": "Opens the Flow Pro manager",
+      "icon": {"place": "community", "glob": "p42-util-flow-pro/Flow for MSFS2024.exe"}
+    }
+  ]
+}

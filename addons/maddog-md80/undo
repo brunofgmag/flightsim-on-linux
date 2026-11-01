@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+KEY='HKCU\Software\Wine\AppDefaults\MDClient.exe\DllOverrides'
+prefix="${FSOL_PREFIX:?FSOL_PREFIX is not set}"
+
+state="$(python3 -I "$HERE/parts/maddog.py" override "$prefix")"
+case "$state" in
+  native)
+    addon_alone reg delete "$KEY" /v mscoree /f > /dev/null
+    echo "removed the mscoree override for MDClient.exe, so it runs on wine-mono again; .NET Framework 4.8 stays in the prefix"
+    ;;
+  absent) echo "already no mscoree override for MDClient.exe" ;;
+  *) echo "left the mscoree override for MDClient.exe, which is not the one apply writes (${state#other:})" ;;
+esac

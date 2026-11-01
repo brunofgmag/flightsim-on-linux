@@ -1,0 +1,4 @@
+REGEDIT4
+
+[HKEY_CURRENT_USER\Software\Wine\AppDefaults\CP MSFS Bridge.exe\DllOverrides]
+"httpapi"=""

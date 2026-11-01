@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+RECORD="${FSOL_CACHE:-${XDG_CACHE_HOME:-${HOME:-/nonexistent}/.cache}/flightsim-on-linux}/opendeck/patched-build.txt"
+PLUGIN="${XDG_CONFIG_HOME:-${HOME:-/nonexistent}/.config}/opendeck/plugins/com.lorbysi.aao.sdPlugin/settings.js"
+AAO_OWN_PORT=43380
+status=0
+
+recorded_binary() {
+  sed -n 's/^binary //p' "$RECORD" 2> /dev/null | head -n 1
+}
+
+package_altered() {
+  local report
+  command -v pacman > /dev/null || return 1
+  report="$(pacman -Qkk opendeck 2>&1 || true)"
+  grep -qF -- "$1 (" <<< "$report"
+}
+
+report_binary() {
+  local binary="$1" current recorded
+  current="$(sha256sum "$binary" | cut -d ' ' -f 1)"
+  recorded="$(recorded_binary)"
+  if [ -n "$recorded" ] && [ "$recorded" = "$current" ]; then
+    echo "ok the installed binary is the patched build that rebuild made (swipe changes the page, dial titles, no checkerboard)"
+  elif [ -n "$recorded" ]; then
+    echo "FAIL the installed binary is not the patched build that rebuild made; a package update puts the stock one back. Run rebuild again and install it, or ignore this if you want the stock binary"
+    status=1
+  elif package_altered "$binary"; then
+    echo "ok the installed binary differs from the package, and rebuild did not make it: somebody changed it, so it is not the stock binary"
+  else
+    echo "ok the installed binary is the stock one: the three source patches are not applied, and they are optional"
+  fi
+}
+
+report_plugin() {
+  local port
+  [ -f "$PLUGIN" ] || return 0
+  port="$(sed -n 's|^const AAO_URL = "http://localhost:\([0-9]*\)/webapi";|\1|p' "$PLUGIN" | head -n 1)"
+  if [ "$port" = "$AAO_OWN_PORT" ]; then
+    echo "FAIL the AAO plugin talks to AAO's own port $AAO_OWN_PORT, where the answer carries the CORS header twice and OpenDeck's web view refuses it; run: flightsim-on-linux addon launch opendeck aao-plugin"
+    status=1
+  else
+    echo "ok the AAO plugin does not use AAO's own port $AAO_OWN_PORT (its port is ${port:-unknown})"
+  fi
+}
+
+binary="$(command -v opendeck || true)"
+if [ -z "$binary" ]; then
+  echo "FAIL opendeck is not installed; install your distribution's opendeck package"
+  exit 1
+fi
+binary="$(readlink -f "$binary")"
+echo "ok opendeck is installed at $binary"
+report_binary "$binary"
+report_plugin
+exit "$status"

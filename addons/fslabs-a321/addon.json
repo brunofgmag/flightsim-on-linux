@@ -1,11 +1,31 @@
 {
   "name": "FSLabs A321 and Control Center",
   "tested_version": "2.0.1.197",
-  "tested_on": "2026-10-21",
+  "tested_on": "2026-10-30",
   "needs": ["proton-fs2024", "simulator-closed"],
   "touches_addon_files": false,
   "installed": {
     "prefix": ["drive_c/FlightSimLabs/ControlCenter/FSLControlCenter.exe"],
     "community": ["fsl-a32x/manifest.json"]
+  },
+  "install": {
+    "from": "https://www.flightsimlabs.com/",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "FSLabs Control Center",
+      "script": "launch",
+      "comment": "Starts the FSLabs Control Center, inside the simulator's container when the simulator runs",
+      "icon": {"place": "prefix", "glob": "drive_c/FlightSimLabs/ControlCenter/FSLControlCenter.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^C:.*\\\\FlightSimLabs\\\\ControlCenter\\\\FSLControlCenter\\.exe",
+    "script": "launch",
+    "args": ["-NOTIFY"],
+    "trigger": {"aircraft": "FSLabs A3|fsl-a32x"},
+    "stop": "with_simulator_if_started"
   }
 }

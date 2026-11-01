@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\MDClient\\MDClient\.exe'
+
+addon_need_simulator
+addon_refuse_second "$PATTERN"
+exe="$(compgen -G "${FSOL_PREFIX:?FSOL_PREFIX is not set}/drive_c/users/*/AppData/Local/Maddog X Files/MSFS 2024/MDClient/MDClient.exe" | head -n 1 || true)"
+if [ -z "$exe" ]; then
+  addon_say maddog-md80 "the MDClient is not installed; run: flightsim-on-linux addon install maddog-md80 <the Leonardo installer>"
+  exit 1
+fi
+log="$(addon_log_file maddog-md80)"
+
+cd "${FSOL_SIM_INSTALL:?FSOL_SIM_INSTALL is not set}"
+"$FSOL_CLI" run "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+disown

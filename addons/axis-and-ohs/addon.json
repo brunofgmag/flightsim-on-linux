@@ -1,0 +1,30 @@
+{
+  "name": "Lorby Axis and Ohs",
+  "tested_version": "4.58.2",
+  "tested_on": "2026-10-24",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/Program Files/LorbyAxisAndOhs_MSFS24/LorbyAxisAndOhs_MSFS2024.exe"]
+  },
+  "install": {
+    "from": "Lorby's website, the Axis and Ohs installer for MSFS 2024",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Axis and Ohs",
+      "script": "launch",
+      "comment": "Starts Lorby Axis and Ohs, inside the running simulator's container when the simulator is open",
+      "icon": {"place": "prefix", "glob": "drive_c/Program Files/LorbyAxisAndOhs_MSFS24/LorbyAxisAndOhs_MSFS2024.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^[A-Za-z]:.*\\\\LorbyAxisAndOhs_MSFS2024\\.exe",
+    "script": "launch",
+    "wait_for": {"process": "^[A-Za-z]:.*\\\\couatl64_MSFS2024\\.exe", "timeout": 300},
+    "poll": 8,
+    "stop": "with_simulator_if_started"
+  }
+}

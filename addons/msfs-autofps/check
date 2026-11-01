@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$(cd "$HERE/../.." && pwd)"
+widget="${FSOL_COMMUNITY:-}/autofps-html-widget-panel"
+status=0
+
+python3 -I "$ROOT/fsol/proton_build.py" check "${FSOL_PROTON:-}" shell32-notifyicon-guid.patch lib/wine/x86_64-windows/shell32.dll "Proton's shell32.dll finds a tray icon by its GUID, so AutoFPS can start with Close to Tray" || status=1
+
+if [ -z "${FSOL_COMMUNITY:-}" ]; then
+  echo "FAIL no Community folder found; run: flightsim-on-linux machine"
+  status=1
+elif [ -L "$widget" ]; then
+  echo "FAIL $widget is a Linux link, and the AutoFPS installer cannot update a link; run: flightsim-on-linux addon install msfs-autofps <installer>, which removes it"
+  status=1
+elif [ -d "$widget" ]; then
+  echo "ok the AutoFPS widget in Community is a real folder"
+else
+  echo "FAIL $widget does not exist; run the AutoFPS installer again"
+  status=1
+fi
+exit "$status"

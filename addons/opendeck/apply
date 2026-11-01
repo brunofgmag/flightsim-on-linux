@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: OpenDeck needs no change to work; the three source patches are optional, and the rebuild script makes the patched binary"

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+exe="${FSOL_COMMUNITY:-}/p42-util-chaseplane/Modules/ChasePlane/CP MSFS Bridge.exe"
+copied=(WINEPREFIX WINEESYNC WINEFSYNC PROTON_NO_NTSYNC WAYLAND_DISPLAY DISPLAY XAUTHORITY)
+read_names=("${copied[@]}" PROTON_ENABLE_WAYLAND WINEDLLPATH WINEDLLOVERRIDES)
+
+addon_need_simulator
+if [ ! -f "$exe" ]; then
+  addon_say chaseplane "the ChasePlane bridge is not in the Community folder; run: flightsim-on-linux addon install chaseplane <installer>"
+  exit 1
+fi
+addon_refuse_second '^[A-Za-z]:.*\\CP MSFS Bridge\.exe'
+
+declare -A sim=()
+values="$("$FSOL_CLI" sim-env "${read_names[@]}")"
+while IFS= read -r line; do
+  [ -z "$line" ] || sim["${line%%=*}"]="${line#*=}"
+done <<< "$values"
+
+settings=(WINEPREFIX="$FSOL_PREFIX")
+for name in "${copied[@]}"; do
+  [ -z "${sim[$name]:-}" ] || settings+=("$name=${sim[$name]}")
+done
+
+if [[ "${sim[PROTON_ENABLE_WAYLAND]:-}" =~ ^0*[1-9] ]]; then
+  display_driver="winex11.drv=d;winewayland.drv=b"
+else
+  display_driver="winewayland.drv=d;winex11.drv=b"
+fi
+inherited_key=WINEDLLOVERRIDES
+inherited="${sim[$inherited_key]:-}"
+overrides="${inherited:+$inherited;}$display_driver;httpapi=d"
+dll_path="${sim[WINEDLLPATH]:-$FSOL_PROTON/files/lib/vkd3d:$FSOL_PROTON/files/lib/wine}"
+
+unset NoDefaultCurrentDirectoryInExePath
+log="$(addon_log_file chaseplane-bridge)"
+setsid env "${settings[@]}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" WINEDEBUG=-all \
+  WINEDLLPATH="$dll_path" WINEDLLOVERRIDES="$overrides" \
+  "$FSOL_PROTON/files/bin/wine" "$exe" 'chaseplanemsfs24://' > "$log" 2>&1 &
+disown

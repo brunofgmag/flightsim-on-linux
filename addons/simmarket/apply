@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: simMarket needs no change in the prefix; its launch script starts it with --disable-gpu-sandbox and turns the toaststub stand-in off for that one program"

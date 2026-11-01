@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+
+if [ "${FSOL_SIM_RUNNING:-0}" = 1 ]; then
+  echo "tfdi-md-11: close the simulator first; this changes the MD-11 package" >&2
+  exit 1
+fi
+if pgrep -f 'MD11InstallManager[.]exe' > /dev/null; then
+  echo "tfdi-md-11: close the MD-11 Install Manager first; it rewrites the same files" >&2
+  exit 1
+fi
+
+exec python3 -I "$HERE/parts/navdata.py" fix "$FSOL_PREFIX" "${FSOL_COMMUNITY:-}" "$FSOL_COMPATDATA/flightsim-on-linux-backup/tfdi-md-11"

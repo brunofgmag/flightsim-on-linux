@@ -1,0 +1,23 @@
+{
+  "name": "REX Atmos Core",
+  "tested_version": "8.1.2025.1210",
+  "tested_on": "2026-10-27",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/REX Atmos Core/weathercreator.exe"]
+  },
+  "install": {
+    "from": "https://rexaxis.com",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "REX Atmos Core",
+      "script": "launch",
+      "comment": "Starts REX Atmos Core inside the running simulator's container",
+      "icon": {"place": "prefix", "glob": "drive_c/REX Atmos Core/weathercreator.exe"}
+    }
+  ]
+}

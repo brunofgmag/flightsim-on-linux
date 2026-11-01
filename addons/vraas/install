@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+CONTRAIL='^[A-Za-z]:.*\\ContrailApp[\\]'
+CONTRAIL_EXIT=82
+
+installer="${FSOL_INSTALLER:?no installer given; run: flightsim-on-linux addon install vraas <the vRAAS installer from Contrail>}"
+
+if pgrep -f -- "$CONTRAIL" > /dev/null; then
+  echo "Contrail is open, so the vRAAS installer would fail at its last step with exit $CONTRAIL_EXIT. Close Contrail from its tray icon or its menu first, then run this again." >&2
+  exit 1
+fi
+
+code=0
+addon_alone "$installer" || code=$?
+if [ "$code" = "$CONTRAIL_EXIT" ]; then
+  echo "the installer stopped with exit $CONTRAIL_EXIT: its --veloapp-install step failed with error 5, access denied, which is what an open Contrail causes. Close every program of the prefix, Contrail included, and run it again." >&2
+fi
+exit "$code"

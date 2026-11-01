@@ -1,0 +1,24 @@
+{
+  "name": "TFDi Design MD-11",
+  "tested_version": "1.1.32",
+  "tested_on": "2026-10-13",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/TFDi Design MD-11/installation.xml"],
+    "community": ["tfdidesign-aircraft-md11/manifest.json"]
+  },
+  "install": {
+    "from": "your vendor account (TFDi Design); the MD-11 asks for an activation code",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "MD-11 Extended Simulation",
+      "script": "launch",
+      "comment": "Starts the TFDi MD-11 Extended Simulation package",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/TFDi Design/MD-11 Extended Simulation/MD-11 Extended Simulation Package.exe"}
+    }
+  ]
+}

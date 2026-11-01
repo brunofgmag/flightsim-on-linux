@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+echo "axis-and-ohs changes files of wine-mono, not of Axis and Ohs: it makes a copy of Proton's wine-mono inside the prefix and replaces WindowsBase.dll in that copy; flightsim-on-linux addon undo axis-and-ohs puts the original back"
+
+patch_window_timer() {
+  local relative="$MONO_WINDOWSBASE" target tool state
+  target="$(mono_copy_dir)/$relative"
+  state="$(python3 -I "$MONO_PARTS/clr.py" state "$target" dispatcher-timer)" || aao_die "cannot read $target"
+  case "$state" in
+    patched) echo "already the timer patch in WindowsBase.dll" ;;
+    original)
+      tool="$(shim_path windowsbase-timer windowsbase-timer/windowsbase-timer.dll)"
+      mono_backup_original axis-and-ohs "$relative"
+      dotnet "$tool" --apply "$target" "$target.fsol-new" > /dev/null || { rm -f "$target.fsol-new"; aao_die "the patch tool refused $target"; }
+      [ "$(python3 -I "$MONO_PARTS/clr.py" state "$target.fsol-new" dispatcher-timer)" = patched ] || { rm -f "$target.fsol-new"; aao_die "the patched WindowsBase.dll does not read back as patched; the original is untouched"; }
+      chmod --reference="$target" "$target.fsol-new"
+      mv -f "$target.fsol-new" "$target"
+      echo "changed WindowsBase.dll in the wine-mono copy: DispatcherTimer.Interval rounds up to the 15.625 ms of the Windows clock"
+      ;;
+    *) aao_die "$target is neither the original nor the patched WindowsBase.dll; not touching it" ;;
+  esac
+}
+
+set_asm_override() {
+  local current
+  current="$(python3 -I "$AAO_PARTS/aao.py" asm-override "$FSOL_PREFIX")"
+  if [ "$current" = "gac=n" ]; then
+    echo "already *=gac=n in HKCU\\Software\\Wine\\Mono\\AsmOverrides"
+    return 0
+  fi
+  if [ -n "$current" ]; then
+    aao_die "HKCU\\Software\\Wine\\Mono\\AsmOverrides has * set to '$current', a value this tool did not write, so it stays as it is. Axis and Ohs needs it to be gac=n once .NET Framework 4.8 is in the prefix. Close the simulator and every program of the prefix, change that value to gac=n yourself in the prefix's registry (keep the old value written down), then run: flightsim-on-linux addon apply axis-and-ohs"
+  fi
+  mkdir -p "$AAO_BACKUP"
+  : > "$AAO_ASM_OVERRIDE_ADDED"
+  addon_alone reg add 'HKCU\Software\Wine\Mono\AsmOverrides' /v '*' /t REG_SZ /d gac=n /f > /dev/null || aao_die "reg add failed"
+  echo "changed the registry: wine-mono ignores the Windows GAC (*=gac=n), so it does not load Microsoft's WPF when .NET 4.8 is installed"
+}
+
+mono_copy_ensure axis-and-ohs
+patch_window_timer
+set_asm_override

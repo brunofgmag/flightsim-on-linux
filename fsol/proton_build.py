@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WINE_PATCHES = ROOT / "patches" / "wine"
+VKD3D_PATCHES = ROOT / "patches" / "vkd3d-proton"
+PATCH_FOLDERS = {"patch": WINE_PATCHES, "vkd3d-patch": VKD3D_PATCHES}
 BUILD_RECORD = "fs2024-build.txt"
 PROTON_BUILD = "flightsim-on-linux proton build"
 USAGE = "usage: proton_build.py check <Proton folder> <patch> <module> <text when it passes> [<patch> <module> <text when it passes> ...]"
@@ -28,14 +30,22 @@ def recorded_module(record, module):
 def changed_modules(proton):
     return sorted(name for kind, sha, name in build_record(proton) if kind == "module" and sha256_of(proton / "files" / name) != sha)
 
-def patch_line(proton, patch, module, passed):
-    record = build_record(proton)
-    if ("patch", sha256_of(WINE_PATCHES / patch), patch) not in record:
+def listed_line(proton, patch, passed, kind="patch"):
+    if (kind, sha256_of(PATCH_FOLDERS[kind] / patch), patch) not in build_record(proton):
         return False, f"{proton / BUILD_RECORD} does not list this repository's {patch}; run: {PROTON_BUILD}"
-    wanted = recorded_module(record, module)
+    return True, passed
+
+
+def module_line(proton, module, passed):
+    wanted = recorded_module(build_record(proton), module)
     if not wanted or sha256_of(proton / "files" / module) != wanted:
         return False, f"{module} in {proton / 'files'} is not the one its build record lists; run: {PROTON_BUILD}"
     return True, passed
+
+
+def patch_line(proton, patch, module, passed, kind="patch"):
+    listed = listed_line(proton, patch, passed, kind)
+    return module_line(proton, module, passed) if listed[0] else listed
 
 
 def main(argv):

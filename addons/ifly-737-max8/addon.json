@@ -1,0 +1,24 @@
+{
+  "name": "iFly 737 MAX8 and iFly Manager",
+  "tested_version": "1.1.0.3",
+  "tested_on": "2026-10-16",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/ProgramData/iFlyManager/iFlyManager.exe"],
+    "community": ["ifly-aircraft-737max8/manifest.json"]
+  },
+  "install": {
+    "from": "your vendor account (iFly), which offers the iFly Manager setup",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "iFly Manager",
+      "script": "launch",
+      "comment": "Starts the iFly Manager, which installs and updates the iFly 737 MAX8",
+      "icon": {"place": "prefix", "glob": "drive_c/ProgramData/iFlyManager/iFlyManager.exe"}
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=addons/navigraph-simlink/parts/common.sh
+. "$HERE/parts/common.sh"
+# shellcheck source=addons/navigraph-simlink/parts/mime.sh
+. "$HERE/parts/mime.sh"
+MIME_BACKUP="${FSOL_COMPATDATA:?FSOL_COMPATDATA is not set}/flightsim-on-linux-backup/navigraph-simlink/mime-default"
+CFG_BACKUP="${FSOL_COMPATDATA}/flightsim-on-linux-backup/navigraph-simlink/cfg"
+
+if [ ! -d "$SIMLINK_FOLDER" ]; then
+  echo "FAIL Simlink is not installed in $SIMLINK_PREFIX; run: flightsim-on-linux addon install navigraph-simlink <Navigraph+Simlink.exe>"
+  exit 1
+fi
+if [ ! -f "$SIMLINK_ENTRY" ]; then
+  echo "FAIL the menu entry $SIMLINK_ENTRY does not exist, and the sign-in link opens through it; run: flightsim-on-linux addon shortcut navigraph-simlink"
+  exit 1
+fi
+addon_stash "$SIMLINK_FOLDER/SimConnect.cfg" "$CFG_BACKUP"
+simlink_cfg write
+mime_apply "$MIME_BACKUP"

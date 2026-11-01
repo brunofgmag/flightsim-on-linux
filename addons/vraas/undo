@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to undo: apply changes nothing; addon shortcut vraas --remove and addon watcher vraas --off take out the menu entry and the service"

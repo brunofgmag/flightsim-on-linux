@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=addons/volanta/parts/common.sh
+. "$HERE/parts/common.sh"
+sibling="$(addon_sibling_prefix)"
+status=0
+
+if [ -f "$sibling/system.reg" ] && [ -f "$sibling/user.reg" ]; then
+  echo "ok the add-ons prefix $sibling has its own registry"
+else
+  echo "FAIL the add-ons prefix $sibling does not exist; run: flightsim-on-linux addon apply volanta"
+  exit 1
+fi
+
+if [ -L "$sibling/drive_c" ] && [ "$(readlink -f "$sibling/drive_c")" = "$(readlink -f "${FSOL_PREFIX:-/nonexistent}/drive_c")" ]; then
+  echo "ok drive_c of the add-ons prefix is the simulator prefix's drive_c, so Volanta is found in both"
+else
+  echo "FAIL drive_c of the add-ons prefix is not a link to the simulator prefix's drive_c; delete $sibling and run: flightsim-on-linux addon apply volanta"
+  status=1
+fi
+
+if [ "$(cat "$sibling/.update-timestamp" 2> /dev/null || true)" = disable ]; then
+  echo "ok .update-timestamp holds disable, so Wine never rewrites the shared windows folder"
+else
+  echo "FAIL .update-timestamp does not hold disable, so Wine could rewrite the windows folder it shares with the simulator; delete $sibling and run: flightsim-on-linux addon apply volanta"
+  status=1
+fi
+
+volanta_cfg check || status=1
+exit "$status"

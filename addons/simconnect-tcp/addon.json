@@ -1,0 +1,10 @@
+{
+  "name": "SimConnect over TCP",
+  "tested_version": "SimConnect 12.2.0.0",
+  "tested_on": "2026-10-15",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "base": ["SimConnect.xml"]
+  }
+}

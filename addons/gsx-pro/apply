@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/mono-copy.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/curl.sh"
+
+echo "gsx-pro changes the prefix, not the FSDT programs: it never runs the universal installer, never touches licences or serial numbers, and keeps what it replaces in $GSX_BACKUP"
+echo "it makes RegisterAssembly report success and Process.Responding report true in a copy of wine-mono inside the prefix; flightsim-on-linux addon undo gsx-pro puts both back"
+
+[ -f "$GSX_MANIFEST" ] || gsx_die "$GSX_MANIFEST does not exist: run the FSDT universal installer once first, as the GSX Pro page says; this tool never runs it"
+! pgrep -f 'Couatl_Updater2[.]exe' > /dev/null || gsx_die "close the FSDT updater first"
+
+register_regasm() {
+  local folders=(Framework i386-windows Framework64 x86_64-windows) index folder
+  for ((index = 0; index < ${#folders[@]}; index += 2)); do
+    folder="$FSOL_PREFIX/drive_c/windows/Microsoft.NET/${folders[index]}/v4.0.30319"
+    if [ -e "$folder/RegAsm.exe" ] || [ -L "$folder/RegAsm.exe" ]; then
+      echo "already a RegAsm.exe in ${folders[index]}/v4.0.30319; left alone"
+    else
+      mkdir -p "$folder" "$GSX_BACKUP/regasm"
+      ln -s "$FSOL_PROTON/files/lib/wine/${folders[index + 1]}/regasm.exe" "$folder/RegAsm.exe"
+      : > "$GSX_BACKUP/regasm/${folders[index]}"
+      echo "changed RegAsm.exe in ${folders[index]}/v4.0.30319: a link to Wine's stub, so the updater can start it"
+    fi
+  done
+}
+
+register_com() {
+  local work install remove="$GSX_BACKUP/qlm-remove.reg"
+  if python3 -I "$GSX_PARTS/gsx.py" registered "$FSOL_PREFIX"; then
+    echo "already QlmLicenseLib registered as COM"
+    return 0
+  fi
+  mkdir -p "$GSX_BACKUP"
+  [ -f "$remove" ] || python3 -I "$GSX_PARTS/qlm_reg.py" remove "$GSX_MANIFEST" "$remove"
+  work="$(mktemp -d "${TMPDIR:-/tmp}/gsx-reg.XXXXXX")"
+  install="$work/qlm-install.reg"
+  python3 -I "$GSX_PARTS/qlm_reg.py" install "$GSX_MANIFEST" "$install"
+  gsx_regedit "$install" || { rm -rf "$work"; gsx_die "regedit could not import the QlmLicenseLib registration"; }
+  rm -rf "$work"
+  echo "changed the registry: QlmLicenseLib registered as COM (generated from its manifest; no licence data)"
+}
+
+patch_mono() {
+  mono_copy_ensure gsx-pro
+  mono_patch_apply gsx-pro "$MONO_MSCORLIB" register-assembly
+  mono_patch_apply gsx-pro "$MONO_SYSTEM" process-responding
+}
+
+install_wrapper() {
+  local built
+  built="$(shim_path com-environment com-environment.exe)"
+  mkdir -p "$GSX_WRAPPER_FOLDER"
+  cp "$built" "$GSX_WRAPPER_FOLDER/com-environment.exe"
+}
+
+wrap_engine_entry() {
+  local result outcome
+  result="$(python3 -I "$GSX_PARTS/couatl_entry.py" status "$FSOL_BASE/exe.xml" "$GSX_WEBVIEW2_OPTIONS")"
+  case "$result" in
+    wrapped)
+      if [ -f "$GSX_WRAPPER_FOLDER/com-environment.exe" ]; then
+        echo "already the GSX engine entry in exe.xml starts through com-environment.exe"
+      else
+        install_wrapper
+        echo "put com-environment.exe back in $GSX_WRAPPER_FOLDER: exe.xml already starts the GSX engine through it, and the file was missing"
+      fi
+      ;;
+    absent | no-file) echo "exe.xml has no GSX engine entry yet: install GSX Pro with the updater (addon launch gsx-pro), then run apply again" ;;
+    plain)
+      mkdir -p "$GSX_BACKUP"
+      [ -f "$GSX_BACKUP/exe.xml" ] || cp -p "$FSOL_BASE/exe.xml" "$GSX_BACKUP/exe.xml"
+      install_wrapper
+      outcome="$(python3 -I "$GSX_PARTS/couatl_entry.py" wrap "$FSOL_BASE/exe.xml" "$GSX_WRAPPER_WINDOWS" "$GSX_WEBVIEW2_OPTIONS")"
+      [ "$outcome" = changed ] || gsx_die "exe.xml was not changed (the edit answered '$outcome'); the GSX engine entry still starts as it did"
+      echo "changed exe.xml: the GSX engine entry now starts com-environment.exe, which sets the WebView2 software options and opens couatl64_boot.exe (the file as it was is in $GSX_BACKUP/exe.xml)"
+      ;;
+    other) gsx_die "the GSX engine entry in exe.xml already starts through com-environment.exe, but with WebView2 options other than '$GSX_WEBVIEW2_OPTIONS'. This tool does not rewrite an entry it did not make, so exe.xml and com-environment.exe stay as they are. To use this tool's options, put the entry back to start couatl64_boot.exe directly (or restore the exe.xml you kept before changing it by hand), then run apply again; to keep your own options, leave it and ignore the failing exe.xml line of check" ;;
+    *) gsx_die "cannot tell what the GSX engine entry in exe.xml is (the status read '$result'); exe.xml stays as it is" ;;
+  esac
+}
+
+register_regasm
+register_com
+patch_mono
+gsx_curl_apply
+wrap_engine_entry

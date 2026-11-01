@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\orbx-central\\Orbx Central\.exe'
+
+addon_refuse_second "$PATTERN"
+if [ "${FSOL_SIM_RUNNING:-0}" = 1 ]; then
+  addon_say orbx-central "close Microsoft Flight Simulator 2024 before you open Orbx Central: while it is open it keeps the prefix busy and Steam will not start the simulator"
+  exit 1
+fi
+exe="$(addon_newest "$FSOL_PREFIX/drive_c/users/*/AppData/Local/Programs/orbx-central/Orbx Central.exe")"
+if [ -z "$exe" ]; then
+  addon_say orbx-central "Orbx Central is not installed; run: flightsim-on-linux addon install orbx-central <installer>"
+  exit 1
+fi
+log="$(addon_log_file orbx-central)"
+
+addon_in_prefix "$(addon_windows_path "$exe")" --disable-gpu-sandbox "$@" > "$log" 2>&1 &
+disown

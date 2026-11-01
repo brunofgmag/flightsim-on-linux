@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+exe="$(compgen -G "${FSOL_PREFIX:-/nonexistent}/drive_c/users/*/AppData/Local/simMarket/app-*/simMarket.exe" | sort -V | tail -n 1 || true)"
+if [ -n "$exe" ]; then
+  echo "ok simMarket is installed: $(basename "$(dirname "$exe")")"
+else
+  echo "FAIL simMarket is not installed in the prefix; run: flightsim-on-linux addon install simmarket <installer>"
+  exit 1
+fi

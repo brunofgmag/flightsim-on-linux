@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=addons/chaseplane/parts/p42.sh
+. "$HERE/../chaseplane/parts/p42.sh"
+
+p42_undo flow
+p42_clean_backup

@@ -1,0 +1,31 @@
+{
+  "name": "Navigraph Simlink",
+  "tested_version": "1.1.41",
+  "tested_on": "2026-10-30",
+  "needs": [],
+  "touches_addon_files": true,
+  "installed": {
+    "data": ["navigraph-simlink/drive_c/Program Files/Navigraph/Simlink/NavigraphSimlink.exe"]
+  },
+  "install": {
+    "from": "Navigraph, with your account (the download page is not recorded here)",
+    "paid": null,
+    "kind": "installer",
+    "own_prefix": true
+  },
+  "shortcuts": [
+    {
+      "title": "Navigraph Simlink",
+      "icon": {"place": "data", "glob": "navigraph-simlink/drive_c/Program Files/Navigraph/Simlink/NavigraphSimlink.exe"},
+      "script": "launch",
+      "comment": "Starts Navigraph Simlink in its own Wine prefix and hands it the sign-in link",
+      "mime": ["x-scheme-handler/navigraph-traffic-desktop"]
+    }
+  ],
+  "watcher": {
+    "app": "^C:.*\\\\Simlink\\\\NavigraphSimlink\\.exe",
+    "trigger": "none",
+    "poll": 10,
+    "health": {"connected_to": 5111, "lost_for": 60, "restart": "restart"}
+  }
+}

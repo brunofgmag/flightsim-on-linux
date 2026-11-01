@@ -14,6 +14,8 @@ NAV = (
     ("proton-fs2024.html", "Proton FS2024"),
     ("rules.html", "Ground rules"),
     ("addons.html", "Add-ons"),
+    ("installers.html", "Installing add-ons"),
+    ("shortcuts-and-watchers.html", "Shortcuts and watchers"),
     ("ai.html", "With an AI"),
 )
 

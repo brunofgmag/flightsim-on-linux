@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+python3 -I "$HERE/../../tools/exe-entry.py" check "${FSOL_PREFIX:-}" "${FSOL_BASE:-}/exe.xml" '\rkapps-fsrealistic\service\fsrealistic-plus.exe' "FSRealistic+" "run: flightsim-on-linux addon apply fsrealistic-plus"

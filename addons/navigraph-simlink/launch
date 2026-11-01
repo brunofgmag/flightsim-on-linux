@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=addons/navigraph-simlink/parts/common.sh
+. "$HERE/parts/common.sh"
+link="${1:-}"
+
+if [ -z "$link" ]; then
+  addon_refuse_second "$SIMLINK_PATTERN"
+elif [ "${link#"$SIMLINK_SCHEME_PREFIX"}" = "$link" ]; then
+  addon_say navigraph-simlink "refusing an argument that is not a navigraph-traffic-desktop: link"
+  exit 1
+fi
+if [ ! -f "$SIMLINK_FOLDER/NavigraphSimlink.exe" ]; then
+  addon_say navigraph-simlink "Simlink is not installed; run: flightsim-on-linux addon install navigraph-simlink <Navigraph+Simlink.exe>"
+  exit 1
+fi
+
+cd "$SIMLINK_FOLDER"
+simlink_wine QT_OPENGL=software wine "$SIMLINK_EXE" ${link:+"$link"} > /dev/null 2>&1 &
+disown

@@ -11,8 +11,5 @@ for build in "$ROOT"/shims/*/build.sh; do
   [ -x "$build" ] || continue
   "$build" "$OUT/shims"
 done
-mapfile -t shims < <(cd "$OUT/shims" && find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' | sort)
-if [ "${#shims[@]}" -gt 0 ]; then
-  (cd "$OUT/shims" && sha256sum "${shims[@]}" > SHA256SUMS)
-fi
+"$ROOT/tools/pack-shims.sh" "$OUT/shims"
 find "$OUT" -type f | sort

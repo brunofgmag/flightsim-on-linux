@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+exe="${FSOL_COMMUNITY:-}/p42-util-flow-pro/Flow for MSFS2024.exe"
+
+if [ ! -f "$exe" ]; then
+  addon_say flow "the Flow manager is not in the Community folder; run: flightsim-on-linux addon install flow <installer>"
+  exit 1
+fi
+addon_refuse_second '^[A-Za-z]:.*\\(Flow for MSFS2024|Flow Pro Manager)\.exe'
+log="$(addon_log_file flow)"
+if [ "${FSOL_SIM_RUNNING:-0}" = 1 ]; then
+  addon_beside_simulator "$(addon_windows_path "$exe")" > "$log" 2>&1 &
+  disown
+  exit 0
+fi
+command -v protontricks > /dev/null || { addon_say flow "protontricks is missing: install it, it opens the manager so it survives the copy it makes of itself"; exit 1; }
+protontricks --no-term -c "wine $(printf %q "$exe"); wineserver -w" 2537590 > "$log" 2>&1 &
+disown

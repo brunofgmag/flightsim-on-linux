@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+KEY='HKCU\Software\Wine\AppDefaults\PMDG OC3.exe\X11 Driver'
+BACKUP="$FSOL_COMPATDATA/flightsim-on-linux-backup/pmdg-oc3"
+
+if [ -e "$BACKUP/decorated.absent" ]; then
+  addon_alone reg delete "$KEY" /v Decorated /f > /dev/null
+  rm -f "$BACKUP/decorated.absent"
+  echo "removed Decorated from the PMDG OC3.exe key; it was not there before apply"
+elif [ -e "$BACKUP/decorated" ]; then
+  previous="$(cat "$BACKUP/decorated")"
+  addon_alone reg add "$KEY" /v Decorated /t REG_SZ /d "$previous" /f > /dev/null
+  rm -f "$BACKUP/decorated"
+  echo "changed Decorated is back to $previous"
+else
+  echo "already apply did not change Decorated; a value you set yourself stays"
+fi

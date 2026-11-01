@@ -1,0 +1,24 @@
+{
+  "name": "BBS Nest (BlueBird Simulations 757)",
+  "tested_version": "1.0.0.0",
+  "tested_on": "2026-10-28",
+  "needs": ["proton-fs2024"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/Programs/BlueBird Simulations/NEST/bbs_nest.exe"]
+  },
+  "install": {
+    "from": "the BlueBird Simulations account panel (BlueBirdNestSetup.exe)",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "BBS Nest",
+      "script": "launch",
+      "close": "close",
+      "comment": "Opens BBS Nest in the running simulator's container, or alone when the simulator is closed",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Programs/BlueBird Simulations/NEST/bbs_nest.exe"}
+    }
+  ]
+}

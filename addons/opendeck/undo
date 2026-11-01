@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLUGIN_COPY="${XDG_CONFIG_HOME:-${HOME:?HOME is not set}/.config}/opendeck/plugins/com.lorbysi.aao.sdPlugin/settings.js.orig"
+if [ -f "$PLUGIN_COPY" ]; then
+  "$(dirname "$(readlink -f "$0")")/aao-plugin" --restore
+fi
+echo "already nothing to undo: apply changes nothing; to go back from a patched binary to the stock one, reinstall the opendeck package (on Arch: sudo pacman -S opendeck)"

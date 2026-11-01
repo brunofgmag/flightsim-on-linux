@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\FlightSimLabs\\ControlCenter\\FSLControlCenter\.exe'
+PROGRAM='C:\FlightSimLabs\ControlCenter\FSLControlCenter.exe'
+FOLDER="${FSOL_PREFIX:?FSOL_PREFIX is not set}/drive_c/FlightSimLabs/ControlCenter"
+
+addon_refuse_second "$PATTERN"
+if [ ! -f "$FOLDER/FSLControlCenter.exe" ]; then
+  addon_say fslabs-a321 "the Control Center is not installed; run the FSLabs installer with the simulator closed"
+  exit 1
+fi
+
+cd "$FOLDER"
+EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator "$PROGRAM" "$@" > /dev/null 2>&1 &
+disown

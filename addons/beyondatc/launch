@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\BeyondATC\.exe'
+exe="$FSOL_PREFIX/drive_c/BeyondATC/BeyondATC.exe"
+
+addon_need_simulator
+addon_refuse_second "$PATTERN"
+if [ ! -f "$exe" ]; then
+  addon_say beyondatc "BeyondATC is not installed; run its installer in the prefix first"
+  exit 1
+fi
+log="$(addon_log_file beyondatc)"
+
+addon_beside_simulator "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+disown

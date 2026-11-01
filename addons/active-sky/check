@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$(cd "$HERE/../.." && pwd)"
+# shellcheck source=tools/registry.sh
+. "$HERE/../../tools/registry.sh"
+# shellcheck source=addons/active-sky/parts/carlito.sh
+. "$HERE/parts/carlito.sh"
+# shellcheck source=addons/active-sky/parts/program.sh
+. "$HERE/parts/program.sh"
+API='http://127.0.0.1:19285/ActiveSky/API/GetWeatherInfoJson'
+status=0
+
+weather_api_line() {
+  local code
+  if ! pgrep -f -- "$ACTIVE_SKY_PATTERN" > /dev/null; then
+    echo "ok Active Sky is not running, so its weather API was not asked; run the check again while it runs with the simulator"
+    return 0
+  fi
+  if [ "${FSOL_SIM_RUNNING:-0}" != 1 ]; then
+    echo "ok Active Sky is running but the simulator is not, so there is no weather to ask for yet"
+    return 0
+  fi
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$API" || true)"
+  if [ "$code" = 200 ]; then
+    echo "ok $API answers 200, so Active Sky Utils and the asfs package in the simulator are getting weather"
+    return 0
+  fi
+  echo "FAIL $API answers ${code:-nothing} instead of 200, so the simulator gets no weather from Active Sky; see \"Known problems\" in the Active Sky guide"
+  return 1
+}
+
+python3 -I "$ROOT/fsol/proton_build.py" check "${FSOL_PROTON:-}" gdiplus-font-family-after-substitution.patch lib/wine/x86_64-windows/gdiplus.dll "Proton's gdiplus.dll finds a font family after Wine substitutes another for it, so Active Sky can draw with Calibri and Microsoft Sans Serif" || status=1
+
+if carlito_installed; then
+  echo "ok the Carlito font is installed"
+else
+  echo "FAIL the Carlito font is not installed; install the ttf-carlito package (Arch) or the package of your distribution that holds Carlito"
+  status=1
+fi
+
+for name in Calibri "Calibri Medium"; do
+  if [ "$(registry_get "$ACTIVE_SKY_KEY" "$name" || true)" = Carlito ]; then
+    echo "ok $name is replaced by Carlito in the prefix registry"
+  else
+    echo "FAIL $name is not replaced by Carlito in the prefix registry; run: flightsim-on-linux addon apply active-sky"
+    status=1
+  fi
+done
+
+weather_api_line || status=1
+exit "$status"

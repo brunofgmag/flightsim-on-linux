@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=addons/navigraph-simlink/parts/common.sh
+. "$HERE/parts/common.sh"
+# shellcheck source=addons/navigraph-simlink/parts/mime.sh
+. "$HERE/parts/mime.sh"
+MIME_BACKUP="${FSOL_COMPATDATA:?FSOL_COMPATDATA is not set}/flightsim-on-linux-backup/navigraph-simlink/mime-default"
+CFG_BACKUP="${FSOL_COMPATDATA}/flightsim-on-linux-backup/navigraph-simlink/cfg"
+
+if [ -e "$CFG_BACKUP/SimConnect.cfg" ] || [ -e "$CFG_BACKUP/SimConnect.cfg.absent" ]; then
+  addon_unstash "$SIMLINK_FOLDER/SimConnect.cfg" "$CFG_BACKUP"
+  rmdir "$CFG_BACKUP" 2> /dev/null || true
+  echo "SimConnect.cfg in $SIMLINK_FOLDER is as it was before apply"
+else
+  simlink_cfg remove
+fi
+mime_undo "$MIME_BACKUP"
+echo "the prefix $SIMLINK_PREFIX stays, with Simlink and its sign-in. To delete it, quit Simlink and run: rm -r '$SIMLINK_PREFIX'. addon shortcut navigraph-simlink --remove takes out the menu entry, addon watcher navigraph-simlink --off the service, and addon launch navigraph-simlink autostart -- --remove the login entry."

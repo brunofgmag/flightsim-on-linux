@@ -1,0 +1,15 @@
+{
+  "name": "BlueBird Simulations 757-200",
+  "tested_version": "0.1.0",
+  "tested_on": "2026-10-28",
+  "needs": ["proton-fs2024"],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["bluebirdsim-aircraft-757-200/manifest.json"]
+  },
+  "install": {
+    "from": "BBS Nest, from your BlueBird Simulations account",
+    "paid": null,
+    "kind": "store"
+  }
+}

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=addons/navigraph-simlink/parts/common.sh
+. "$HERE/parts/common.sh"
+# shellcheck source=addons/navigraph-simlink/parts/mime.sh
+. "$HERE/parts/mime.sh"
+status=0
+
+if command -v wine > /dev/null; then
+  echo "ok system Wine $(wine --version 2> /dev/null) is installed"
+else
+  echo "FAIL Wine is not installed; Simlink runs in its own prefix with the Wine of your distribution (the wine package on Arch)"
+  status=1
+fi
+
+if [ -f "$SIMLINK_FOLDER/NavigraphSimlink.exe" ]; then
+  echo "ok Simlink is installed in $SIMLINK_PREFIX"
+else
+  echo "FAIL $SIMLINK_FOLDER/NavigraphSimlink.exe does not exist; run: flightsim-on-linux addon install navigraph-simlink <Navigraph+Simlink.exe>"
+  status=1
+fi
+
+simlink_cfg check || status=1
+python3 -I "$HERE/../../fsol/simconnect.py" watched navigraph-simlink "${FSOL_BASE:-}" "$HERE/addon.json" || status=1
+
+if [ "$(mime_default)" = "$SIMLINK_HANDLER" ]; then
+  echo "ok links that start with navigraph-traffic-desktop: open $SIMLINK_HANDLER, so the sign-in reaches Simlink"
+else
+  echo "FAIL links that start with navigraph-traffic-desktop: do not open $SIMLINK_HANDLER, so the sign-in link goes nowhere; run: flightsim-on-linux addon shortcut navigraph-simlink, then addon apply navigraph-simlink"
+  status=1
+fi
+exit "$status"

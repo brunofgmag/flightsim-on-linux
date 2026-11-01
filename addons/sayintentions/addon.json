@@ -1,0 +1,24 @@
+{
+  "name": "SayIntentions.AI",
+  "tested_version": "5.6.5.4",
+  "tested_on": "2026-10-21",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/Program Files/SayIntentions.AI/SayIntentionsUpdater3.exe"]
+  },
+  "install": {
+    "from": "https://www.SayIntentions.AI",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "SayIntentions.AI",
+      "script": "launch",
+      "comment": "Opens the SayIntentions.AI Update Hub inside the running simulator's container",
+      "icon": {"place": "prefix", "glob": "drive_c/Program Files/SayIntentions.AI/SayIntentionsUpdater3.exe"}
+    }
+  ],
+  "watcher": {"loop": "links-watcher"}
+}

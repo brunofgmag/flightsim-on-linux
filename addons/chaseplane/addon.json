@@ -1,0 +1,30 @@
+{
+  "name": "ChasePlane",
+  "tested_version": "2026.39.1.16",
+  "tested_on": "2026-10-17",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["p42-util-chaseplane/manifest.json"]
+  },
+  "install": {
+    "from": "Parallel 42's website, the ChasePlane installer for MSFS 2024",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "ChasePlane",
+      "script": "launch",
+      "comment": "Opens the ChasePlane manager",
+      "icon": {"place": "community", "glob": "p42-util-chaseplane/ChasePlane for MSFS2024.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^[A-Za-z]:.*\\\\CP MSFS Bridge\\.exe",
+    "script": "launch-bridge",
+    "poll": 8,
+    "stop": "with_simulator",
+    "health": {"listening": 8651}
+  }
+}

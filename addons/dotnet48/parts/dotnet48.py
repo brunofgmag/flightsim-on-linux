@@ -12,13 +12,8 @@ from fsol import registry  # noqa: E402
 
 Setting = namedtuple("Setting", "hive path name value wow label")
 
-FENIX_EXECUTABLES = ("Fenix.exe", "FenixBootstrapper.exe", "FenixSystem.exe", "FenixCDU.exe", "FenixDisplay.exe")
 SETTINGS = (
     Setting("HKCU", r"Software\Wine\DllOverrides", "mscoree", "builtin", False, "mscoree stays builtin for every other program (wine-mono)"),
-    *(
-        Setting("HKCU", rf"Software\Wine\AppDefaults\{exe}\DllOverrides", "mscoree", "native", False, f"mscoree is native for {exe}")
-        for exe in FENIX_EXECUTABLES
-    ),
     Setting("HKLM", r"Software\Microsoft\.NETFramework", "InstallRoot", "C:\\windows\\Microsoft.NET\\Framework64\\", False, ".NETFramework InstallRoot (64-bit view)"),
     Setting("HKLM", r"Software\Microsoft\.NETFramework", "InstallRoot", "C:\\windows\\Microsoft.NET\\Framework\\", True, ".NETFramework InstallRoot (32-bit view)"),
     Setting("HKCU", r"Software\Wine\Mono\AsmOverrides", "*", "gac=n", False, "wine-mono ignores the Windows GAC (gac=n)"),
@@ -95,10 +90,6 @@ def setting_holds(prefix, setting):
     return current_value(prefix, setting) == setting.value
 
 
-def is_app_override(setting):
-    return "AppDefaults" in setting.path
-
-
 def product_version(path):
     if not path.is_file():
         return None
@@ -160,11 +151,6 @@ def command_missing(args):
     return print_arguments(add_arguments(item, item.name, item.value) for item in SETTINGS if not setting_holds(args.prefix, item))
 
 
-def command_remove_overrides(args):
-    present = (item for item in SETTINGS if is_app_override(item) and current_value(args.prefix, item) is not None)
-    return print_arguments(delete_arguments(item, item.name) for item in present)
-
-
 def command_winver_save(args):
     Path(args.file).write_text(json.dumps(windows_version_snapshot(args.prefix)))
     return 0
@@ -187,10 +173,9 @@ def parser():
     check.add_argument("prefix")
     check.add_argument("group", nargs="?", choices=GROUPS)
     check.set_defaults(run=command_check)
-    for name, run in (("missing", command_missing), ("remove-overrides", command_remove_overrides)):
-        command = commands.add_parser(name)
-        command.add_argument("prefix")
-        command.set_defaults(run=run)
+    missing = commands.add_parser("missing")
+    missing.add_argument("prefix")
+    missing.set_defaults(run=command_missing)
     for name, run in (("winver-save", command_winver_save), ("winver-restore", command_winver_restore)):
         command = commands.add_parser(name)
         command.add_argument("prefix")

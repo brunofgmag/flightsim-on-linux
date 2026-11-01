@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/tritrisim.sh"
+
+addon_refuse_second "$TRITRISIM_PATTERN"
+exe="$(tritrisim_exe)"
+if [ -z "$exe" ]; then
+  addon_say tritrisim-hub "the TriTriSim Hub is not installed; run: flightsim-on-linux addon install tritrisim-hub <installer>"
+  exit 1
+fi
+log="$(addon_log_file tritrisim-hub)"
+tritrisim_patch "$exe" > "$log" 2>&1 || { addon_say tritrisim-hub "the import patch failed; see $log"; exit 1; }
+
+addon_beside_simulator "$(addon_windows_path "$exe")" "$@" >> "$log" 2>&1 &
+disown

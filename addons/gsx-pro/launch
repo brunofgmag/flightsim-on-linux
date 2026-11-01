@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+exe="$FSOL_PREFIX/drive_c/Program Files (x86)/Addon Manager/Couatl_Updater2.exe"
+
+if [ ! -f "$exe" ]; then
+  addon_say gsx-pro "the FSDT updater is not in the prefix; run the FSDT universal installer once, as the GSX Pro page says"
+  exit 1
+fi
+if [ "${FSOL_SIM_RUNNING:-0}" = 1 ] || addon_sibling_prefix_running "$FSOL_PREFIX"; then
+  addon_say gsx-pro "close the simulator and every program in its prefix first; the updater is an installer and runs alone"
+  exit 1
+fi
+addon_refuse_second 'Couatl_Updater2[.]exe'
+log="$(addon_log_file gsx-pro)"
+addon_alone "$(addon_windows_path "$exe")" /SILENT /INSTALLMODE > "$log" 2>&1

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: the iFly Manager writes the plugin entry in exe.xml itself, and the plugin is a native program that exe.xml can start"

@@ -14,6 +14,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install the tools the tests use
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 desktop-file-utils attr python3-pyqt6 golang
+      - uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version: 8.0.x
       - name: Unit tests
         run: python3 -m unittest discover -s tests -t . -v
 
@@ -41,6 +46,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install MinGW-w64
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+      - uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: shims/procgov/go.mod
+      - uses: actions/setup-dotnet@v4.3.1
+        with:
+          dotnet-version: 8.0.x
       - name: Build checks and shims
         run: tools/build-windows.sh out
       - uses: actions/upload-artifact@v4
@@ -66,6 +77,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes ""
+          test -z "$(find out/shims -mindepth 1 -type d)"
           if [ -s out/shims/SHA256SUMS ]; then
             gh release upload "$GITHUB_REF_NAME" out/shims/* --clobber
           fi

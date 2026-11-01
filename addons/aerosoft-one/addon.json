@@ -1,0 +1,15 @@
+{
+  "name": "Aerosoft One",
+  "tested_version": "0.16.12",
+  "tested_on": "2026-10-14",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["aerosoft-*"]
+  },
+  "install": {
+    "from": "Aerosoft's website: the Linux AppImage of Aerosoft One, not the Windows setup",
+    "paid": null,
+    "kind": "native"
+  }
+}

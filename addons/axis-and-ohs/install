@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+
+installer="${FSOL_INSTALLER:?no installer given; run: flightsim-on-linux addon install axis-and-ohs <the Axis and Ohs installer.exe>}"
+
+addon_alone "$installer"

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+
+if [ "${FSOL_SIM_RUNNING:-0}" = 1 ]; then
+  addon_say maddog-md80 "close the simulator first; the Load Manager registers the MD-80 with the prefix to itself"
+  exit 1
+fi
+addon_prefix_free_or_say maddog-md80
+exe="$(compgen -G "${FSOL_PREFIX:?FSOL_PREFIX is not set}/drive_c/users/*/AppData/Local/Maddog X Files/Load Manager/maddog_lm.exe" | head -n 1 || true)"
+if [ -z "$exe" ]; then
+  addon_say maddog-md80 "the Load Manager is not installed; run: flightsim-on-linux addon install maddog-md80 <the Leonardo installer>"
+  exit 1
+fi
+log="$(addon_log_file maddog-md80)"
+
+cd "$(dirname "$exe")"
+addon_alone "$(addon_windows_path "$exe")" > "$log" 2>&1

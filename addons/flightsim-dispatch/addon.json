@@ -1,0 +1,24 @@
+{
+  "name": "FlightSim Dispatch",
+  "tested_version": "1.5.0.2",
+  "tested_on": "2026-10-17",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "data": ["flightsim-dispatch/drive_c/FlightSimDispatch/FlightSimDispatch.exe"]
+  },
+  "install": {
+    "from": "flightsimdispatch.net (the program's own window links to the download)",
+    "paid": null,
+    "kind": "installer",
+    "own_prefix": true
+  },
+  "shortcuts": [
+    {
+      "title": "FlightSim Dispatch",
+      "icon": {"place": "data", "glob": "flightsim-dispatch/drive_c/FlightSimDispatch/FlightSimDispatch.exe"},
+      "script": "launch",
+      "comment": "Starts FlightSim Dispatch in its own Wine prefix"
+    }
+  ]
+}

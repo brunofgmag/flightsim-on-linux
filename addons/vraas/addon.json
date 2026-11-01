@@ -1,0 +1,31 @@
+{
+  "name": "vRAAS",
+  "tested_version": "1.3.9",
+  "tested_on": "2026-10-15",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe"]
+  },
+  "install": {
+    "from": "the Contrail store (LAND3 Simulations)",
+    "paid": null,
+    "kind": "store"
+  },
+  "shortcuts": [
+    {
+      "title": "vRAAS",
+      "script": "launch",
+      "comment": "Starts vRAAS inside the running simulator's container",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^C:.*\\\\LAND3\\.vRAAS\\\\current\\\\vRAAS\\.exe",
+    "script": "launch",
+    "args": ["-autostart"],
+    "grace": 20,
+    "poll": 8,
+    "stop": "with_simulator"
+  }
+}

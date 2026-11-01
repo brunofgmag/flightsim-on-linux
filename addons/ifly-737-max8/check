@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+package="${FSOL_COMMUNITY:-}/ifly-aircraft-737max8"
+status=0
+
+if [ -z "${FSOL_COMMUNITY:-}" ]; then
+  echo "FAIL no Community folder found; run: flightsim-on-linux machine"
+  status=1
+elif version="$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["package_version"])' "$package/manifest.json" 2> /dev/null)"; then
+  echo "ok the iFly 737 MAX8 $version is in the Community folder"
+else
+  echo "FAIL $package has no readable manifest.json; install the aircraft with the iFly Manager"
+  status=1
+fi
+
+python3 -I "$HERE/../../tools/exe-entry.py" check "${FSOL_PREFIX:-}" "${FSOL_BASE:-}/exe.xml" '\data\tool\737max_plugin.exe' "the iFly plugin" "install the aircraft with the iFly Manager, which writes the entry" || status=1
+exit "$status"

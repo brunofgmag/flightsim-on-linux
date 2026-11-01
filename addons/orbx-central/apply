@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: Orbx Central needs no change in the prefix; its installer needs powershell.exe off, which the install script sets, and its launch script starts it with --disable-gpu-sandbox and refuses while the simulator runs"

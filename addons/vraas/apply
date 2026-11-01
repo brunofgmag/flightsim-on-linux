@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: vRAAS needs Direct3D 9 off, and its launch script turns it off for that one program"

@@ -1,0 +1,90 @@
+diff --git a/src-tauri/src/encoder_layouts.rs b/src-tauri/src/encoder_layouts.rs
+index 2a93eab..0d53ef1 100644
+--- a/src-tauri/src/encoder_layouts.rs
++++ b/src-tauri/src/encoder_layouts.rs
+@@ -1,4 +1,4 @@
+-use crate::shared::{ActionInstance, Encoder, config_dir};
++use crate::shared::{ActionInstance, ActionState, Encoder, config_dir};
+ use crate::store::profiles::{acquire_locks_mut, get_slot_mut};
+ 
+ use std::path::{Path, PathBuf};
+@@ -59,15 +59,7 @@ fn get_encoder_image(encoder: &mut Encoder, instance: &ActionInstance) -> Result
+ 
+ 	let state_idx = instance.current_state as usize;
+ 
+-	// Override the title if it's set in the state.
+-	let override_title = {
+-		let t = instance.states[state_idx]
+-			.text_override
+-			.clone()
+-			.filter(|s| !s.is_empty())
+-			.unwrap_or_else(|| instance.states[state_idx].text.clone());
+-		(!t.is_empty()).then_some(t)
+-	};
++	let override_title = encoder_title_override(&instance.states[state_idx]);
+ 
+ 	// Similar to the title, except for the rendered icon.
+ 	let state_image = &instance.states[state_idx].image.trim();
+@@ -126,3 +118,62 @@ fn get_encoder_image(encoder: &mut Encoder, instance: &ActionInstance) -> Result
+ 	renderer.set_feedback(Value::Object(feedback))?;
+ 	Ok(DynamicImage::ImageRgba8(renderer.get_image()))
+ }
++
++fn encoder_title_override(state: &ActionState) -> Option<String> {
++	if !state.show {
++		return Some(String::new());
++	}
++	let text = state.text_override.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| state.text.clone());
++	(!text.is_empty()).then_some(text)
++}
++
++#[cfg(test)]
++mod tests {
++	use super::*;
++
++	fn state(text: &str, show: bool) -> ActionState {
++		ActionState {
++			text: text.to_owned(),
++			show,
++			..Default::default()
++		}
++	}
++
++	#[test]
++	fn hidden_title_blanks_the_layout_title() {
++		assert_eq!(encoder_title_override(&state("DISP & WX", false)), Some(String::new()));
++	}
++
++	#[test]
++	fn whitespace_title_stays_blank_instead_of_falling_back_to_the_action_name() {
++		assert_eq!(encoder_title_override(&state(" ", true)), Some(" ".to_owned()));
++	}
++
++	#[test]
++	fn shown_title_keeps_its_text() {
++		assert_eq!(encoder_title_override(&state(" RANGE", true)), Some(" RANGE".to_owned()));
++	}
++
++	#[test]
++	fn empty_title_leaves_the_layout_title_alone() {
++		assert_eq!(encoder_title_override(&state("", true)), None);
++	}
++
++	#[test]
++	fn plugin_title_wins_over_the_saved_title() {
++		let state = ActionState {
++			text_override: Some("ALL DISP".to_owned()),
++			..state("DISP & WX", true)
++		};
++		assert_eq!(encoder_title_override(&state), Some("ALL DISP".to_owned()));
++	}
++
++	#[test]
++	fn hidden_title_also_hides_the_plugin_title() {
++		let state = ActionState {
++			text_override: Some("ALL DISP".to_owned()),
++			..state("DISP & WX", false)
++		};
++		assert_eq!(encoder_title_override(&state), Some(String::new()));
++	}
++}

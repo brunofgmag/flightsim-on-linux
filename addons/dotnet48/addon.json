@@ -1,0 +1,10 @@
+{
+  "name": ".NET Framework 4.8",
+  "tested_version": "4.8 (ndp48-x86-x64-allos-enu.exe)",
+  "tested_on": "2026-10-18",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/clr.dll"]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Aerosoft A340-600 Professional",
+  "tested_version": "1.0.5",
+  "tested_on": "2026-10-15",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["aerosoft-aircraft-a346-pro/manifest.json"]
+  },
+  "install": {
+    "from": "the Aerosoft One store",
+    "paid": null,
+    "kind": "store"
+  }
+}

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=addons/flightsim-dispatch/parts/common.sh
+. "$HERE/parts/common.sh"
+status=0
+
+if command -v wine > /dev/null; then
+  echo "ok system Wine $(wine --version 2> /dev/null) is installed"
+else
+  echo "FAIL Wine is not installed; FlightSim Dispatch runs in its own prefix with the Wine of your distribution (the wine package on Arch)"
+  status=1
+fi
+
+for file in FlightSimDispatch.exe FlightDB.db; do
+  if [ -f "$DISPATCH_FOLDER/$file" ]; then
+    echo "ok $DISPATCH_FOLDER/$file exists"
+  else
+    echo "FAIL $DISPATCH_FOLDER/$file does not exist; run: flightsim-on-linux addon install flightsim-dispatch <FlightSimDispatch zip>"
+    status=1
+  fi
+done
+exit "$status"

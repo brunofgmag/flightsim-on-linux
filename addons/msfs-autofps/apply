@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: AutoFPS needs Proton FS2024 and Direct3D 9 off, and its launch script turns Direct3D 9 off for that one program"

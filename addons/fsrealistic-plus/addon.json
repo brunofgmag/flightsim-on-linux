@@ -1,0 +1,15 @@
+{
+  "name": "FSRealistic+",
+  "tested_version": "1.1.9",
+  "tested_on": "2026-10-14",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["rkapps-fsrealistic/manifest.json"]
+  },
+  "install": {
+    "from": "your vendor account (rkApps)",
+    "paid": null,
+    "kind": "installer"
+  }
+}

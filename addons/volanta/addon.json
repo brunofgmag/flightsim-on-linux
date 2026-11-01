@@ -1,0 +1,31 @@
+{
+  "name": "Volanta",
+  "tested_version": "1.19.2",
+  "tested_on": "2026-10-30",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/Programs/Volanta/Volanta.exe"]
+  },
+  "install": {
+    "from": "https://api.volanta.app/api/v1/ClientUpdate/latest.yml (open it in a browser: it lists the Windows installer, while the site's own download is a Linux AppImage that cannot reach the simulator)",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Volanta",
+      "script": "launch",
+      "comment": "Starts Volanta in the add-ons prefix, which has its own Wine server next to the simulator's",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Programs/Volanta/Volanta.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^C:.*\\\\Volanta\\\\Volanta\\.exe",
+    "script": "launch",
+    "args": ["--minimized"],
+    "grace": 20,
+    "poll": 8,
+    "stop": "never"
+  }
+}

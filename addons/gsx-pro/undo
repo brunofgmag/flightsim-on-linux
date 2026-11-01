@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/mono-copy.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/curl.sh"
+
+! pgrep -f 'Couatl_Updater2[.]exe' > /dev/null || gsx_die "close the FSDT updater first"
+
+unwrap_engine_entry() {
+  local result
+  result="$(python3 -I "$GSX_PARTS/couatl_entry.py" unwrap "$FSOL_BASE/exe.xml")"
+  case "$result" in
+    changed) echo "changed exe.xml: the GSX engine entry starts couatl64_boot.exe directly again" ;;
+    *) echo "already no com-environment.exe in exe.xml" ;;
+  esac
+  rm -f "$GSX_WRAPPER_FOLDER/com-environment.exe"
+  rmdir "$GSX_WRAPPER_FOLDER" 2> /dev/null || true
+}
+
+remove_regasm() {
+  local folder net="$FSOL_PREFIX/drive_c/windows/Microsoft.NET"
+  for folder in Framework Framework64; do
+    if [ -f "$GSX_BACKUP/regasm/$folder" ] && [ -L "$net/$folder/v4.0.30319/RegAsm.exe" ]; then
+      rm -f "$net/$folder/v4.0.30319/RegAsm.exe"
+      rmdir "$net/$folder/v4.0.30319" "$net/$folder" 2> /dev/null || true
+    fi
+  done
+  rmdir "$net" 2> /dev/null || true
+  rm -rf "$GSX_BACKUP/regasm"
+  echo "removed the RegAsm.exe links this tool made to Wine's stub"
+}
+
+unregister_com() {
+  if [ -f "$GSX_BACKUP/qlm-remove.reg" ]; then
+    gsx_regedit "$GSX_BACKUP/qlm-remove.reg" || gsx_die "regedit could not remove the QlmLicenseLib registration"
+    rm -f "$GSX_BACKUP/qlm-remove.reg"
+    echo "changed the registry: QlmLicenseLib registration removed"
+  else
+    echo "already no QlmLicenseLib registration of ours"
+  fi
+}
+
+unwrap_engine_entry
+unregister_com
+mono_patch_undo gsx-pro "$MONO_MSCORLIB" register-assembly
+mono_patch_undo gsx-pro "$MONO_SYSTEM" process-responding
+mono_copy_release gsx-pro
+gsx_curl_undo
+remove_regasm
+rm -f "$GSX_BACKUP/exe.xml"
+[ ! -d "$GSX_BACKUP" ] || find "$GSX_BACKUP" -depth -type d -empty -delete
+echo "left alone: the FSDT programs, their licences and serial numbers, and every file the FSDT installers wrote"

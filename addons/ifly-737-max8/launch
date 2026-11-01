@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\iFlyManager\.exe'
+exe="$FSOL_PREFIX/drive_c/ProgramData/iFlyManager/iFlyManager.exe"
+
+addon_refuse_second "$PATTERN"
+if [ ! -f "$exe" ]; then
+  addon_say ifly-737-max8 "the iFly Manager is not installed; run: flightsim-on-linux addon install ifly-737-max8 <iFlyManagerSetup.exe>"
+  exit 1
+fi
+log="$(addon_log_file ifly-737-max8)"
+
+addon_beside_simulator "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+disown

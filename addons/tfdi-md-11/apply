@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: the MD-11 needs no setting in the prefix; if the Install Manager stops at Installing NavData_FS24, close it and run: flightsim-on-linux addon launch tfdi-md-11 fix-navdata"

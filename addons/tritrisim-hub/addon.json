@@ -1,0 +1,24 @@
+{
+  "name": "TriTriSim Hub",
+  "tested_version": "1.2.2",
+  "tested_on": "2026-10-14",
+  "needs": [],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/TriTriSim Hub/tritrisim-hub.exe"]
+  },
+  "install": {
+    "from": "TriTriSim's website: the TriTriSim Hub installer for Windows, an NSIS setup",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "TriTriSim Hub",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts the TriTriSim Hub in the simulator's prefix, with its import patched first",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/TriTriSim Hub/tritrisim-hub.exe"}
+    }
+  ]
+}

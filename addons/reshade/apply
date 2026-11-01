@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: ReShade needs no launch option and no change in the prefix; install puts its files in the simulator folder"

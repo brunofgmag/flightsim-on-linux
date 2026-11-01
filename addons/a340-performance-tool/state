@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+if [ -f "$A340_SESSION" ]; then
+  echo "ON since $(a340_session_value activated): ToLissPrevLog.txt is read-only."
+  if a340_watcher_alive "$(a340_session_value id)"; then
+    echo "Watcher running: write access comes back when MSFS 2024 closes."
+  else
+    echo "Watcher stopped: close the simulator and run: flightsim-on-linux addon launch a340-performance-tool off"
+  fi
+else
+  echo "OFF."
+fi
+stat -c '%A %n' "$A340_PREVLOG" 2> /dev/null || true
+cat "$A340_LAST_EVENT" 2> /dev/null || true

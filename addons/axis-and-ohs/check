@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+exec python3 -I "$HERE/parts/aao.py" check "${FSOL_PREFIX:?FSOL_PREFIX is not set}" "${FSOL_PROTON:-}"

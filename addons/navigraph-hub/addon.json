@@ -1,0 +1,24 @@
+{
+  "name": "Navigraph Hub",
+  "tested_version": "1.2.24",
+  "tested_on": "2026-10-31",
+  "needs": [],
+  "touches_addon_files": true,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Local/Programs/navigraph-hub/Navigraph Hub.exe"]
+  },
+  "install": {
+    "from": "Navigraph's website: the Navigraph Hub installer for Windows",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Navigraph Hub",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts the Navigraph Hub in the simulator's prefix",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/Programs/navigraph-hub/Navigraph Hub.exe"}
+    }
+  ]
+}

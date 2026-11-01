@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/download.sh"
+GLASS_VERSION="1.0.2"
+GLASS_URL="https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases/download/v$GLASS_VERSION/glass-cockpit-dlss-fix.addon64"
+GLASS_SHA256="9474b66e2e22bc005233463574fc9ba9c107d4bfa8364e5c3478588f0e8f2036"
+
+sim="${FSOL_SIM_INSTALL:?no simulator install folder found; run: flightsim-on-linux machine}"
+cache="${FSOL_CACHE:?FSOL_CACHE is not set}/downloads"
+
+[ "${FSOL_SIM_RUNNING:-0}" != 1 ] || { echo "close the simulator before you install the add-on" >&2; exit 1; }
+[ -f "$sim/dxgi.dll" ] || { echo "ReShade is not in the simulator folder; run first: flightsim-on-linux addon install reshade <dxgi.dll of a Windows ReShade install>" >&2; exit 1; }
+
+file="${FSOL_INSTALLER:-}"
+if [ -z "$file" ]; then
+  file="$cache/glass-cockpit-dlss-fix-$GLASS_VERSION.addon64"
+  glass_fetch "$GLASS_URL" "$GLASS_SHA256" "$file"
+fi
+glass_install_file "$file" "$GLASS_SHA256" "$sim"
+echo "glass-cockpit-dlss-fix.addon64 $GLASS_VERSION is in $sim; next: flightsim-on-linux addon apply glass-cockpit-dlss-fix"

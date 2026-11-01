@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+exe="${FSOL_COMMUNITY:-}/p42-util-chaseplane/ChasePlane for MSFS2024.exe"
+
+if [ ! -f "$exe" ]; then
+  addon_say chaseplane "the ChasePlane manager is not in the Community folder; run: flightsim-on-linux addon install chaseplane <installer>"
+  exit 1
+fi
+addon_refuse_second '^[A-Za-z]:.*\\ChasePlane for MSFS2024\.exe'
+if [ "${FSOL_SIM_RUNNING:-0}" = 1 ]; then
+  log="$(addon_log_file chaseplane)"
+  addon_beside_simulator "$(addon_windows_path "$exe")" > "$log" 2>&1 &
+  disown
+  exit 0
+fi
+command -v protontricks > /dev/null || { addon_say chaseplane "protontricks is missing: install it, it opens the manager so it survives the copy it makes of itself"; exit 1; }
+log="$(addon_log_file chaseplane)"
+protontricks --no-term -c "wine $(printf %q "$exe"); wineserver -w" 2537590 > "$log" 2>&1 &
+disown

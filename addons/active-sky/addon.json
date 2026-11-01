@@ -1,0 +1,24 @@
+{
+  "name": "Active Sky FS",
+  "tested_version": "1.0.9720.20096",
+  "tested_on": "2026-10-15",
+  "needs": ["proton-fs2024", "simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/Program Files/HiFi/AS_FS/AS_FS.exe"]
+  },
+  "install": {
+    "from": "http://www.hifisimtech.com/",
+    "paid": true,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "Active Sky",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts Active Sky inside the running simulator's container",
+      "icon": {"place": "prefix", "glob": "drive_c/Program Files/HiFi/AS_FS/AS_FS.exe"}
+    }
+  ]
+}

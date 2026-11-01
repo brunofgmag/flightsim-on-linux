@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+
+installer="${FSOL_INSTALLER:?no installer given; run: flightsim-on-linux addon install bbs-nest <BlueBirdNestSetup.exe>}"
+code=0
+addon_alone "$installer" || code=$?
+if [ "$code" -ne 0 ]; then
+  echo "the setup exited with code $code; on the test machine it exited with 3 after installing, so run: flightsim-on-linux addon check bbs-nest" >&2
+fi
+exit "$code"

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$(cd "$HERE/../.." && pwd)"
+# shellcheck source=tools/registry.sh
+. "$HERE/../../tools/registry.sh"
+# shellcheck source=addons/rex-atmos-core/parts/policy.sh
+. "$HERE/parts/policy.sh"
+status=0
+
+python3 -I "$ROOT/fsol/proton_build.py" check "${FSOL_PROTON:-}" \
+  win32u-cross-process-child-windows.patch lib/wine/x86_64-unix/win32u.so "Proton's win32u.so draws the WebView2 area inside the REX window" \
+  server-process-vm-write-falls-back-to-ptrace.patch bin/wineserver "Proton's wineserver writes the read-only image page REX patches, so the sliders reach the simulator" || status=1
+
+if [ "$(registry_get "$POLICY_KEY" "$POLICY_NAME" || true)" = "$POLICY_VALUE" ]; then
+  echo "ok the WebView2 policy gives $POLICY_NAME the four software options"
+else
+  echo "FAIL the WebView2 policy has no $POLICY_NAME value with the four software options; run: flightsim-on-linux addon apply rex-atmos-core"
+  status=1
+fi
+exit "$status"

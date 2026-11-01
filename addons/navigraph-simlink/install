@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=addons/navigraph-simlink/parts/common.sh
+. "$HERE/parts/common.sh"
+
+installer="${FSOL_INSTALLER:?no installer given; run: flightsim-on-linux addon install navigraph-simlink <Navigraph+Simlink.exe>}"
+
+if ! command -v wine > /dev/null; then
+  echo "Wine is not installed; Simlink runs in its own prefix with the Wine of your distribution (the wine package on Arch)" >&2
+  exit 1
+fi
+if pgrep -f -- "$SIMLINK_PATTERN" > /dev/null; then
+  echo "Simlink is open; quit it from its tray icon first, then run this again" >&2
+  exit 1
+fi
+if [ ! -f "$SIMLINK_PREFIX/system.reg" ]; then
+  mkdir -p "$SIMLINK_PREFIX"
+  simlink_wine wine wineboot -i
+fi
+
+code=0
+simlink_wine wine "$installer" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- '/LOG=C:\simlink-install.log' || code=$?
+simlink_wait > /dev/null 2>&1 || echo "programs are still open in the Simlink prefix after the installer" >&2
+exit "$code"

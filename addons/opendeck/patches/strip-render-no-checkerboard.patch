@@ -1,0 +1,55 @@
+diff --git a/src/components/pixmap.rs b/src/components/pixmap.rs
+--- a/src/components/pixmap.rs
++++ b/src/components/pixmap.rs
+@@ -1,8 +1,8 @@
+-use crate::color::{parse_gradient, with_opacity};
++use crate::color::parse_gradient;
+ use crate::layout::{PixmapItem, PixmapSource, Rect};
+ use crate::render::{FillStyle, blend, fill_rect, is_valid_rect};
+ use crate::{FONT_MONO, FONT_SANS, FONT_SERIF, STRICT_RENDER};
+-use image::{Rgba, RgbaImage, imageops};
++use image::{RgbaImage, imageops};
+ use log::warn;
+ use resvg::tiny_skia::Transform;
+ use resvg::usvg::{fontdb, roxmltree};
+@@ -57,10 +57,8 @@
+     };
+     fill_rect(canvas, rect, &style);
+ 
+-    // Load and draw the image, or draw the checkerboard
+-    match load_pixmap_source(&item.value, rect) {
+-        Some(img) => blit_image(canvas, &img, rect, item.common.opacity),
+-        None => draw_checkerboard(canvas, rect, item.common.opacity),
++    if let Some(img) = load_pixmap_source(&item.value, rect) {
++        blit_image(canvas, &img, rect, item.common.opacity);
+     }
+ }
+ 
+@@ -186,27 +184,3 @@
+     }
+ }
+ 
+-/// This is essentially a fallback, if an image is not defined, or we can't load the image
+-/// we replace it with a checkerboard in the location the image should be.
+-/// TODO: We should probably not draw at all, but this helps debugging
+-fn draw_checkerboard(canvas: &mut RgbaImage, rect: &Rect, opacity: f64) {
+-    let c1 = with_opacity(Rgba([80, 80, 80, 128]), opacity);
+-    let c2 = with_opacity(Rgba([48, 48, 48, 128]), opacity);
+-    let tile = 8u32;
+-    for py in 0..rect.height {
+-        for px in 0..rect.width {
+-            let cx = rect.x + px;
+-            let cy = rect.y + py;
+-            if cx >= canvas.width() || cy >= canvas.height() {
+-                continue;
+-            }
+-            let c = if (px / tile + py / tile).is_multiple_of(2) {
+-                c1
+-            } else {
+-                c2
+-            };
+-            let dst = *canvas.get_pixel(cx, cy);
+-            canvas.put_pixel(cx, cy, blend(dst, c));
+-        }
+-    }
+-}

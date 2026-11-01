@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+exe="${FSOL_PREFIX:-}/drive_c/BeyondATC/BeyondATC.exe"
+if [ -f "$exe" ]; then
+  echo "ok BeyondATC is installed at $exe"
+  exit 0
+fi
+echo "FAIL $exe does not exist; download the installer from https://www.beyondatc.net and run it in the prefix, alone (see the ground rules)"
+exit 1

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to undo: apply changes nothing; addon shortcut msfs-autofps --remove and addon watcher msfs-autofps --off take out the menu entry and the service"

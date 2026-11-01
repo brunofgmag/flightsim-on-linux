@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=addons/flightsim-dispatch/parts/common.sh
+. "$HERE/parts/common.sh"
+
+archive="${FSOL_INSTALLER:?no zip given; run: flightsim-on-linux addon install flightsim-dispatch <FlightSimDispatch zip>}"
+fresh="$DISPATCH_FOLDER.new"
+
+if ! command -v wine > /dev/null; then
+  echo "Wine is not installed; FlightSim Dispatch runs in its own prefix with the Wine of your distribution (the wine package on Arch)" >&2
+  exit 1
+fi
+if pgrep -f -- "$DISPATCH_PATTERN" > /dev/null; then
+  echo "FlightSim Dispatch is open; close it first, then run this again" >&2
+  exit 1
+fi
+if [ ! -f "$DISPATCH_PREFIX/system.reg" ]; then
+  mkdir -p "$DISPATCH_PREFIX"
+  dispatch_wine wine wineboot -i
+  dispatch_wait > /dev/null 2>&1 || true
+fi
+
+rm -rf "$fresh"
+mkdir -p "$fresh"
+python3 -I -m zipfile -e "$archive" "$fresh"
+if [ ! -f "$fresh/FlightSimDispatch.exe" ]; then
+  rm -rf "$fresh"
+  echo "FAIL $archive has no FlightSimDispatch.exe at its top level, so it is not the FlightSim Dispatch zip; the folder was left as it was" >&2
+  exit 1
+fi
+rm -rf "$DISPATCH_FOLDER"
+mv "$fresh" "$DISPATCH_FOLDER"
+echo "unzipped $archive into $DISPATCH_FOLDER"

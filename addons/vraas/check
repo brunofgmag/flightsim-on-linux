@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+exe="$(compgen -G "${FSOL_PREFIX:-}/drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe" | head -n 1 || true)"
+if [ -n "$exe" ]; then
+  echo "ok vRAAS is installed at $exe"
+  exit 0
+fi
+echo "FAIL vRAAS.exe is not in the prefix; download the installer from the Contrail store, then run: flightsim-on-linux addon install vraas <installer>"
+exit 1

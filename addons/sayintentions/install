@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+installer="${FSOL_INSTALLER:?no installer given; run: flightsim-on-linux addon install sayintentions <SayIntentionsAI_UpdateHub.exe>}"
+
+if ! pgrep -f -- "$HERE/links-watcher" > /dev/null; then
+  addon_say sayintentions "start the links watcher first, or the Update Hub empties the SayIntentions packages in Community when it relinks them; run: flightsim-on-linux addon watcher sayintentions"
+  exit 1
+fi
+addon_alone WINEDLLOVERRIDES=d3d9=d "$installer"

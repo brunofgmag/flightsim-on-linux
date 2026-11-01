@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+glass_sha256() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+glass_fetch() {
+  local url="$1" sha="$2" file="$3"
+  if [ -f "$file" ] && [ "$(glass_sha256 "$file")" = "$sha" ]; then
+    echo "already downloaded: $file"
+    return 0
+  fi
+  mkdir -p "$(dirname "$file")"
+  curl --fail --location --silent --show-error --output "$file.part" "$url"
+  if [ "$(glass_sha256 "$file.part")" != "$sha" ]; then
+    rm -f "$file.part"
+    echo "the download from $url is not the file this add-on was tested with (sha256 $sha); nothing was installed" >&2
+    return 1
+  fi
+  mv "$file.part" "$file"
+}
+
+glass_install_file() {
+  local file="$1" sha="$2" sim="$3"
+  if [ "$(glass_sha256 "$file")" != "$sha" ]; then
+    echo "$file is not the release this add-on was tested with (sha256 $sha); nothing was installed" >&2
+    return 1
+  fi
+  install -m 644 "$file" "$sim/glass-cockpit-dlss-fix.addon64"
+}

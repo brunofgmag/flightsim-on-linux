@@ -1,0 +1,10 @@
+LIBRARY oletr.dll
+EXPORTS
+    RegisterDragDrop=ole32.RegisterDragDrop
+    OleInitialize=ole32.OleInitialize
+    CoCreateInstance=ole32.CoCreateInstance
+    RevokeDragDrop
+    CoUninitialize=ole32.CoUninitialize
+    CoInitializeEx=ole32.CoInitializeEx
+    CoInitialize=ole32.CoInitialize
+    CoTaskMemAlloc=ole32.CoTaskMemAlloc

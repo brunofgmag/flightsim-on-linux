@@ -1,0 +1,15 @@
+{
+  "name": "FSS Boeing 727-200",
+  "tested_version": "1.1.7",
+  "tested_on": "2026-10-15",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["fss-aircraft-boeing-727-200f/manifest.json", "fss-aircraft-boeing-727-200re/manifest.json"]
+  },
+  "install": {
+    "from": "the Aerosoft One store",
+    "paid": null,
+    "kind": "store"
+  }
+}

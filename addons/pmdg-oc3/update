@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CDN=https://cdn.pmdg.com/oc3-client-releases
+folder="${FSOL_CACHE:?FSOL_CACHE is not set}/downloads"
+
+manifest="$(curl -fsS "$CDN/prod.yml")"
+version="$(awk '$1 == "version:" {print $2; exit}' <<< "$manifest")"
+file="$(awk '$1 == "path:" {print $2; exit}' <<< "$manifest")"
+sha512="$(awk '$1 == "sha512:" {print $2; exit}' <<< "$manifest")"
+if [[ $file != oc3_setup_*.exe || $file == */* || -z $sha512 ]]; then
+  echo "pmdg-oc3: PMDG's manifest is not in the shape this script knows: $manifest" >&2
+  exit 1
+fi
+
+installer="$folder/$file"
+echo "version published by PMDG: $version"
+mkdir -p "$folder"
+if [ ! -f "$installer" ]; then
+  curl -fL --progress-bar -o "$installer.part" "$CDN/$file"
+  mv "$installer.part" "$installer"
+fi
+
+actual="$(openssl dgst -sha512 -binary "$installer" | base64 -w0)"
+if [ "$actual" != "$sha512" ]; then
+  rm -f "$installer"
+  echo "pmdg-oc3: the sha512 of $file does not match PMDG's manifest; the file was deleted" >&2
+  exit 1
+fi
+echo "sha512 matches PMDG's manifest"
+
+if [ "${1:-}" = --download-only ]; then
+  echo "$installer"
+  exit 0
+fi
+
+exec "$FSOL_CLI" addon install pmdg-oc3 "$installer"

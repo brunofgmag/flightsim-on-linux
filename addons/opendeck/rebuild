@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+OPENDECK_REPOSITORY="${OPENDECK_REPOSITORY:-https://github.com/nekename/OpenDeck.git}"
+STRIP_RENDER_REPOSITORY="${STRIP_RENDER_REPOSITORY:-}"
+WORK="${FSOL_CACHE:-${XDG_CACHE_HOME:-${HOME:?HOME is not set}/.cache}/flightsim-on-linux}/opendeck"
+SOURCE="$WORK/source"
+STRIP_RENDER="$WORK/strip-render"
+RECORD="$WORK/patched-build.txt"
+OPENDECK_PATCHES=(swipe-changes-the-page.patch dial-title-like-elgato.patch)
+STRIP_RENDER_PATCH=strip-render-no-checkerboard.patch
+FETCH_ATTEMPTS="${OPENDECK_FETCH_ATTEMPTS:-5}"
+FETCH_PAUSE="${OPENDECK_FETCH_PAUSE:-10}"
+
+need() {
+  command -v "$1" > /dev/null || { echo "$1 is missing: install $2" >&2; exit 1; }
+}
+
+installed_version() {
+  command -v pacman > /dev/null || return 0
+  pacman -Q opendeck 2> /dev/null | sed -n 's/^opendeck \([0-9][0-9.]*\)-.*/\1/p' || true
+}
+
+fetch() {
+  local attempt
+  for ((attempt = 1; attempt <= FETCH_ATTEMPTS; attempt++)); do
+    timeout 60 git -C "$1" fetch --tags origin && return 0
+    sleep "$FETCH_PAUSE"
+  done
+  return 1
+}
+
+clone_or_fetch() {
+  local url="$1" folder="$2"
+  [ -d "$folder/.git" ] || git clone --quiet "$url" "$folder"
+  fetch "$folder" || echo "git fetch failed in $folder; going on with the tags already there" >&2
+}
+
+checkout_clean() {
+  git -C "$1" reset --hard --quiet
+  git -C "$1" clean -fdq
+  git -C "$1" checkout --detach --quiet "$2"
+}
+
+strip_render_field() {
+  sed -n "s/^streamdeck-strip-render = {.*$1 = \"\([^\"]*\)\".*/\1/p" "$SOURCE/src-tauri/Cargo.toml"
+}
+
+prepare_strip_render() {
+  local rev url
+  rev="$(strip_render_field rev)"
+  url="$(strip_render_field git)"
+  [ -n "$rev" ] && [ -n "$url" ] || { echo "this OpenDeck does not take streamdeck-strip-render from a pinned git revision; the checkerboard patch has nothing to apply to" >&2; exit 1; }
+  clone_or_fetch "${STRIP_RENDER_REPOSITORY:-$url}" "$STRIP_RENDER"
+  checkout_clean "$STRIP_RENDER" "$rev"
+  git -C "$STRIP_RENDER" apply "$HERE/patches/$STRIP_RENDER_PATCH"
+  {
+    echo
+    echo "[patch.\"$url\"]"
+    echo "streamdeck-strip-render = { path = \"$STRIP_RENDER\" }"
+  } >> "$SOURCE/src-tauri/Cargo.toml"
+}
+
+build_frontend() {
+  local stamp="node_modules/.rebuild-package-json"
+  cd "$SOURCE"
+  if ! sha256sum --status -c "$stamp" 2> /dev/null; then
+    npm install --no-audit --no-fund
+    sha256sum package.json > "$stamp"
+  fi
+  npm run build
+}
+
+build_binary() {
+  local bin="$WORK/bin"
+  mkdir -p "$bin"
+  printf '#!/bin/sh\nexit 0\n' > "$bin/deno"
+  chmod +x "$bin/deno"
+  cd "$SOURCE/src-tauri"
+  PATH="$bin:$PATH" cargo test --release --features custom-protocol encoder_layouts
+  PATH="$bin:$PATH" cargo build --release --features custom-protocol
+}
+
+write_record() {
+  local version="$1" binary="$2" patch
+  {
+    echo "version $version"
+    echo "binary $(sha256sum "$binary" | cut -d ' ' -f 1)"
+    for patch in "${OPENDECK_PATCHES[@]}" "$STRIP_RENDER_PATCH"; do
+      echo "patch $(sha256sum "$HERE/patches/$patch" | cut -d ' ' -f 1) $patch"
+    done
+  } > "$RECORD"
+}
+
+version="${1:-$(installed_version)}"
+[ -n "$version" ] || { echo "usage: rebuild <OpenDeck version, like 2.14.2>; the installed version could not be read from pacman" >&2; exit 2; }
+need git "git"
+need npm "npm"
+need cargo "cargo (Arch: rust)"
+
+mkdir -p "$WORK"
+clone_or_fetch "$OPENDECK_REPOSITORY" "$SOURCE"
+git -C "$SOURCE" rev-parse --verify --quiet "v$version^{commit}" > /dev/null || { echo "OpenDeck has no tag v$version" >&2; exit 1; }
+checkout_clean "$SOURCE" "v$version"
+prepare_strip_render
+for patch in "${OPENDECK_PATCHES[@]}"; do
+  git -C "$SOURCE" apply --3way "$HERE/patches/$patch"
+done
+build_frontend
+build_binary
+binary="$SOURCE/src-tauri/target/release/opendeck"
+write_record "$version" "$binary"
+echo "built OpenDeck $version with the three patches: $binary"
+echo "to use it: sudo install -m 755 '$binary' /usr/bin/opendeck, then start OpenDeck again"

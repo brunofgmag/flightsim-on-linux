@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/p42.sh"
+
+option_hint() {
+  local option
+  if option="$(python3 -I "$P42_PARTS/chaseplane.py" option "${FSOL_STEAM:-}" "${FSOL_SIM_INSTALL:-}")"; then
+    echo "the Steam launch options of the simulator already hold $option"
+  else
+    echo "one step is yours: in Steam, open the properties of Microsoft Flight Simulator 2024 and put $option before %command% in its launch options, keeping the options already there. Without it the bridge does not see steamapps\\common in the simulator's path and quits. Then start the simulator once so Proton maps drive S: again"
+  fi
+}
+
+p42_apply chaseplane
+mkdir -p "$P42_BACKUP"
+p42_import "$P42_PARTS/bridge-install.reg"
+echo "changed the registry: httpapi is off for CP MSFS Bridge.exe only, so the bridge uses its own web socket server and the panel loads"
+option_hint

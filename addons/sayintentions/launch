@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+# shellcheck source=/dev/null
+. "$HERE/parts/links.sh"
+
+addon_need_simulator
+addon_refuse_second "$SI_PROGRAM_PATTERN"
+if [ ! -f "$SI_HUB" ]; then
+  addon_say sayintentions "SayIntentions.AI is not installed; run: flightsim-on-linux addon install sayintentions <installer>"
+  exit 1
+fi
+si_need_attr_tools || { addon_say sayintentions "getfattr is missing: install the attr package, or the Update Hub empties the SayIntentions packages in Community"; exit 1; }
+si_remove_links
+log="$(addon_log_file sayintentions)"
+EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator "$(addon_windows_path "$SI_HUB")" > "$log" 2>&1 &
+disown

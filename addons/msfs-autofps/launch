@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\MSFS_AutoFPS\.exe'
+
+addon_need_simulator
+addon_refuse_second "$PATTERN"
+exe="$(addon_newest "$FSOL_PREFIX/drive_c/users/*/AppData/Roaming/MSFS_AutoFPS/bin/MSFS_AutoFPS.exe")"
+if [ -z "$exe" ]; then
+  addon_say msfs-autofps "AutoFPS is not installed; run: flightsim-on-linux addon install msfs-autofps <installer>"
+  exit 1
+fi
+log="$(addon_log_file msfs-autofps)"
+
+EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator DXVK_CONFIG= "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+disown

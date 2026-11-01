@@ -156,6 +156,32 @@ class DiscoverTest(unittest.TestCase):
         self.fake.run_sim()
         self.assertTrue(self.fake.discover().sim_running)
 
+    def test_a_stand_in_named_like_the_simulator_outside_the_steam_install_is_not_the_simulator(self):
+        self.fake.build()
+        write(self.fake.proc / "4100/cmdline", "Z:\\home\\pilot\\sentinel\\FlightSimulator2024.exe\0")
+        found = self.fake.discover()
+        self.assertFalse(found.sim_running)
+        self.assertIsNone(found.sim_pid)
+
+    def test_the_simulator_is_seen_through_any_drive_mapping_of_the_steam_common_folder(self):
+        self.fake.build()
+        for first in (
+            "S:\\common\\MSFS2024\\FlightSimulator2024.exe",
+            "S:\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe",
+            "Z:\\home\\pilot\\.local\\share\\Steam\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe",
+        ):
+            with self.subTest(first=first):
+                write(self.fake.proc / "4100/cmdline", first + "\0")
+                found = self.fake.discover()
+                self.assertTrue(found.sim_running)
+                self.assertEqual(found.sim_pid, 4100)
+
+    def test_the_steam_install_folder_is_matched_without_regard_to_case(self):
+        self.fake.build()
+        write(self.fake.proc / "4100/cmdline", "Z:\\home\\pilot\\sentinel\\FlightSimulator2024.exe\0")
+        write(self.fake.proc / "4200/cmdline", "D:\\SteamLibrary\\SteamApps\\Common\\MSFS2024\\FlightSimulator2024.exe\0")
+        self.assertEqual(self.fake.discover().sim_pid, 4200)
+
     def test_an_idle_prefix_is_not_in_use(self):
         found = self.fake.build().discover()
         self.assertFalse(found.prefix_in_use)

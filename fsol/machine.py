@@ -16,6 +16,7 @@ STEAM_CANDIDATES = (
 DISPLAY_DRIVERS = ("winewayland", "winex11")
 USERCFG = "drive_c/users/steamuser/AppData/Roaming/Microsoft Flight Simulator 2024/UserCfg.opt"
 WINDOWS_PATH = re.compile(r"^[A-Za-z]:\\")
+STEAM_INSTALL = b"\\common\\"
 WINDOWS_FOLDER = "c:\\windows\\"
 
 
@@ -156,7 +157,8 @@ def sim_pid(proc=Path("/proc")):
             first = cmdline.read_bytes().split(b"\0", 1)[0]
         except OSError:
             continue
-        if first.lower().endswith(SIM_EXE.lower().encode()) and first[1:3] == b":\\":
+        lowered = first.lower()
+        if lowered.endswith(SIM_EXE.lower().encode()) and first[1:3] == b":\\" and STEAM_INSTALL in lowered:
             return int(cmdline.parent.name)
     return None
 

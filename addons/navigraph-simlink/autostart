@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+folder="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+
+case "${1:-}" in
+  "") exec python3 -I "$HERE/parts/autostart.py" write "$folder" "${FSOL_CLI:?FSOL_CLI is not set; run this through: flightsim-on-linux addon launch navigraph-simlink autostart}" ;;
+  --remove) exec python3 -I "$HERE/parts/autostart.py" remove "$folder" ;;
+  *)
+    echo "usage: flightsim-on-linux addon launch navigraph-simlink autostart [-- --remove]" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: Nest needs Proton FS2024 with winewayland-pace-hidden-gl-swaps, its Settings folder set to the real Community, and the launch script, which opens it from its own folder"

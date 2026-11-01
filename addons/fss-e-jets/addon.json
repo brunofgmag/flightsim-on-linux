@@ -1,0 +1,15 @@
+{
+  "name": "FSS E-Jets",
+  "tested_version": "1.0.2",
+  "tested_on": "2026-10-15",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "community": ["fss-aircraft-e19x/manifest.json", "fss-aircraft-e19xfreighter/manifest.json"]
+  },
+  "install": {
+    "from": "the Contrail store",
+    "paid": null,
+    "kind": "store"
+  }
+}

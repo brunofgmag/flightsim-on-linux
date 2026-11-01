@@ -67,18 +67,33 @@ def environment(sim_env, caller_env, found, sim_root):
     return env
 
 
-def plan(found, args, caller_env, proc=Path("/proc")):
+def require_simulator(found):
     if not found.sim_pid:
         raise ContainerError("the simulator is not running; start it from Steam first")
+
+
+def simulator_environ(found, proc):
+    require_simulator(found)
+    pid_dir = proc / str(found.sim_pid)
+    sim_env = machines.process_environ(pid_dir)
+    if not sim_env:
+        raise ContainerError(f"cannot read the environment of the simulator (pid {found.sim_pid})")
+    return pid_dir, sim_env
+
+
+def simulator_values(found, names, proc=Path("/proc")):
+    _, sim_env = simulator_environ(found, proc)
+    return {name: sim_env[name] for name in names if name in sim_env}
+
+
+def plan(found, args, caller_env, proc=Path("/proc")):
+    require_simulator(found)
     if not found.proton:
         raise ContainerError("the Proton the simulator runs with was not found in its config_info")
     assignments, program = split_assignments(args)
     if not program:
         raise ContainerError("no program given")
-    pid_dir = proc / str(found.sim_pid)
-    sim_env = machines.process_environ(pid_dir)
-    if not sim_env:
-        raise ContainerError(f"cannot read the environment of the simulator (pid {found.sim_pid})")
+    pid_dir, sim_env = simulator_environ(found, proc)
     env = environment(sim_env, caller_env, found, pid_dir / "root")
     env.update(assignments)
     wine = found.proton / "files" / "bin" / "wine"

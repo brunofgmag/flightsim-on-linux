@@ -1,0 +1,15 @@
+{
+  "name": "BBS 757 weather radar mod",
+  "tested_version": "1.0.3",
+  "tested_on": "2026-10-28",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "community": ["bluebirdsim-aircraft-757-200/SimObjects/Airplanes/bbs-757-200-base/panel/BBS757WX.wasm"]
+  },
+  "install": {
+    "from": "Temag's B757 Weather Radar Installer; the author's page is https://buymeacoffee.com/temag33",
+    "paid": null,
+    "kind": "installer"
+  }
+}

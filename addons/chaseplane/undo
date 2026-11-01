@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/p42.sh"
+
+if [ -e "$P42_USERS/chaseplane" ]; then
+  p42_import "$P42_PARTS/bridge-remove.reg"
+  echo "changed the registry: httpapi for CP MSFS Bridge.exe is back to Wine's default"
+fi
+p42_undo chaseplane
+p42_clean_backup
+echo "left alone: the Steam launch options of the simulator; remove STEAM_COMPAT_LIBRARY_PATHS there yourself if you want it gone"

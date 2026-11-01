@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: BeyondATC needs nothing in the prefix, and its launch script only starts it inside the running simulator's container"

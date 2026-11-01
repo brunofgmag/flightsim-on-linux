@@ -1,0 +1,31 @@
+{
+  "name": "MSFS AutoFPS",
+  "tested_version": "0.5.4.4",
+  "tested_on": "2026-10-16",
+  "needs": ["proton-fs2024"],
+  "touches_addon_files": false,
+  "installed": {
+    "prefix": ["drive_c/users/*/AppData/Roaming/MSFS_AutoFPS/bin/MSFS_AutoFPS.exe"]
+  },
+  "install": {
+    "from": "https://github.com/ResetXPDR/MSFS_AutoFPS/releases",
+    "paid": null,
+    "kind": "installer"
+  },
+  "shortcuts": [
+    {
+      "title": "MSFS AutoFPS",
+      "script": "launch",
+      "close": "close",
+      "comment": "Starts MSFS AutoFPS inside the running simulator's container",
+      "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Roaming/MSFS_AutoFPS/bin/MSFS_AutoFPS.exe"}
+    }
+  ],
+  "watcher": {
+    "app": "^C:.*\\\\MSFS_AutoFPS\\.exe",
+    "script": "launch",
+    "grace": 20,
+    "poll": 8,
+    "stop": "with_simulator"
+  }
+}

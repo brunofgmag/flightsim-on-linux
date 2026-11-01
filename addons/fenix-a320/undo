@@ -4,12 +4,12 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=/dev/null
 . "$HERE/parts/common.sh"
-PARTS=(dotnet48 geometry dxvk exe_xml)
+PARTS=(dotnet geometry dxvk exe_xml)
 for part in "${PARTS[@]}"; do
   # shellcheck source=/dev/null
   . "$HERE/parts/$part.sh"
 done
 
-for part in exe_xml dxvk geometry dotnet48; do
+for part in exe_xml dxvk geometry dotnet; do
   "${part}_undo"
 done

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/common.sh"
+
+restore_loader() {
+  local target="$SI_APP/WebView2Loader.dll" backup="$SI_BACKUP/WebView2Loader.dll"
+  if [ -f "$backup" ]; then
+    echo "restored WebView2Loader.dll as it was"
+  elif [ -e "$backup.absent" ]; then
+    echo "removed the WebView2Loader.dll this tool copied"
+  else
+    echo "already no WebView2Loader.dll of ours"
+  fi
+  addon_unstash "$target" "$SI_BACKUP"
+}
+
+restore_registry() {
+  local work count
+  work="$(mktemp -d "${TMPDIR:-/tmp}/sayintentions-reg.XXXXXX")"
+  count="$(python3 -I "$SI_PARTS/sayintentions.py" plan-undo "$SI_BACKUP/registry.json" "$work/undo.reg")"
+  if [ "$count" -gt 0 ]; then
+    addon_alone regedit /S "$(addon_windows_path "$work/undo.reg")" > /dev/null || { rm -rf "$work"; si_die "regedit could not import the previous settings"; }
+    echo "changed the registry: $count setting(s) back to what they were before apply"
+  else
+    echo "already no registry settings of ours"
+  fi
+  rm -rf "$work" "$SI_BACKUP/registry.json"
+}
+
+restore_registry
+restore_loader
+[ ! -d "$SI_BACKUP" ] || find "$SI_BACKUP" -depth -type d -empty -delete
+echo "left alone: the Update Hub, SayIntentions and the links watcher; switch the watcher off with: flightsim-on-linux addon watcher sayintentions --off"

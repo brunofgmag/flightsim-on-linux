@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+PATTERN='^[A-Za-z]:.*\\MSFS_AutoFPS\.exe'
+
+if ! pgrep -f -- "$PATTERN" > /dev/null; then
+  echo "AutoFPS is not running"
+  exit 0
+fi
+addon_beside_simulator taskkill /im MSFS_AutoFPS.exe > /dev/null 2>&1 || true
+if ! addon_wait_gone "$PATTERN"; then
+  addon_say msfs-autofps "AutoFPS is still running after its window was asked to close; with Close to Tray on it went to the tray, so use Exit in its tray menu"
+  exit 1
+fi

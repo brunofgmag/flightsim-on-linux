@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=addons/volanta/parts/common.sh
+. "$HERE/parts/common.sh"
+
+installer="${FSOL_INSTALLER:?no installer given; run: flightsim-on-linux addon install volanta <volanta-1.19.2.exe>}"
+sibling="$(addon_sibling_prefix)"
+
+if pgrep -f -- "$VOLANTA_PATTERN" > /dev/null; then
+  echo "Volanta is open; quit it from its tray icon first, then run this again" >&2
+  exit 1
+fi
+addon_sibling_prefix_create
+
+code=0
+EXTRA_WINEDLLOVERRIDES=powershell.exe=d addon_sibling_prefix_wine "$(addon_windows_path "$installer")" /S || code=$?
+timeout 60 env WINEPREFIX="$sibling" "$FSOL_PROTON/files/bin/wineserver" -w > /dev/null 2>&1 || echo "programs are still open in the add-ons prefix after the installer; close them before the next one" >&2
+exit "$code"

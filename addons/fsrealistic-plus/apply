@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+ROOT="$(cd "$HERE/../.." && pwd)"
+EXE_XML="${FSOL_BASE:?no base folder found; run: flightsim-on-linux machine}/exe.xml"
+PROGRAM="${FSOL_COMMUNITY:?no Community folder found; run: flightsim-on-linux machine}/rkapps-fsrealistic/service/FSRealistic-Plus.exe"
+BACKUP="$FSOL_COMPATDATA/flightsim-on-linux-backup/fsrealistic-plus"
+
+state="$(python3 -I "$HERE/../../tools/exe-entry.py" state "$EXE_XML" '\rkapps-fsrealistic\service\fsrealistic-plus.exe')"
+case "$state" in
+  enabled)
+    echo "already exe.xml starts FSRealistic+"
+    exit 0
+    ;;
+  disabled)
+    echo "left exe.xml as it is: its FSRealistic+ entry has Disabled true"
+    exit 0
+    ;;
+esac
+if [ ! -f "$PROGRAM" ]; then
+  echo "fsrealistic-plus: $PROGRAM does not exist; install FSRealistic+ first" >&2
+  exit 2
+fi
+windows="$(addon_windows_path "$PROGRAM")"
+mkdir -p "$BACKUP"
+[ ! -f "$EXE_XML" ] || cp -p "$EXE_XML" "$BACKUP/exe.xml"
+result="$(python3 -I "$ROOT/fsol/exe_xml.py" add --name "FSRealistic+" "$EXE_XML" "$windows")"
+printf '%s\n%s\n' "$result" "$windows" > "$BACKUP/exe-xml-entry"
+echo "changed exe.xml: $result the FSRealistic+ entry for $windows (previous file in $BACKUP/exe.xml)"

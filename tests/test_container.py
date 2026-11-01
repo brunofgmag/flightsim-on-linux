@@ -1,10 +1,13 @@
+import contextlib
+import io
 import os
 import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from fsol import container
+from fsol import cli, container
 from tests.test_machine import FakeMachine, write
 
 SIM_ENV = {
@@ -18,7 +21,7 @@ SIM_ENV = {
 }
 
 
-class ContainerTest(unittest.TestCase):
+class SimulatorCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.fake = FakeMachine(Path(self.temp.name)).build()
@@ -37,6 +40,8 @@ class ContainerTest(unittest.TestCase):
         inside.parent.mkdir(parents=True, exist_ok=True)
         os.symlink(path, inside)
 
+
+class ContainerTest(SimulatorCase):
     def plan(self, args, caller=None):
         return container.plan(self.fake.discover(), args, caller or {}, proc=self.fake.proc)
 
@@ -116,6 +121,57 @@ class ContainerTest(unittest.TestCase):
         self.start_sim()
         with self.assertRaisesRegex(container.ContainerError, "no program"):
             self.plan(["WINEDEBUG=+seh"])
+
+
+class SimulatorValuesTest(SimulatorCase):
+    def values(self, names):
+        return container.simulator_values(self.fake.discover(), names, proc=self.fake.proc)
+
+    def test_a_closed_simulator_is_an_error(self):
+        with self.assertRaisesRegex(container.ContainerError, "not running"):
+            self.values(["WINEPREFIX"])
+
+    def test_each_name_comes_back_with_the_value_the_simulator_has(self):
+        self.start_sim()
+        self.assertEqual(self.values(["DISPLAY", "WINEPREFIX"]), {"DISPLAY": ":1", "WINEPREFIX": "/pfx"})
+
+    def test_a_name_the_simulator_lacks_is_left_out(self):
+        self.start_sim()
+        self.assertEqual(self.values(["WAYLAND_DISPLAY", "DISPLAY"]), {"DISPLAY": ":1"})
+
+    def test_a_value_with_an_equals_sign_is_kept_whole(self):
+        self.start_sim({"WINEDLLOVERRIDES": "d3d9=n;httpapi=d"})
+        self.assertEqual(self.values(["WINEDLLOVERRIDES"]), {"WINEDLLOVERRIDES": "d3d9=n;httpapi=d"})
+
+    def test_an_unreadable_environment_is_an_error(self):
+        self.fake.run_sim()
+        with self.assertRaisesRegex(container.ContainerError, "cannot read the environment"):
+            self.values(["DISPLAY"])
+
+
+class SimEnvCommandTest(SimulatorCase):
+    def sim_env(self, *names):
+        out, err = io.StringIO(), io.StringIO()
+        real = container.simulator_values
+        with mock.patch.object(cli.machine, "discover", return_value=self.fake.discover()), \
+                mock.patch.object(cli.container, "simulator_values", lambda found, wanted: real(found, wanted, proc=self.fake.proc)), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(["sim-env", *names])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_it_prints_one_name_value_line_for_each_variable_the_simulator_has(self):
+        self.start_sim()
+        self.assertEqual(self.sim_env("DISPLAY", "NOPE", "WINEPREFIX"), (0, "DISPLAY=:1\nWINEPREFIX=/pfx\n", ""))
+
+    def test_with_no_simulator_it_says_so_and_exits_2(self):
+        code, out, err = self.sim_env("DISPLAY")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("sim-env: the simulator is not running", err)
+
+    def test_it_needs_at_least_one_name(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+            cli.main(["sim-env"])
+        self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == "__main__":
