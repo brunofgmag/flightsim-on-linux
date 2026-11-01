@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BeyondATC · Flightsim on Linux</title>
+  <meta name="description" content="How to run BeyondATC in MSFS 2024 under Proton: the installer, the menu entry that starts it inside the simulator&#x27;s container, and the option that keeps its drawing off your main GPU, with the measurements and the doubt behind it.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>BeyondATC</h1>
+<p class="lead">BeyondATC 1.8.23 EA was opened on the test machine on 30 October 2026, in a test prefix and not through this add-on's launch script. The launch behaviour below was measured with 1.8.22 EA on 14 October 2026. It needs nothing in the prefix and no Proton fix.</p>
+
+<h2>Get it</h2>
+<p>BeyondATC is made by Skirmish Mode Games and comes from <a href="https://www.beyondatc.net">beyondatc.net</a>. The version on the test machine is 1.8.23 EA (early access), installed with an Inno Setup installer into <code>C:\BeyondATC</code>. The installer's file name and the price weren't recorded.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. BeyondATC has no <code>addon install</code> script. On the test machine it was installed into the simulator's prefix with <code>protontricks-launch</code>, and no installer problem was recorded.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply beyondatc</code></pre>
+<p>This changes nothing, and then runs the check. BeyondATC needs no Proton patch and no registry value. It has to start inside the simulator's container: the parts of it that control the jetways import <code>ReadProcessMemory</code>, <code>WriteProcessMemory</code> and <code>CreateRemoteThread</code>, read from the decompiled program on 30 October 2026, so they act on the simulator's process.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut beyondatc</code></pre>
+<p>This writes an entry called "BeyondATC" in your application menu, with BeyondATC's own icon when <code>7z</code> and <code>magick</code> are installed. The entry starts BeyondATC inside the running simulator's container. With the simulator closed it tells you to start the simulator first, and with BeyondATC already open it says so and does nothing. There is no watcher and no close action.</p>
+<p>The launch script sets nothing about graphics. BeyondATC is a Unity program, and Unity picks its own renderer. On 14 October 2026, with 1.8.22 EA started with nothing set, it drew with Vulkan on the RTX 4080 and held 130 to 134 MiB of that card.</p>
+
+<h2>Programs out of the main GPU</h2>
+<p>This is an option, and the add-on doesn't do it. It helps when you want BeyondATC's drawing out of the video memory of the GPU the simulator uses, and you accept that the drawing moves to the CPU. On the test machine the simulator needed that memory.</p>
+<p>The launcher the test machine used passed three things to BeyondATC, through the simulator's container:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux run \
+  __EGL_VENDOR_LIBRARY_FILENAMES=/usr/lib/pressure-vessel/overrides/share/glvnd/egl_vendor.d/50_mesa.json \
+  LIBGL_ALWAYS_SOFTWARE=1 \
+  'C:\BeyondATC\BeyondATC.exe' -force-glcore</code></pre>
+<p>The first path is inside the Steam Linux Runtime container, not on your disk. The test machine read it from the simulator's process environment. <code>-force-glcore</code> makes Unity use OpenGL, <code>LIBGL_ALWAYS_SOFTWARE=1</code> makes Mesa draw it on the CPU, and the first variable keeps the EGL loader on Mesa instead of the NVIDIA driver.</p>
+<p>What the test machine measured on 14 October 2026 with 1.8.22 EA, by reading the game's <code>Player.log</code> and <code>nvidia-smi</code>:</p>
+<div class="table-wrap">
+<table>
+  <tr><th>What it was started with</th><th>Result</th></tr>
+  <tr><td>nothing</td><td>Vulkan on the RTX 4080, 130 to 134 MiB of its memory.</td></tr>
+  <tr><td>the Vulkan loader limited to the integrated Radeon</td><td>Dies within seconds with <code>error 7: importing the supplied dmabufs failed</code>.</td></tr>
+  <tr><td>the software Vulkan driver (lavapipe)</td><td>Unity refuses it: it lists the device as type 4, a CPU, and says <code>Could not select a physical device</code>. It fell back to OpenGL on the RTX, 116 MiB.</td></tr>
+  <tr><td>the three settings above</td><td>OpenGL 4.5 on <code>llvmpipe (LLVM 23.1.1, 256 bits)</code>, off the RTX. It cost 19 to 35% of one CPU core, measured with the program idle at the menu.</td></tr>
+</table>
+</div>
+<p>This guide can't say which renderer your BeyondATC uses when the menu entry starts it. The newest <code>Player.log</code> on the test machine, from 30 October 2026, says <code>Renderer: NVIDIA GeForce RTX 4080</code>, although the launcher of that time set software OpenGL. The most likely reason is that this log comes from the test in the add-ons prefix, outside the launcher, but that wasn't confirmed. Opening BeyondATC through the launcher with the simulator running and reading that line would settle it. Read the line on your machine before you rely on this option: the file is <code>drive_c/users/steamuser/AppData/LocalLow/Skirmish Mode Games, Inc/BeyondATC/Player.log</code> in the prefix.</p>
+<p>The CPU number depends on your CPU, so measure it with BeyondATC open: <code>ps -o %cpu= -p $(pgrep -f '^C:.*BeyondATC[.]exe')</code>.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check beyondatc</code></pre>
+<p>It prints one line, <code>ok</code> or <code>FAIL</code>, and changes nothing: <code>BeyondATC.exe</code> is in <code>C:\BeyondATC</code>. When it fails, run the installer again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>On the test machine, choosing the integrated Radeon kills BeyondATC with <code>error 7: importing the supplied dmabufs failed</code>. KWin composes on the RTX and doesn't import a buffer the other GPU drew, and Wine's Wayland driver loses the connection. Volanta escapes it because Chromium hands over its window through shared memory when its compositor is off; Unity has no such option.</li>
+  <li>Unity rejects lavapipe, as in the table.</li>
+  <li>On 14 October 2026, with the first run still on the RTX, BeyondATC stopped answering when SayIntentions opened, and its process was gone between 10:03:55 and 10:04:33, with no dump and no last line in <code>Player.log</code>. It didn't happen again: alone it stayed up, and on the software OpenGL run it ran with SayIntentions to the end. With one occurrence there is nothing to measure.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo beyondatc</code> has nothing to restore, because <code>apply</code> changed nothing. Take out the menu entry with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut beyondatc --remove</code></pre>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

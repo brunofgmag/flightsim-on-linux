@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenDeck for Stream Deck · Flightsim on Linux</title>
+  <meta name="description" content="How to use OpenDeck, the native Linux program for Elgato Stream Deck, with MSFS 2024: converting the profiles of the Windows Stream Deck app, three optional source patches with a script that builds them, and the Axis and Ohs plugin.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>OpenDeck for Stream Deck</h1>
+<p class="lead">Tested with OpenDeck 2.14.2 on 22 October 2026. It is a native Linux program, so it doesn't go into the simulator's prefix and needs no fix to run. This guide covers the parts around it: moving your profiles over from the Windows Stream Deck app, three optional patches to its source, and the plugin for Lorby's Axis and Ohs. Only that plugin step changes a file that isn't yours, and its section says how to undo it.</p>
+
+<h2>Get it</h2>
+<p>OpenDeck is free, open-source software (the project is <code>nekename/OpenDeck</code> on GitHub). The test machine uses the <code>opendeck</code> package of Arch Linux, 2.14.2-1.1. Install it from your distribution if it has one:</p>
+<pre><code>sudo pacman -S opendeck</code></pre>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install opendeck</code></pre>
+<p>The second command only prints where to get it and what kind of program it is.</p>
+
+<h2>Bring your profiles from the Windows Stream Deck app</h2>
+<p>OpenDeck doesn't import the profiles of the Elgato app. <code>convert-profiles</code> does, from a copy of the Windows app's data folder, <code>%APPDATA%\Elgato\StreamDeck</code>, the one that holds <code>ProfilesV3</code> and <code>Plugins</code>. It reads that folder and never changes it.</p>
+<p>Before you run it:</p>
+<ul>
+  <li>Close OpenDeck, and copy <code>~/.config/opendeck</code> somewhere safe. The converter writes into it.</li>
+  <li>Find the OpenDeck name of each device. OpenDeck calls a device <code>sd-</code> followed by its serial number, and the same name is the folder under <code>~/.config/opendeck/profiles</code> once the device has been connected.</li>
+  <li>Know the Elgato model of each: <code>20GBD9901</code> is the Stream Deck +, <code>20GAT9902</code> the XL and <code>20GBA9901</code> the MK.2. Other models are left out because their size isn't in the converter, and it says so.</li>
+</ul>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch opendeck convert-profiles -- \
+  --source /path/to/StreamDeck --config ~/.config/opendeck --report ~/opendeck-report.json \
+  --device 20GBD9901=sd-SERIAL-OF-YOUR-PLUS --device 20GBA9901=sd-SERIAL-OF-YOUR-MK2</code></pre>
+<p>Give one <code>--device</code> for each device you own. A profile for a model with no <code>--device</code> is left out and listed in the report. Other options: <code>--skip NAME</code> leaves a profile out (repeat it), for example the profiles of another simulator; <code>--adapted FOLDER</code> installs the <code>.sdPlugin</code> folders in it first; <code>--gpu-selector</code> and <code>--network-interface</code> fill in the Redline plugin's settings for the System Vitals buttons that show a GPU or the network.</p>
+<p>What it does:</p>
+<ul>
+  <li>OpenDeck has neither pages nor folders, so each page becomes a profile named <code>Name/Page 01</code>, and each folder <code>Name/Folder 01 Title</code>, inside a group named after the Elgato profile. A dot in a name becomes a dash, because OpenDeck uses the dot as a separator.</li>
+  <li>Next page, previous page, go to page, open folder, back and switch profile become the Starter Pack's "Switch Profile" button. A hotkey or a text button becomes its "Input Simulation".</li>
+  <li>The images are copied under <code>~/.config/opendeck/images</code>: 6,001 images, about 140 MB, on the test machine. A title saved without alignment and size gets top and 11. That matched how a button looked in the Windows app on the test machine; nothing in the profiles says which default the Elgato app uses.</li>
+  <li>Plugins that the profiles use are copied from the Windows app, unless OpenDeck already has one by that name. Replacements are mapped for the Elgato Discord, Volume Controller and System Vitals plugins, if you installed the OpenDeck plugin that replaces each.</li>
+  <li>Each device opens on <code>Default Profile/Page 01</code>.</li>
+</ul>
+<p>What it can't carry over goes in the report, by reason, and every button is counted. On the test machine 10,454 buttons converted and 103 had no equivalent: an action stack keeps only its active action, a few built-in actions have no match, and 13 plugins bought on the Elgato marketplace have encrypted manifests that OpenDeck can't read.</p>
+
+<h2>Three optional patches to OpenDeck</h2>
+<p>These change OpenDeck's source and give you a binary of your own. You can skip all of this. The patches are in <code>addons/opendeck/patches</code>:</p>
+<ul>
+  <li><code>swipe-changes-the-page.patch</code>: OpenDeck 2.14.2 drops a swipe on the Stream Deck + touch strip. With the patch a swipe changes to the next or previous <code>Page NN</code> profile of the same group, the names the converter writes. It has not been seen working on the device.</li>
+  <li><code>strip-render-no-checkerboard.patch</code>: this one is for another project, <code>streamdeck-strip-render</code>, which draws the touch strip. It paints a grey checkerboard over any image slot that has no image. The Axis and Ohs dials, with the <code>$A0</code> layout, have a slot that the plugin never fills, and the checkerboard showed on every dial. The Elgato app draws nothing there. The patch draws nothing too.</li>
+  <li><code>dial-title-like-elgato.patch</code>: OpenDeck ignored "show title" on dials and trimmed a title of a single space to nothing, which brought back the action's name over the plugin's own text. The patch follows the Elgato app: a hidden title leaves the title blank, a title of only spaces stays blank, and only an empty one falls back to the action's name. A title sent by the plugin wins over the saved one when titles are shown.</li>
+</ul>
+<p>To build OpenDeck with all three you need <code>git</code>, <code>npm</code> and <code>cargo</code> (<code>rust</code> on Arch), and some time and disk for the build:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch opendeck rebuild -- 2.14.2</code></pre>
+<p>Without a version it uses the one <code>pacman</code> says is installed. The script clones OpenDeck and <code>streamdeck-strip-render</code> into <code>~/.cache/flightsim-on-linux/opendeck</code>, checks out the tag, applies the patches, installs the front end, runs OpenDeck's <code>encoder_layouts</code> tests and builds. It stands in for the <code>deno</code> that OpenDeck's build calls with one that does nothing. So the binary doesn't carry the plugins that come with OpenDeck. It takes them from the package's folder, <code>/usr/lib/opendeck/plugins</code>, and it won't work where that folder doesn't exist.</p>
+<p>It ends by printing where the binary is and the command to install it:</p>
+<pre><code>sudo install -m 755 ~/.cache/flightsim-on-linux/opendeck/source/src-tauri/target/release/opendeck /usr/bin/opendeck</code></pre>
+<p>OpenDeck uses the new binary at its next start. A package update puts the stock one back, so run <code>rebuild</code> again after it. On the test machine a pacman hook did that by itself, as a transient systemd service. That hook needs root and is not part of this repository.</p>
+
+<h2>The Axis and Ohs plugin</h2>
+<p>Lorby's plugin for Stream Deck, <code>com.lorbysi.aao.sdPlugin</code> (71.01 here), is an HTML plugin. In OpenDeck it runs in OpenDeck's own web view, which serves it from <code>http://127.0.0.1:57118</code>, and it asks AAO's web API at <code>http://localhost:43380/webapi</code> from a different origin. The web view therefore applies CORS to every answer. AAO runs in wine-mono and sends <code>Access-Control-Allow-Origin: *</code> twice. WebKit joins them into <code>*, *</code>, an invalid value, and hands every answer to the plugin as an error. The plugin tests the connection every 500 ms with <code>GET ?conn=1</code>, the load event never fires and it never connects, so the connection button stays dark with AAO running. The plugin also sends <code>Cache-Control: no-cache</code>, which forces a preflight <code>OPTIONS</code> request. AAO answers it with 405 and doesn't list that header as allowed. On Windows the Stream Deck app doesn't do this check, which is why it only shows up here.</p>
+<p>The fix is a small proxy in front of AAO that sends each header once and answers the preflight with 204, plus the plugin pointed at it. The proxy is part of <a href="axis-and-ohs.html">the Axis and Ohs guide</a>, on port 43390. Pointing the plugin is one line of its <code>settings.js</code>:</p>
+<p><span class="tag warn">touches add-on files</span> This is the only step of this guide that changes a file of a plugin: <code>aao-plugin</code> edits one line of the plugin's <code>settings.js</code> and keeps the plugin's own file as <code>settings.js.orig</code> beside it. This puts the original back:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch opendeck aao-plugin -- --restore</code></pre>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch opendeck aao-plugin</code></pre>
+<p>That moves the port from 43380 to 43390 (or to the number you give it), and keeps the plugin's own file as <code>settings.js.orig</code>. <code>aao-plugin --restore</code> puts it back. A new version of the plugin brings 43380 back, and the check says so.</p>
+<p>A dark Axis and Ohs button with an empty title is not always CORS. With no SimConnect connection AAO answers 0 to every variable and takes about 150 ms for each one it is asked, and the plugin gives up after 500 ms. Reading <code>(A:TITLE, String)</code> through the API tells them apart: an empty title is AAO without SimConnect. Windows plugins in general run in the system Wine, in <code>~/.wine</code>, far from the simulator's prefix. Their processes also start with <code>C:\</code>, so to count the prefix's programs, filter by <code>compatdata/2537590</code> in <code>/proc/&lt;pid&gt;/environ</code>.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check opendeck</code></pre>
+<p>It prints two or three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing:</p>
+<ul>
+  <li><code>opendeck</code> is installed, and where;</li>
+  <li>what binary it is. It is the patched build that <code>rebuild</code> made when its checksum matches the one <code>rebuild</code> recorded. It fails when a record exists and the binary is something else, which is what a package update does. Without a record it says the binary is the stock one, or, when <code>pacman -Qkk opendeck</code> reports that file as changed, that somebody changed it;</li>
+  <li>only when the AAO plugin is in OpenDeck's plugins folder: it doesn't use AAO's own port 43380.</li>
+</ul>
+<p>On the test machine <code>pacman -Qkk opendeck</code> reports a wrong SHA256 for <code>/usr/bin/opendeck</code>, which is how a patched binary shows when it was built by something other than <code>rebuild</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>A new binary is used at the next start of OpenDeck. A running process keeps what it loaded.</li>
+  <li>The swipe has never been seen working on the device.</li>
+  <li>13 plugins from the Elgato store have encrypted manifests that OpenDeck can't read. Some have a native Linux replacement.</li>
+  <li><code>rebuild</code> was exercised in this repository with stand-in tools and against the real source files with <code>git apply</code>, and the binary on the test machine came from the script it was ported from. A full build from this copy of the script has not been run.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo opendeck</code> has nothing to restore, because <code>apply</code> changed nothing. To go back from a patched binary to the stock one, reinstall the package (<code>sudo pacman -S opendeck</code>). To put the AAO plugin back, run <code>addon launch opendeck aao-plugin -- --restore</code>. To undo a conversion, put back the copy of <code>~/.config/opendeck</code> that you made.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

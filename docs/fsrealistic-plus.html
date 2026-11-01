@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FSRealistic+ · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run FSRealistic+ in MSFS 2024 under Proton: the installer, the entry in exe.xml that starts its service with the simulator, and what the check reads.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>FSRealistic+</h1>
+<p class="lead">Tested with FSRealistic+ 1.1.9 on 14 October 2026. The installer needs nothing special, and the program starts from <code>exe.xml</code> like on Windows. <code>apply</code> adds that one entry.</p>
+
+<h2>Get it</h2>
+<p>You get the installer, <code>FSRealistic_Plus_v1.1.9.exe</code> on the test machine, from your vendor account (rkApps). This guide doesn't have the download page or the price. It is an Inno Setup installer. The package it installs is <code>rkapps-fsrealistic</code>, with the program in its <code>service</code> folder.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install fsrealistic-plus ~/Downloads/FSRealistic_Plus_v1.1.9.exe</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it runs the installer in the simulator's prefix. Nothing else was recorded as needed for it on the test machine.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply fsrealistic-plus</code></pre>
+<p>The program FSRealistic+ needs is <code>service\FSRealistic-Plus.exe</code>, in the package. It is a native C++ program, so the simulator can start it from <code>exe.xml</code>, like on Windows. (Programs written for WPF can't start that way, because a program started by the simulator inherits the simulator's environment, which turns Direct3D 9 on.) On the test machine the entry was added by hand, and the program ran on 14 and 15 October 2026. No Proton FS2024 patch is involved.</p>
+<p><code>apply</code> does this, with the simulator closed:</p>
+<ul>
+  <li>It looks in <code>exe.xml</code>, in the folder that holds <code>UserCfg.opt</code>, for an entry whose path ends in <code>\rkapps-fsrealistic\service\FSRealistic-Plus.exe</code>. If there is an enabled one, it says so and stops. If there is one with <code>Disabled</code> set to true, it leaves it as it is and says so.</li>
+  <li>If there is none, it refuses when the program isn't in your Community folder yet: install it first.</li>
+  <li>Otherwise it copies <code>exe.xml</code> to <code>compatdata/2537590/flightsim-on-linux-backup/fsrealistic-plus</code>, adds an entry called <code>FSRealistic+</code> with the program's path, keeping the other entries, and creates the file if there is none.</li>
+</ul>
+
+<h2>Start it</h2>
+<p>You don't start it. The simulator starts it with itself, from <code>exe.xml</code>.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fsrealistic-plus</code></pre>
+<p>It prints one line, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open. It wants an enabled entry in <code>exe.xml</code> whose path ends in <code>\rkapps-fsrealistic\service\FSRealistic-Plus.exe</code>, and that file has to exist. The case of the path doesn't matter, and a path that goes through a link to the Community folder counts. It says what is wrong when there is no <code>exe.xml</code>, no entry, an entry with <code>Disabled</code> set to true, or an entry that points at a file that is gone. In the first two cases run <code>apply</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>None are recorded. FSRealistic+ was seen running on 14 and 15 October 2026.</li>
+  <li>After a simulator that was ended by force, the programs it started from <code>exe.xml</code>, FSRealistic+ among them, stay open and hold Steam's "running" state of the game until they exit. On the test machine Steam released the game only when they were gone.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo fsrealistic-plus</code></pre>
+<p>This removes the entry that <code>apply</code> added, and deletes <code>exe.xml</code> only when <code>apply</code> created it. An entry that you or the installer wrote stays. The copy of the old <code>exe.xml</code> is in the backup folder above.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReShade · Flightsim on Linux</title>
+  <meta name="description" content="How to make ReShade load in MSFS 2024 under Proton: three files copied from a Windows ReShade install into the simulator&#x27;s folder, no launch option, no shaders included, and how to take it out again.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>ReShade</h1>
+<p class="lead">Tested with ReShade 6.8.0 (build 6.8.0.2155) on 14 October 2026. To make it load, copy three files into the simulator's folder and change one line of one of them.</p>
+
+<p>ReShade is a third-party program. This guide only gets it to load in the simulator. Your shaders stay yours: it copies, edits and fixes none of them.</p>
+
+<h2>Get it</h2>
+<p>ReShade is free and comes from <a href="https://reshade.me">reshade.me</a>. It has no installer for Linux. The files on the test machine were copied from a Windows install of ReShade, and nobody tried its installer under Wine. Install ReShade for the simulator's <code>FlightSimulator2024.exe</code> on a Windows PC, or in any Windows folder you have, and take the folder it makes.</p>
+<p>You need three files from that folder: <code>dxgi.dll</code>, <code>ReShade.ini</code> and <code>ReShadePreset.ini</code>.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator first. The CLI takes a file, so give it the <code>dxgi.dll</code> of the Windows install, and it reads the other two beside it:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install reshade /path/to/windows-reshade-folder/dxgi.dll</code></pre>
+<p>The command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it copies into the simulator's install folder, next to <code>FlightSimulator2024.exe</code>:</p>
+<ul>
+  <li><code>dxgi.dll</code>. If the folder already has a different <code>dxgi.dll</code>, the install stops and leaves it alone: move it away yourself first. The same file is fine.</li>
+  <li><code>ReShade.ini</code>, with one line rewritten: <code>IntermediateCachePath</code> in a Windows install names a folder of that Windows user, and here it becomes <code>C:\users\steamuser\AppData\Local\Temp\ReShade</code>, inside the prefix. A <code>ReShade.ini</code> that was already in the folder is kept in <code>compatdata/2537590/flightsim-on-linux-backup/reshade</code> first, as <code>ReShade.ini.previous</code>. Installing again never replaces that copy.</li>
+  <li><code>ReShadePreset.ini</code>. A preset that is already there stays, because ReShade saves its own there when Auto Save is on.</li>
+</ul>
+<p>Nothing else is touched. No shaders are copied, not even the <code>reshade-shaders</code> folder of the Windows install. Put your own shader and texture folders in the simulator's folder, where your <code>ReShade.ini</code> expects them.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply reshade</code></pre>
+<p>This changes nothing, and then runs the check. There is no launch option, and this is why. Proton puts <code>dxgi=n</code> into the simulator's environment. With that, Wine takes the <code>dxgi.dll</code> from the game's folder before its own, which is DXVK's, and ReShade passes the calls on to it. So you don't need <code>WINEDLLOVERRIDES=dxgi=n,b</code> in the Steam launch options. A <code>dxgi.dll</code> in that folder only counts for programs whose executable is in that folder.</p>
+<p>The proof on the test machine: <code>ReShade.log</code> says it was loaded from <code>S:\steamapps\common\MSFS2024\dxgi.dll</code>, with no launch option set for it.</p>
+
+<h2>Start it</h2>
+<p>There is nothing to start. ReShade loads with the simulator, and you open its overlay in the simulator as on Windows.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check reshade</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and a third one once the simulator has run, and it changes nothing:</p>
+<ul>
+  <li><code>dxgi.dll</code> in the simulator's folder is ReShade's;</li>
+  <li><code>IntermediateCachePath</code> in <code>ReShade.ini</code> is the folder inside the prefix (or the line is absent);</li>
+  <li>once <code>ReShade.log</code> exists, it records ReShade loading.</li>
+</ul>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Some effects fail to compile under Wine. Wine's shader compiler, <code>d3dcompiler_47</code>, refuses <code>isnan</code> in a pixel shader with <code>Function "isnan" is not defined</code>, the same effect compiles on Windows, and it is the effect's code that has to change. This guide doesn't edit any.</li>
+  <li>In <code>ReShade.log</code>, read the first error. The ones after an <code>E5017</code> about <code>fastopt</code> are consequences of it.</li>
+  <li>ReShade doesn't refresh its cached <code>.i</code> files when you edit a file that an effect includes. Delete the cache folder inside the prefix (<code>drive_c/users/steamuser/AppData/Local/Temp/ReShade</code>) to force it.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo reshade</code></pre>
+<p>This moves <code>dxgi.dll</code>, <code>ReShade.ini</code> and <code>ReShadePreset.ini</code> out of the simulator's folder into <code>compatdata/2537590/flightsim-on-linux-backup/reshade/removed</code>, so the preset you tuned isn't lost. Each file gets the date and time of the undo in its name, so an earlier undo's copies are never overwritten. If the simulator's folder had a <code>ReShade.ini</code> before the install, that one goes back where it was. Close the simulator first. Your shader and texture folders stay where they are.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,36 @@
+title: Aerosoft One
+description: How to use the native Linux Aerosoft One with MSFS 2024: the AppImage options, the packages folder you give it by hand, the check that reads only that one setting, and what the simulator's own folder move does to its links.
+---
+<h1>Aerosoft One</h1>
+<p class="lead">Tested with Aerosoft One 0.16.12 on 14 October 2026. It is a native Linux program, so it doesn't go into the simulator's prefix. It takes two Chromium options and one folder that you choose by hand, and <code>addon apply</code> only reads whether that folder is right.</p>
+
+<h2>Get it</h2>
+<p>Aerosoft publishes Aerosoft One as an AppImage for Linux, 84 MB for this version. Take that one. A Windows <code>Aerosoft One Setup.exe</code> was downloaded beside it on the test machine and never used. Where the AppImage is downloaded from and what Aerosoft One costs aren't recorded here; get it from Aerosoft.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install aerosoft-one</code></pre>
+<p>This prints where to get it and what kind of program it is. It installs nothing.</p>
+
+<h2>Install it</h2>
+<p>Make the AppImage executable and run it with the two options the test machine used. Why it needs them was not recorded:</p>
+<pre><code>chmod +x "Aerosoft One.AppImage"
+./"Aerosoft One.AppImage" --no-sandbox --disable-gpu</code></pre>
+<p>It doesn't find the simulator by itself. In the app, add MSFS 2024 (Steam) by hand and give it the simulator's packages folder, the one that holds <code>Community</code>. <code>~/flightsim-on-linux/bin/flightsim-on-linux machine</code> prints it as <code>packages</code>. The check follows links, so a link that leads to that folder passes.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply aerosoft-one</code></pre>
+<p>This changes nothing. It reads one setting, <code>manuallyDetectedGamesData.msfs2024Steam.directory</code> in <code>~/.config/Aerosoft One/persistent-store.json</code>, follows links and compares the folder with the packages folder that the CLI found. It prints that folder and nothing else from the file. The file also holds your login token and your e-mail address: never paste it into an issue, a forum post or an AI chat.</p>
+
+<h2>Start it</h2>
+<p>There is no menu entry, because the AppImage can be anywhere on your disk. To make one, point a <code>.desktop</code> file at your copy with the same two options.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check aerosoft-one</code></pre>
+<p>It prints one line, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open. It says whether Aerosoft One's MSFS 2024 (Steam) folder is the simulator's packages folder. When it fails, the line names both folders. Add the game again in the app with the right one, or the aircraft land where the simulator doesn't look.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Moving the packages folder with the simulator's own option discards the links that Aerosoft One keeps in Community. On 16 October 2026 that made three aircraft (the 727-200F, the 727-200RE and the A346 Pro) disappear from the simulator. The fix was to make the links again, pointing into the Aerosoft One library. Afterwards Aerosoft One made the same links in the folder it knows.</li>
+  <li>The two options come from what worked on the test machine. The cause of the need for them is not known.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo aerosoft-one</code> has nothing to restore, because <code>apply</code> changed nothing.</p>

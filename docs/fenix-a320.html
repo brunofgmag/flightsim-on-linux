@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fenix A320 · Flightsim on Linux</title>
-  <meta name="description" content="How to run the Fenix A320, A319 and A321 in MSFS 2024 under Proton: the Fenix Installer and its updates, .NET Framework 4.8 for the Fenix programs only, the geometry library and the DXVK the displays need, and how to undo it all.">
+  <meta name="description" content="How to install and run the Fenix A320, A319 and A321 in MSFS 2024 under Proton: the Fenix Installer and its updates, the 1.0.353 installer that opens empty, packages that must not be links, .NET Framework 4.8 for the Fenix programs only, the geometry library and the DXVK the displays need, and how to undo it all.">
   <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
   <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
 </head>
@@ -18,69 +18,84 @@
         <a href="proton-fs2024.html">Proton FS2024</a>
         <a href="rules.html">Ground rules</a>
         <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
         <a href="ai.html">With an AI</a>
       </nav>
     </div>
   </header>
   <main class="wrap">
 <h1>Fenix A320, A319 and A321</h1>
-<p class="lead">Tested with Fenix 3.0.0.7438 on 21 October 2026. One command sets up the prefix for the Fenix, and another proves it is set up. <span class="tag warn">touches add-on files</span>: it adds files to the Fenix <code>deps</code> folder and its <code>displays</code> folder, and puts back what was there when you undo it.</p>
+<p class="lead">The test machine has Fenix 3.0.0.7613 and Fenix Installer 1.0.359. The aircraft manifests there are dated 29 October 2026. It takes an installer, one command that sets up the prefix and one that proves it is set up. <span class="tag warn">touches add-on files</span>: it adds files to the Fenix <code>deps</code> folder and its <code>displays</code> folder, and puts back what was there when you undo it.</p>
 
-<h2>Before you start</h2>
-<p>The Fenix needs <a href="proton-fs2024.html">Proton FS2024</a>. Without it the aircraft won't power up, and the displays leak memory, lose frame rate within minutes and freeze. Fenix 3 needs a Proton FS2024 built on 21 October 2026 or later. With an older build, the runner quits as soon as it starts and the cockpit stays dark. The check below tells you whether yours has the Fenix 3 fixes. Pick Proton FS2024 for the simulator in Steam, and start the simulator once with it before you go on.</p>
-<p>Close the simulator for every step on this page except the check and the last section.</p>
+<h2>Get it</h2>
+<p>Download the Fenix Installer from <a href="https://fenixsim.com">fenixsim.com</a>, after you sign in to your account. Whether the aircraft is paid isn't recorded here; the vendor's page says. The download is a Velopack setup program with a WebView2 page. It installs the Fenix Installer, and the Fenix Installer installs and updates the aircraft. On the test machine the setup file was <code>FenixInstaller-1.0.286-0763ce3.exe</code>.</p>
 
-<h2>Install the Fenix</h2>
-<p>Download the Fenix Installer from <a href="https://fenixsim.com">fenixsim.com</a> and run its setup once in the simulator's prefix:</p>
-<pre><code>protontricks-launch --no-term --appid 2537590 ~/Downloads/FenixInstaller-Setup.exe</code></pre>
-<p>Use the name of the file you downloaded. The setup installs the installer and opens it. Close that first window, and from then on open the installer with:</p>
-<pre><code>~/flightsim-on-linux/addons/fenix-a320/installer</code></pre>
-<p>It needs <code>protontricks</code>. It refuses to start while the simulator or any other program of the prefix is open, and names what to close. On the test machine, a Fenix Installer started while another program held the prefix crashed before its window appeared. Otherwise it opens the installer in its own window and keeps running until the installer and any update it applies have finished. On the test machine, with installer 1.0.355 and Proton FS2024, that window took mouse clicks and typing. Sign in, install the aircraft, then close the installer. From version 1.0.353 the installer also needs a Proton FS2024 built with the installer fix, and the check below tells you whether yours has it. Without it, the installer can't open its package database or check the aircraft for updates.</p>
+<h2>Install it</h2>
+<p>The Fenix needs <a href="proton-fs2024.html">Proton FS2024</a>. Without it the aircraft won't power up, and the displays leak memory, lose frame rate within minutes and freeze. Pick Proton FS2024 for the simulator in Steam and start the simulator once with it. From Fenix Installer 1.0.353 the installer also needs a Proton FS2024 built with the installer fix (<code>windows-storage-applicationdata-no-package.patch</code>), or it can't open its package database and can't check the aircraft for updates. The check below tells you whether yours has it.</p>
+<p>Close the simulator and every other program of its prefix, and run nothing else while the setup works. <a href="rules.html">The ground rules</a> explain why. Then give the setup file to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install fenix-a320 ~/Downloads/FenixInstaller-1.0.286-0763ce3.exe</code></pre>
+<p>Use the name of the file you downloaded. Without the file name the command only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it runs the setup alone in the simulator's prefix, which puts the installer in <code>AppData\Local\FenixApp</code>. The setup opens the installer when it ends. Close that first window.</p>
+<p>From then on open the installer with its own script, not by double-clicking the program:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch fenix-a320 installer</code></pre>
+<p>It needs <code>protontricks</code>. It refuses to start while the simulator or any other program of the prefix is open, and names what to close. On the test machine, a Fenix Installer started while another program held the prefix crashed before its window appeared. Otherwise it opens the installer in its own window and keeps running until the installer and any update it applies have finished. Sign in, install the aircraft, then close the installer. On the test machine, with installer 1.0.355 and Proton FS2024, that window took mouse clicks and typing. Whether the 1.0.359 window does was not rechecked; its log shows three starts, on 22 and 24 October 2026, with no failure line.</p>
+<p>Three things about the installer matter here:</p>
+<ul>
+  <li><strong>It updates itself.</strong> On 21 October 2026 installer 1.0.286 downloaded the next version five seconds after it opened and didn't ask. The updater is Velopack: the installer runs <code>Update.exe apply</code> and quits. On Wine that update only finishes while the program that started the installer stays alive, and only when the installer was not started from inside its own <code>current</code> folder, because every Wine process keeps its current folder open and Velopack can't move it. The <code>installer</code> script waits for <code>Update.exe</code> and starts outside <code>current</code>. Started any other way, the update stops at "Checking application pre-requisites" and the old version comes back.</li>
+  <li><strong>An update can delete linked packages.</strong> The installer updates the aircraft by replacing every file of its two packages, <code>fnx-aircraft-320</code> and <code>fnx-aircraft-319-321</code>. On the test machine those two were Linux links made by a Community organiser. On 17 October 2026 an update through installer 1.0.286 left both links pointing at nothing, and the aircraft were gone from the simulator. The test machine saw the effect and not which call causes it. In a separate test with the same Proton, removing a folder that is a Linux link, through Windows calls, deleted the target folder and left the link dangling. Keep the Fenix packages as real folders in Community. After an update, this must print nothing:
+<pre><code>find "$(~/flightsim-on-linux/bin/flightsim-on-linux machine --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["community"])')" -maxdepth 1 -name 'fnx-*' -type l</code></pre>
+  If it lists a link, delete the link with <code>rm</code> (not the folder behind it) and reinstall the aircraft in the installer, which then makes a real folder.</li>
+  <li><strong>The packages must be plain folders</strong> for the same reason, so don't point a Community organiser at them.</li>
+</ul>
 
-<h2>If the installer window stays empty</h2>
-<p>On 2026-10-21 Fenix published Fenix Installer 1.0.353, rebuilt on .NET 10. It puts its page inside a Windows composition layer that Wine doesn't have, so under Wine the window stays empty. That page is also what checks for updates, so 1.0.353 never updates itself. Version 1.0.355, out a few hours later, went back to the kind of window Wine can show. See which version you have:</p>
+<h3>If the installer window stays empty</h3>
+<p>On 21 October 2026 Fenix published Fenix Installer 1.0.353, rebuilt on .NET 10. It puts its page inside a Windows composition layer that Wine doesn't have, so under Wine the window stays empty. That page is also what checks for updates, so 1.0.353 never updates itself. Version 1.0.355, out a few hours later, went back to the kind of window Wine can show. The installer on the test machine updated itself from 1.0.355 to 1.0.359 without help. See which version you have:</p>
 <pre><code>cd "$(~/flightsim-on-linux/bin/flightsim-on-linux machine --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["prefix"])')/drive_c/users/steamuser/AppData/Local/FenixApp"
 grep -o '&lt;version&gt;[^&lt;]*' current/sq.version</code></pre>
 <p>If it says 1.0.353, close the simulator and every other program of the prefix. Then, in the same folder, download 1.0.355 from the address the installer itself uses, check it and apply it:</p>
 <pre><code>curl -fL -o packages/FenixApp-1.0.355-1cf2ef7-full.nupkg https://software.fenixsim.com/FenixApp/FenixApp-1.0.355-1cf2ef7-full.nupkg
 sha256sum packages/FenixApp-1.0.355-1cf2ef7-full.nupkg
 protontricks --no-term -c 'wine "$PWD/Update.exe" apply --norestart --package "C:\users\steamuser\AppData\Local\FenixApp\packages\FenixApp-1.0.355-1cf2ef7-full.nupkg"' 2537590</code></pre>
-<p><code>sha256sum</code> should print <code>e4e9b327dca634e7ec7f6f4cf583bad824f60aa91f6b76cc6f1804b02094934f</code>, and the update ends with <code>Package version 1.0.355 applied successfully.</code> Open the installer as above afterwards. It also needs a Proton FS2024 built with the installer fix, or it can't open its package database.</p>
+<p><code>sha256sum</code> should print <code>e4e9b327dca634e7ec7f6f4cf583bad824f60aa91f6b76cc6f1804b02094934f</code>, and the update ends with <code>Package version 1.0.355 applied successfully.</code> Open the installer as above afterwards. It still needs the Proton FS2024 installer fix.</p>
 
-<h2>Choose how the displays draw</h2>
-<p>The Fenix draws its displays either on the GPU, its default, or on the CPU. On the test machine both work. The setup below reads the mode from the Fenix settings file, which exists once you have loaded a Fenix aircraft in the simulator. If the check says <code>fenixConfig.xml</code> is missing, load one, quit and run the setup again.</p>
+<h2>Make it run</h2>
+<p>The Fenix draws its displays either on the GPU, its default, or on the CPU. On the test machine both work. The setup below reads the mode from the Fenix settings file, which exists once you have loaded a Fenix aircraft in the simulator. If the check says <code>fenixConfig.xml</code> is missing, load one, quit and run the setup again. Close the simulator for the setup.</p>
 <p>GPU mode needs a DXVK with three fixes in the Fenix <code>deps</code> folder: the adapter of a shared texture, a keyed mutex that waits for what the other process drew, and a wait that gives up when its timeout runs out. Build it once. It takes about two minutes and needs <code>meson</code>, <code>ninja</code>, <code>glslang</code> and the MinGW-w64 cross compiler:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux dxvk build</code></pre>
 <p>It downloads DXVK, applies the fixes, compiles <code>d3d11.dll</code> and <code>dxgi.dll</code>, tests them in a throwaway prefix and keeps them in <code>~/.cache/flightsim-on-linux/dxvk-fenix</code>. If a test fails, or can't run on your machine, nothing is kept.</p>
 <p>CPU mode needs no DXVK. In the Fenix settings, tick <em>USE DISPLAY SAFE MODE</em> and <em>FORCE SAFE MODE CPU RENDERING</em> and apply. The fenix-a320-linux-patch project, which drew its displays on the CPU, says the weather radar doesn't work that way.</p>
-
-<h2>Set up the prefix</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply fenix-a320</code></pre>
 <p>It does four things, skips any that are already done, and then runs the check below:</p>
 <ol>
-  <li>It installs .NET Framework 4.8 for the Fenix programs only. The Fenix runner, the bootstrapper and the system, CDU and display programs need Microsoft's .NET. On Wine's own .NET replacement, wine-mono, they spin or quit within half a second. The command downloads the .NET 4.8 and 4.0 installers from Microsoft, checks them against pinned hashes, installs 4.8 and Microsoft's <code>mscoree.dll</code>, and tells Wine to use them for those five programs only. Every other .NET program in the prefix stays on wine-mono, which is also told to ignore the Microsoft libraries now in the prefix. Without that, Lorby AAO crashed when it started.</li>
+  <li>It puts .NET Framework 4.8 in the prefix and uses it for the Fenix programs only. The Fenix runner, the bootstrapper and the system, CDU and display programs need Microsoft's .NET. On Wine's own .NET replacement, wine-mono, they spin or quit within half a second. The first half is the <a href="dotnet48.html">.NET Framework 4.8 add-on</a>, which this command runs for you: it downloads the .NET 4.8 and 4.0 installers from Microsoft, checks them against pinned hashes, installs 4.8 and Microsoft's <code>mscoree.dll</code>, and tells wine-mono to ignore the Microsoft libraries now in the prefix. Without that, Lorby AAO crashed when it started. The second half is this add-on's own: it tells Wine to use Microsoft's .NET for those five programs only, and every other .NET program in the prefix stays on wine-mono.</li>
   <li>It builds the geometry library. Wine's Direct2D ignores line joins, so the route line escapes the navigation display. Proton FS2024 borrows only the geometry from Microsoft's own Direct2D, in the display program only. The command downloads the Windows 7 update that holds it and Microsoft's patching library, rebuilds <code>d2d1_geometry.dll</code> with a small helper from the fenix-a320-linux-patch project, checks every step against a known hash and puts the result in <code>system32</code>. Microsoft's files are never part of this repository.</li>
   <li>It puts the DXVK in place. In GPU mode it copies the DXVK you built into <code>deps</code>, and into <code>deps/displays</code>, where Fenix 3 keeps its display program. Without it there, the Fenix 3 displays stay dark. In CPU mode it copies nothing, and puts back the files it replaced if you used GPU mode before. With two GPUs, it also adds a line naming the dedicated one to <code>dxvk.conf</code> in both folders. The display program creates Direct3D devices even in CPU mode, and on the test machine DXVK picked the integrated GPU and the displays stayed dark. With one GPU it adds no filter.</li>
   <li>It makes sure the simulator starts the Fenix. The simulator opens the Fenix bootstrapper from <code>exe.xml</code>, and the bootstrapper refuses to run any other way. The Fenix installer writes that entry. The command adds it only if it is missing, and leaves every other line of the file as it was.</li>
 </ol>
 <p>Before changing anything it keeps a copy of what was there in <code>compatdata/2537590/flightsim-on-linux-backup/fenix-a320</code>. The Windows version of the prefix comes out the same as it went in.</p>
 
+<h2>Start it</h2>
+<p>The simulator starts the Fenix by itself, through the <code>exe.xml</code> entry above. Only the installer needs a way to open:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut fenix-a320</code></pre>
+<p>This writes an entry called "Fenix Installer" in your application menu, with the installer's own icon when <code>7z</code> and <code>magick</code> are installed. It runs the same <code>installer</code> script, so it refuses with a desktop notice, and says why, when the simulator or another program holds the prefix. Remove it with <code>addon shortcut fenix-a320 --remove</code>.</p>
+
 <h2>Check it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fenix-a320</code></pre>
-<p>It prints one line per thing it looked at, each starting with <code>ok</code> or <code>FAIL</code>, and every <code>FAIL</code> says what to run. It changes nothing, so you can run it with the simulator open. A Fenix update can replace the files in <code>deps</code>. Run the check after one.</p>
+<p>It prints one line per thing it looked at, each starting with <code>ok</code> or <code>FAIL</code>, and every <code>FAIL</code> says what to run. It changes nothing, so you can run it with the simulator open. Fenix 3 needs a Proton FS2024 built on 21 October 2026 or later: with an older build, the runner quits as soon as it starts and the cockpit stays dark, and the check names the fixes your build lacks. A Fenix update can replace the files in <code>deps</code>. Run the check after one. The last line looks at Community: it says <code>ok</code> when no package named <code>fnx-*</code> there is a Linux link, and otherwise fails with one line for each link: on the test machine an update left two linked packages pointing at nothing. It is the same look as the <code>find</code> command above.</p>
 
-<h2>Undo it</h2>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo fenix-a320</code></pre>
-<p>It removes the bootstrapper entry if the command added it, puts back the <code>deps</code> files and <code>system32</code> files it replaced, and stops the Fenix programs from using Microsoft's .NET. .NET 4.8 stays installed, and wine-mono keeps ignoring the Microsoft libraries: with 4.8 in the prefix, letting wine-mono load them makes other add-ons crash.</p>
-
-<h2>If the displays don't come up</h2>
+<h2>Known problems</h2>
+<h3>If the displays don't come up</h3>
 <p>With the video card almost full, the cockpit displays may not start. On Windows the NVIDIA driver moves the excess to system memory; on Linux it refuses to create anything new, and the Fenix display program can't get its Direct3D device. On the test machine this happened at a busy airport on 17 October 2026, with 15,876 of the RTX 4080's 16,376 MiB in use: the display program quit three times while creating its device, in CPU mode as well. At a quiet airport, with about 2.4 GB free, the displays started. In the Fenix runner window, press <strong>RESTART DISPLAY</strong> under <em>System Status</em> and the displays come back. The optional setting below makes them use less video memory.</p>
 
-<h2>Optional: less video memory for the displays</h2>
+<h3>Optional: less video memory for the displays</h3>
 <p>This isn't needed to fly, and it only helped because the test machine ran short of video memory in 4K. In CPU mode with <code>&lt;multithread&gt;true&lt;/multithread&gt;</code>, the display program created 13 Direct3D devices and used 622 MiB of the RTX 4080. With <code>false</code> it created 2 and used 208 MiB, and the displays didn't look any slower. No setting in the Fenix window was found for it. With the simulator closed, edit the value in <code>C:\ProgramData\Fenix\FenixSim A320\fenixConfig.xml</code> inside the prefix. Keep a copy of the file first.</p>
 
-<h2>If the aircraft has no systems after loading</h2>
+<h3>If the aircraft has no systems after loading</h3>
 <p>Rarely, the Fenix runner quits a few seconds after it opens. On the test machine it happened once in 24 starts between 17 and 18 October 2026, and once before that, on 16 October, under gamescope with the X11 driver, so it isn't tied to Wine's Wayland driver. The bootstrapper keeps running without it, and the aircraft has no systems. The Fenix crash log shows an "invalid handle" error (<code>0xc0000008</code>) as the runner starts. Go back to the simulator's main menu and start the flight again in a Fenix. The bootstrapper then opens the runner again, without restarting the simulator. The cause hasn't been proven. It looks like a race inside the Fenix itself, and nothing in the Linux setup has been found to fix it.</p>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo fenix-a320</code></pre>
+<p>It removes the bootstrapper entry if the command added it, puts back the <code>deps</code> files and <code>system32</code> files it replaced, and stops the Fenix programs from using Microsoft's .NET. .NET 4.8 stays installed, with Microsoft's <code>mscoree.dll</code>, and wine-mono keeps ignoring the Microsoft libraries: with 4.8 in the prefix, letting wine-mono load them makes other add-ons crash, and other add-ons use that <code>mscoree.dll</code>. <code>addon undo dotnet48</code> gives the original <code>mscoree.dll</code> back. The menu entry is removed with <code>addon shortcut fenix-a320 --remove</code>.</p>
   </main>
   <footer class="wrap">
     <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>

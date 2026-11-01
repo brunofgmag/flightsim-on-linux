@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iFly 737 MAX8 · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run the iFly 737 MAX8 and the iFly Manager in MSFS 2024 under Proton: the Manager&#x27;s setup, the plugin entry it writes in exe.xml, what the check reads, and the errors that look wrong and are not.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>iFly 737 MAX8 and iFly Manager</h1>
+<p class="lead">Tested with the iFly 737 MAX8 1.1.0.3 and the iFly Manager setup v107 on 16 October 2026. It installs as on Windows. Nothing in the prefix needed fixing, and <code>apply</code> changes nothing.</p>
+
+<h2>Get it</h2>
+<p>You get the iFly Manager setup, <code>iFlyManagerSetup_v107.exe</code> on the test machine, from your vendor account. This guide doesn't know whether the aircraft is paid or give the download page, so look in your account. The setup is a 32-bit Windows installer. The Manager it installs downloads and updates the aircraft.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix first, and run nothing else while the setup works. <a href="rules.html">The ground rules</a> explain why. Then give the setup to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install ifly-737-max8 ~/Downloads/iFlyManagerSetup_v107.exe</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it runs the setup in the simulator's prefix. The setup needed no patch, no override and no setting on the test machine. On 16 October 2026 the Manager landed in <code>C:\ProgramData\iFlyManager</code> at 21:12, and its aircraft zip was in the Manager's <code>downloads</code> folder at 21:13.</p>
+<p>Then open the Manager (see "Start it"), sign in and let it download the aircraft, with the simulator closed. When it finishes, run the check below: it tells you whether <code>ifly-aircraft-737max8</code> is in your Community folder. If it isn't, the check fails and names the file it could not read.</p>
+<p>The Manager writes its own entry in <code>exe.xml</code>, the file the simulator reads to start add-ons with itself. It rewrites the formatting of that file, and it keeps the other entries.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply ifly-737-max8</code></pre>
+<p>This changes nothing, and then runs the check. The aircraft needs one thing outside the simulator, the plugin <code>Data\Tool\737MAX_Plugin.exe</code> in the aircraft's folder, started with the argument <code>auto</code>. It is a native C++ program, so the simulator can start it from <code>exe.xml</code> like on Windows, and no watcher is needed. On the test machine, on 16 October 2026, the plugin started about two minutes after the simulator, stayed running and opened the iFly EFB (<code>iFly-EFB.exe</code>).</p>
+<p>The AIRAC comes from Navigraph, through <a href="navigraph-hub.html">Navigraph Hub</a>. Its guide covers the stand-in that makes the unpacking fast.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut ifly-737-max8</code></pre>
+<p>This writes an entry called "iFly Manager" in your application menu, with the Manager's own icon when <code>7z</code> and <code>magick</code> are installed. With the simulator closed it opens the Manager in the simulator's prefix. With the simulator running it opens it inside the simulator's container. With the Manager already open it says so and does nothing. Use the Manager to install or update the aircraft only with the simulator closed. The plugin starts with the simulator and needs no entry in your menu.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check ifly-737-max8</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li><code>Community/ifly-aircraft-737max8</code> has a readable <code>manifest.json</code>, and the line gives the version;</li>
+  <li><code>exe.xml</code> has an enabled entry whose path ends in <code>\Data\Tool\737MAX_Plugin.exe</code>, and that file exists. The case of the path doesn't matter.</li>
+</ul>
+<p>When the second one fails because the entry is missing, open the Manager and install the aircraft with it, so it writes the entry. If the entry has <code>Disabled</code> set to true, the simulator won't start the plugin.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The Manager shows "Error creating shortcut". It is a <code>NotImplementedException</code> from wine-mono and harmless; the aircraft installs and runs.</li>
+  <li>The Manager rewrites <code>exe.xml</code> and changes its formatting. It keeps the other entries.</li>
+  <li>It isn't known whether the Manager unpacked the aircraft into Community by itself or a Community organiser linked it. The check works for both, as long as the link isn't broken.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo ifly-737-max8</code> has nothing to restore, because <code>apply</code> changed nothing. Take out the menu entry with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut ifly-737-max8 --remove</code></pre>
+<p>The plugin entry in <code>exe.xml</code> is the Manager's own. Remove the aircraft with the Manager.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

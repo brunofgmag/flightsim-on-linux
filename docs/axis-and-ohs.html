@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lorby Axis and Ohs · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run Lorby Axis and Ohs (AAO) in MSFS 2024 under Proton: the timer fix in wine-mono&#x27;s copy, the heap patch, the launcher that retries a startup deadlock, the service that starts it with the simulator, and how to move your Windows profiles.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Lorby Axis and Ohs</h1>
+<p class="lead">Tested with Axis and Ohs 4.58.2 on 24 October 2026. It is a WPF program on wine-mono, and it needs a fix inside a copy of wine-mono, a Proton patch, and a launcher that opens it again when Mono deadlocks at startup.</p>
+
+<h2>Read this first</h2>
+<p><span class="tag warn">touches add-on files</span> The fix changes <strong>wine-mono's files</strong> and leaves Axis and Ohs's own alone. <code>apply</code> makes a copy of Proton's wine-mono in your prefix, at <code>drive_c/windows/mono/mono-2.0</code>, and replaces <code>WindowsBase.dll</code> in that copy. Wine looks there before it looks in Proton's folder, so Proton's own files stay as they are, and every WPF program in the prefix that runs on wine-mono gets the change. Today that is Axis and Ohs alone: the Fenix runs on Microsoft's CLR, and vRAAS and the FSLabs Control Center are .NET 8. The copy is the same one <a href="gsx-pro.html">GSX Pro</a> uses, and the two add-ons share it. <code>addon undo axis-and-ohs</code> puts the original <code>WindowsBase.dll</code> back from the backup in <code>compatdata/2537590/flightsim-on-linux-backup/axis-and-ohs</code>, and deletes the copy when this tool made it and nothing else uses it.</p>
+
+<h2>Get it</h2>
+<p>Axis and Ohs is made by Lorby. Where to download it and the price aren't recorded here. The file on the test machine was <code>LorbyAxisAndOhs_Install_MSFS24.exe</code>, version 4.58.2, installed to <code>C:\Program Files\LorbyAxisAndOhs_MSFS24</code>. Lorby's installation guide asks for .NET Framework 4.8 and the Visual C++ 2022 runtime. On the test machine the prefix had the C++ runtime and answered as .NET 4.8 through wine-mono, and the program opened.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program in the prefix, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install axis-and-ohs ~/Downloads/LorbyAxisAndOhs_Install_MSFS24.exe</code></pre>
+<p>It refuses to start while the simulator runs or any program is open in the prefix, and names those programs. It runs the installer in the simulator's prefix with Proton's Wine. Which program ran the installer on the test machine wasn't recorded, and the installer itself needed nothing recorded either: no patch, no override.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply axis-and-ohs</code></pre>
+<p>Close the simulator first. It needs the .NET SDK, version 8 or newer (<code>dotnet-sdk</code> on Arch, <code>dotnet-sdk-8.0</code> on Debian and Ubuntu), to build a small tool that restores Mono.Cecil 0.11.6 from NuGet while it builds. It does these things and runs the check:</p>
+<ul>
+  <li><strong>The timer fix in WindowsBase.dll.</strong> Without it the script handler of Axis and Ohs dies about a minute after it loads the scripts of an aircraft, with <code>Couldn't start scriptHandler TimeSpan period must be greater than or equal to zero.</code> in <code>LAAO_Startup_log.txt</code>, and the Web API answers empty and zero to everything, which looks like "Axis and Ohs doesn't read the simulator". The cause: the autoscript timer adjusts its own interval. Every 100 ticks it compares the average of the last 10 measured periods with the interval it asked for. If they differ by 10 ms or less it lowers the interval by 5 ms, otherwise it raises it by 5. It starts at 75 ms. On Windows the timer fires on multiples of the system clock, 15.625 ms, so a 65 ms interval fires at 78 ms, the difference passes 10, and the interval goes up again; it settles around 65 to 70 ms. In Wine the timer fires at the time asked for, the difference never passes 10, and the interval goes down by 5 ms at a time to 0 and then tries -5, which the setter refuses. The arithmetic predicts the failure 61.5 s after the scripts start; it was measured at 62.1 s and 61.4 s on 15 October 2026. The fix makes <code>DispatcherTimer.Interval</code> round the value up to a multiple of 15.625 ms before the original checks, which stay as they were. That is the behaviour of the Windows clock, put in the setter. The tool writes the patched file next to the original and moves it into place in one step, because a running Axis and Ohs maps the original. After <code>apply</code> it reads the result back and refuses to keep it if it isn't patched. With the fix, Axis and Ohs ran 132 s and then 105 s with its scripts alive, <code>(A:TITLE, String)</code> returned the aircraft's title, and with the original file back it fell again at 61.4 s.</li>
+  <li><strong>The Windows GAC off for mono.</strong> It sets <code>*</code> to <code>gac=n</code> under <code>HKCU\Software\Wine\Mono\AsmOverrides</code>. With .NET Framework 4.8 in the prefix, wine-mono looks in the Windows GAC first and loads Microsoft's WPF, and Axis and Ohs dies at start with <code>MissingMethodException: BinaryCompatibility.get_TargetsAtLeast_Desktop_V4_5()</code>. Before the 4.8 install that GAC had no assemblies, so the setting only brings back what mono did before. The <a href="dotnet48.html">.NET Framework 4.8 add-on</a> sets the same value, so with it applied first this line only reports that the value is there. A <code>gac=n</code> that was already there is left alone and not removed by <code>undo</code>. Any other value of <code>*</code> is never replaced: <code>apply</code> says what it found, stops with an error and asks you to change it to <code>gac=n</code> yourself, then run <code>apply</code> again. <code>undo</code> deletes the value only while it is still the <code>gac=n</code> this tool wrote.</li>
+  <li><strong>Direct3D 9 off.</strong> That is not in the prefix: the launch script sets it for Axis and Ohs when it starts it.</li>
+</ul>
+<p>It also needs <a href="proton-fs2024.html">Proton FS2024</a> with <code>ntdll-heap-read-slack.patch</code>. Axis and Ohs copies 7,200 bytes out of every SimConnect data message into a structure, and <code>SimConnect.dll</code> allocates each message with <code>malloc</code> at exactly the size of the message. On Windows the read past the block gets away with it. Under Wine a block could end a few bytes before memory that isn't mapped, and the copy crashed at a 64 KiB boundary. The patch keeps at least 64 KiB of readable memory after every heap block. A crash with this signature happened on 18 October 2026, and again on 22 and 24 October. Whether the patch stops them for good needs more flights; see "Known problems".</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut axis-and-ohs
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher axis-and-ohs</code></pre>
+<p>The first writes an entry called "Axis and Ohs" in your application menu, with the program's own icon when <code>7z</code> and <code>magick</code> are installed. It starts Axis and Ohs inside the running simulator's container when the simulator is open, and in the prefix when it isn't, with Direct3D 9 off for that one program. If it is already open, the entry says so and does nothing.</p>
+<p>The second writes a user service, <code>flightsim-on-linux-axis-and-ohs.service</code>, and switches it on. It looks every 8 seconds. About 20 seconds after a new simulator appears it waits, up to 5 minutes, for the GSX engine, <code>couatl64_MSFS2024.exe</code>, which the simulator starts from <code>exe.xml</code>, and then opens Axis and Ohs once for that simulator. It doesn't open a program you closed by hand until the next simulator. When the simulator it started Axis and Ohs for closes, it asks the program to end (SIGTERM, never a kill). A watcher is the way because <code>exe.xml</code> starts programs with the simulator's environment, which turns Direct3D 9 on, and nothing that <code>exe.xml</code> accepts can change that. <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a> has the rest.</p>
+<p><strong>The startup deadlock.</strong> Now and then Axis and Ohs opens and shows no window. Two threads compiling at once take two Mono locks in opposite order: one holds the loader lock and wants the lock of a generic-instance set, the other holds that one and wants the loader lock. Every 60 seconds the Wine log gets <code>RtlpWaitForCriticalSection ... wait timed out in thread A, blocked by B</code>, and the launcher answered "already open" at every click. It happened on 24 October 2026 at 18:58, and the openings at 14:10, 15:17, 15:40 and 19:02 that day were fine. Between the wine-mono of the prefix, 11.2.0, and versions 11.2.1 and 11.3.0 no commit mentions it, so a newer wine-mono doesn't cure it. So the launcher watches: for 180 seconds it reads the program's log every 5 seconds, and when the wait lines close a cycle between threads, it ends the program and opens it again, up to three tries, and then shows a notice. A long wait without a cycle doesn't count. Each try has its own log in <code>FSOL_CACHE/logs/axis-and-ohs</code> (<code>aao-&lt;date&gt;.log</code>, then <code>-2</code> and <code>-3</code>); the last 20 are kept. The program's Wine log holds only Wine errors, which is what the detector reads. The launcher asks for those errors whether the simulator is open or not: the simulator's container passes the setting through, and the prefix launcher keeps what the caller sets. The retry hasn't run on a real deadlock yet. On 24 October 2026 the detector found the cycle in the log of the bad opening and nothing in the logs of the good ones, and a copy of the launcher with a stand-in program that printed those two lines closed it in 5 seconds and opened the second try; this repository's tests do the same with stand-ins.</p>
+
+<h2>The OpenDeck plugin</h2>
+<p>You need this only for the Axis and Ohs plugin of a Stream Deck in <a href="opendeck.html">OpenDeck</a>. Axis and Ohs answers with <code>Access-Control-Allow-Origin: *</code> twice. The webview of OpenDeck, a WebKitGTK page, joins the two into the invalid value <code>*, *</code> and hands every response to the plugin as an error. The plugin tests the connection with <code>GET ?conn=1</code> every 500 ms; Axis and Ohs answers <code>OK</code>, the <code>load</code> event never fires, and the connection button stays dark with Axis and Ohs up. The plugin also asks with <code>Cache-Control: no-cache</code>, which forces an <code>OPTIONS</code> preflight, and Axis and Ohs answers that with 405. A small proxy fixes both:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch axis-and-ohs cors-proxy</code></pre>
+<p>It listens on 127.0.0.1:43390, forwards to Axis and Ohs on 43380, sends each header once and answers the preflight with 204. While it runs, any web page open on this machine can call Axis and Ohs too, so stop it when you aren't using the plugin. It runs in the foreground; start it from a terminal or from a service of your own. In the plugin's <code>settings.js</code> change the port from 43380 to 43390; a plugin update brings 43380 back. Measured on 14 October 2026: with the proxy sending each header once the plugin's connected callback fired and the data loop began. A dark button with an empty title is a different problem: the Web API takes 150 ms per variable when Axis and Ohs has no data from the simulator, the plugin gives up at 500 ms, and reading <code>(A:TITLE, String)</code> from the API tells them apart, since an empty title means Axis and Ohs has no SimConnect.</p>
+
+<h2>Your profiles from Windows</h2>
+<p>If you copy your data from Windows, the folder is <code>AppData\Local\LORBY_SI\LorbyAxisAndOhsMSFS24</code> in the prefix: the aircraft profiles in <code>ConfigDatabase_MSFS2024.xml</code>, the scripts in <code>UserScripts_MSFS2024.xml</code>, and the general settings. Two things in it stop matching.</p>
+<ul>
+  <li><strong>Joystick GUIDs.</strong> A command is tied to the GUID of its joystick, and Wine gives a device another GUID than Windows did. The Wine GUID isn't in the prefix's registry, and it repeated in every start tested. Commands whose GUID doesn't match stay mute. Close Axis and Ohs, keep a copy of the database, and replace each Windows GUID with the one Axis and Ohs lists for the device in <code>LAAO_Startup_log.txt</code>. If Wine gives another GUID one day (another USB port, another Proton), the same replacement is needed again. Commands that use FlightLink, a virtual joystick that exists only on Windows, stay mute.</li>
+  <li><strong>Aircraft paths.</strong> Profiles that recognise the aircraft by the path of its <code>aircraft.cfg</code> (<code>airFileId</code>) compare it with the path the <code>AircraftLoaded</code> event brings, with <code>Contains</code> in both directions and case-sensitive. Here the event brings the path in lower case under your packages folder. Cut the stored path down to the part from the top folder on (<code>\community\...</code>, <code>\community2024\...</code> or <code>\streamedpackages\...</code>), which the event's path contains wherever your library is.</li>
+</ul>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check axis-and-ohs</code></pre>
+<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the Proton build has <code>ntdll-heap-read-slack.patch</code>, and its <code>ntdll.dll</code> is the one the build recorded;</li>
+  <li><code>WindowsBase.dll</code> in the wine-mono copy rounds timer intervals up, which it reads from the file without running anything;</li>
+  <li><code>*</code> is <code>gac=n</code> under <code>AsmOverrides</code>.</li>
+</ul>
+<p>After a Proton update that brings another wine-mono, GSX Pro's <code>apply</code> copies the folder again, and the new copy starts without this patch: run <code>addon apply axis-and-ohs</code> again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The Mono deadlock at startup happens now and then. The launcher opens the program again, up to three times.</li>
+  <li>The first Web API query after a start returns empty.</li>
+  <li>Some strings fail with <code>Illegal byte sequence</code>.</li>
+  <li>The heap crash fix needs more flights. The crash came back on 22 and 24 October 2026 before the patch; since the patch there isn't enough flying to say it is gone.</li>
+  <li>Axis and Ohs needs the simulator's SimConnect. Without it the API answers 0 for every variable and the plugin's button stays dark.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher axis-and-ohs --off
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut axis-and-ohs --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon undo axis-and-ohs</code></pre>
+<p>The first two take out the service and the menu entry. Close the simulator and Axis and Ohs first, then <code>undo</code> gives back the original <code>WindowsBase.dll</code> in the copy, removes the copy when this tool made it and GSX Pro doesn't use it, and deletes <code>*=gac=n</code> if this tool added it. Without the timer fix, Axis and Ohs falls back to dying about a minute after its scripts load.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

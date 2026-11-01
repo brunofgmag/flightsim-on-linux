@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimConnect over TCP · Flightsim on Linux</title>
+  <meta name="description" content="How to make MSFS 2024 listen for SimConnect clients on a TCP port under Proton, which Volanta, Navigraph Simlink and the aircraft watchers need.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>SimConnect over TCP</h1>
+<p class="lead">Tested with SimConnect 12.2.0.0 on 15 October 2026. One command, with the simulator closed. Programs that live outside the simulator's prefix need it.</p>
+
+<h2>Why it is needed</h2>
+<p>A program in the simulator's prefix talks to the simulator through a named pipe. A program in another prefix, or a native Linux program, can't reach that pipe, so it uses TCP. The simulator's <code>SimConnect.xml</code> declares a static IPv4 port, 500 by default, and Linux doesn't let the simulator open a port below 1024.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp</code></pre>
+<p>If <code>SimConnect.xml</code> doesn't exist yet, start the simulator once so it writes the file, then run the command again. The command does two things:</p>
+<ul>
+  <li>moves the static IPv4 port to 5111 when it is below 1024, and keeps the original file in <code>compatdata/2537590/flightsim-on-linux-backup/simconnect-tcp</code>;</li>
+  <li>installs <code>node-simconnect</code> 4.2.1 into the project's cache folder when <code>npm</code> is present. Only the watchers that follow the loaded aircraft need it.</li>
+</ul>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check simconnect-tcp</code></pre>
+<p>It reads the port in <code>SimConnect.xml</code> and fails when the port is below 1024. It changes nothing.</p>
+
+<h2>Who uses it</h2>
+<ul>
+  <li><a href="volanta.html">Volanta</a> and <a href="navigraph-simlink.html">Navigraph Simlink</a>, which read the port from a <code>SimConnect.cfg</code> beside them.</li>
+  <li>The aircraft watchers of the <a href="fslabs-a321.html">FSLabs A321</a> and the <a href="maddog-md80.html">Maddog MD-80</a>.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo simconnect-tcp</code></pre>
+<p>It puts the original <code>SimConnect.xml</code> back. <code>node-simconnect</code> stays in the cache folder.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glass Cockpit DLSS Fix · Flightsim on Linux</title>
+  <meta name="description" content="How to run the Glass Cockpit DLSS Fix, a ReShade add-on for MSFS 2024, under Proton FS2024: the two vkd3d-proton patches it relies on, the pinned download, the two lines for its ini file and the NVIDIA-only option.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Glass Cockpit DLSS Fix</h1>
+<p class="lead">Tested with Glass Cockpit DLSS Fix 1.0.2 on 20 October 2026. It takes the DLSS blur off the glass cockpit screens. It needs <a href="reshade.html">ReShade</a>, a Proton FS2024 built with two vkd3d-proton patches, and two lines in its ini file.</p>
+
+<p><span class="tag warn">touches add-on files</span> <code>apply</code> edits the add-on's own ini file, <code>glass-cockpit-dlss-fix.ini</code> in the simulator's folder, or creates it. The first time, it keeps the original (or notes that there was none) in <code>compatdata/2537590/flightsim-on-linux-backup/glass-cockpit-dlss-fix</code>, and this puts it back:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo glass-cockpit-dlss-fix</code></pre>
+
+<h2>Get it</h2>
+<p>It is a free ReShade add-on, from <a href="https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases">the project's releases page on GitHub</a>. The file is <code>glass-cockpit-dlss-fix.addon64</code> of release 1.0.2. You don't need to download it yourself: the install command does.</p>
+
+<h2>Install it</h2>
+<p>Install <a href="reshade.html">ReShade</a> first. The simulator has to be closed.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install glass-cockpit-dlss-fix</code></pre>
+<p>The command downloads <code>https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases/download/v1.0.2/glass-cockpit-dlss-fix.addon64</code> with <code>curl</code> (the release is tagged <code>v1.0.2</code>), checks that its sha256 is <code>9474b66e2e22bc005233463574fc9ba9c107d4bfa8364e5c3478588f0e8f2036</code>, keeps it in <code>~/.cache/flightsim-on-linux/downloads</code> and copies it into the simulator's folder, beside ReShade's <code>dxgi.dll</code>. A file with another hash is thrown away and nothing is installed. The hash is pinned because this is the release the fix was measured with. A newer release needs a newer test.</p>
+<p>If you already downloaded the file, give it to the command: <code>addon install glass-cockpit-dlss-fix /path/to/glass-cockpit-dlss-fix.addon64</code>. It must be the same release.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply glass-cockpit-dlss-fix</code></pre>
+<p>The add-on only redraws a cockpit screen when the root signature active at the draw is the very same object that the screen's pipeline was created with, a pointer comparison. Two things in vkd3d-proton, the Direct3D 12 layer of Proton, stopped that from working, and <a href="proton-fs2024.html">Proton FS2024</a> carries a patch for each.</p>
+<ul>
+  <li><code>root-signature-reuse-identical-blob.patch</code>. On Windows, creating the same root signature twice returns the same object. vkd3d-proton makes a new object every time. The simulator makes the same root signature many times: 95 created in a session with the PMDG 777, 73 of them with the content of another one still alive, and 13 live copies of the screens' root signature. In 10 seconds in the cockpit, 272,765 draws used the very object and 3,272,991 used another copy with identical content. With the stock Proton, the add-on refused 6,894 of 6,894 screen draws with <code>skip reason=root_layout</code>. The patch makes <code>CreateRootSignature</code> return the live object when the blob is identical byte for byte, only while its public reference count is above zero. With it, the same 95 creations gave 73 returns of the live object, no duplicate, and no refusal for <code>root_layout</code>.</li>
+  <li><code>descriptor-heap-covers-its-cpu-handles.patch</code>. After the first patch the add-on refused the screens with <code>texture_not_recognised</code>. On NVIDIA it recognises a screen's texture by the 32 bytes of its descriptor, which on the Windows driver depend only on the resource and the view. vkd3d-proton doesn't fill them the same way. On AMD and Intel the add-on follows each descriptor through the copies that the game makes, and an ini option turns that on for NVIDIA as well (below). With it, the log showed <code>screen texture found through descriptor tracking</code> and <code>fix is active</code>. The statistics line still had 5,339 draws of 154,228 refused as <code>descriptor_unreadable</code> and one screen flickered a little, because vkd3d-proton handed out descriptor addresses beyond the heap's allocation. This patch fixes that.</li>
+</ul>
+<p><code>apply</code> writes two lines in <code>glass-cockpit-dlss-fix.ini</code> and keeps every other line, with the file's line endings:</p>
+<ul>
+  <li><code>dark_screen_fix=1</code> under <code>[experimental]</code>.</li>
+  <li><code>descriptor_tracking=1</code> under <code>[debug]</code>, only when the GPU the simulator uses is NVIDIA. The command asks <code>vulkaninfo</code>: with one GPU it is that one, and with several it is the discrete one, the way the other tools of this repository choose. When it can't tell, because <code>vulkaninfo</code> is missing or two discrete GPUs are present, it leaves the option alone and says so. Install <code>vulkan-tools</code>, or set the option by hand.</li>
+</ul>
+<p>If the ini file doesn't exist, <code>apply</code> creates it with only those two sections.</p>
+
+<h2>Start it</h2>
+<p>There is nothing to start. The add-on loads through ReShade with the simulator. Its settings window opens with Ctrl+Shift+F6, the default in the ini's <code>[hotkeys]</code> section.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check glass-cockpit-dlss-fix</code></pre>
+<p>It prints seven lines, on NVIDIA and elsewhere, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing:</p>
+<ul>
+  <li>ReShade's <code>dxgi.dll</code> and the <code>.addon64</code> are in the simulator's folder;</li>
+  <li><code>dark_screen_fix=1</code> is set;</li>
+  <li>on NVIDIA <code>descriptor_tracking=1</code> is set, and elsewhere the line says it isn't needed;</li>
+  <li>the Proton's <code>fs2024-build.txt</code> lists both vkd3d-proton patches of this repository, and the <code>d3d12core.dll</code> in it is the one the build recorded.</li>
+</ul>
+<p>When the Proton lines fail, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>At a strong reflection angle a screen goes back to DLSS.</li>
+  <li>Lit button legends stay out of the fix.</li>
+  <li>With <a href="dlss5-nr.html">DLSS 5 Neural Rendering</a>, that add-on has to run after this one. Its guide says how.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo glass-cockpit-dlss-fix</code></pre>
+<p>This restores the ini file as it was before the first <code>apply</code>, or deletes it if <code>apply</code> had created it. The add-on stays. To remove it, delete <code>glass-cockpit-dlss-fix.addon64</code> from the simulator's folder, and its ini, log and status files if you want them gone.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

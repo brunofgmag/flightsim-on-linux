@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installing add-ons · Flightsim on Linux</title>
+  <meta name="description" content="How to install Windows add-ons for MSFS 2024 under Proton: the order of work, why installers run alone, what addon install does, and the traps many installers share (260-character paths, .NET 4.8, Wine&#x27;s PowerShell, WebView2, store apps, links in Community).">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html" aria-current="page">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Installing add-ons</h1>
+<p class="lead">Every Windows installer runs inside the simulator's prefix, and a handful of things go wrong the same way for many of them. This page has the order of work and those shared traps. The page of each add-on says what is special about it.</p>
+
+<h2>The order of work</h2>
+<ol class="steps">
+  <li>
+    <h3>Have Proton FS2024 selected in Steam</h3>
+    <p>Most of the hard add-ons need it, and the simulator has to have started once with it. <a href="start.html">Start here</a> builds it and says how to pick it.</p>
+  </li>
+  <li>
+    <h3>Close the simulator and every program of its prefix</h3>
+    <p>That includes the stores, and anything the previous installer left open in the tray. <code>bin/flightsim-on-linux machine --json</code> lists what still holds the prefix in <code>prefix_in_use</code> and <code>prefix_programs</code>. Install one add-on at a time.</p>
+  </li>
+  <li>
+    <h3>Get the installer from the vendor</h3>
+    <p>Each add-on page says where it comes from. <code>addon install</code> without a file prints the same, as the next section shows.</p>
+  </li>
+  <li>
+    <h3>Run the installer</h3>
+    <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install &lt;id&gt; /path/to/the-installer</code></pre>
+  </li>
+  <li>
+    <h3>Fix it and check it</h3>
+    <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply &lt;id&gt;
+~/flightsim-on-linux/bin/flightsim-on-linux addon check &lt;id&gt;</code></pre>
+    <p><code>addon apply</code> runs the fix and then the check, so the second command is for later, after an update.</p>
+  </li>
+  <li>
+    <h3>Add the menu entry and the watcher, if the add-on has them</h3>
+    <p>See <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>. Programs that talk to the simulator are started after the simulator, from the menu or by a watcher. <a href="rules.html">The ground rules</a> say why.</p>
+  </li>
+</ol>
+
+<h2>What addon install does</h2>
+<p>Without a file it only prints where the program comes from, whether it is paid or free when that is known, and what kind of installer it is:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps</code></pre>
+<p>The kind is one of four. <em>installer</em> is a Windows installer you download. <em>store</em> is a store app that downloads the installer for you. <em>native</em> is a Linux program. <em>manual</em> is a set of steps nobody has scripted. When the add-on has an <code>install</code> script and needs a file, the command ends with the line to run next.</p>
+<p>The helper app does the same in dialogs: <em>Install an add-on</em> shows where to get it, asks for the file you downloaded and runs the command.</p>
+<p>With a file, it runs the add-on's own <code>install</code> script on that file:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps ~/Downloads/MSFS_AutoFPS-installer-v0.5.4.4.exe</code></pre>
+<ul>
+  <li>It refuses while the simulator runs, or while any program is open in the prefix, and names those programs: <code>close the simulator and every program of its prefix first; installers run alone</code>. Nothing is started. An add-on with a prefix of its own, such as FlightSim Dispatch, skips this.</li>
+  <li>It runs the installer in the simulator's prefix with the Proton the simulator last ran with. It does not use your system Wine.</li>
+  <li>It starts the installer without <code>NoDefaultCurrentDirectoryInExePath</code> in the environment. Claude Code sets that variable in its shell, and Wine installers fail with it. If an AI agent drives your terminal and you start a Wine command by hand, put <code>env -u NoDefaultCurrentDirectoryInExePath</code> in front of it.</li>
+  <li>Most install scripts then wait up to a minute for the prefix to go quiet. If programs are still open, they say <code>programs are still open in the prefix after the installer; close them before the next one</code>. Close them before you install the next add-on.</li>
+  <li>If the installer exits with a code other than 0, the command says so and stops. If it exits with 0, it prints <code>addon apply</code> for that add-on as the next step.</li>
+</ul>
+<p>A <em>native</em> add-on with an <code>install</code> script needs no file and runs at once. An add-on without an <code>install</code> script gets its source printed, and you run the installer yourself, as the ground rules describe. An add-on with nothing to install says so.</p>
+
+<h2>Which add-ons have an install script</h2>
+<p>This is the list at the time of writing. Every command starts with <code>~/flightsim-on-linux/bin/flightsim-on-linux</code>. <code>bin/flightsim-on-linux addon list</code> marks the same add-ons with <code>[install]</code> on your copy.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Add-on</th><th>Command</th></tr>
+  <tr><td>BBS 757 weather radar mod</td><td><code>addon install bbs-757-weather-radar /path/to/installer</code></td></tr>
+  <tr><td>BBS Nest (BlueBird Simulations 757)</td><td><code>addon install bbs-nest /path/to/installer</code></td></tr>
+  <tr><td>ChasePlane</td><td><code>addon install chaseplane /path/to/installer</code></td></tr>
+  <tr><td>Contrail</td><td><code>addon install contrail /path/to/installer</code></td></tr>
+  <tr><td>Fenix A320, A319 and A321</td><td><code>addon install fenix-a320 /path/to/installer</code></td></tr>
+  <tr><td>FlightSim Dispatch</td><td><code>addon install flightsim-dispatch /path/to/installer</code></td></tr>
+  <tr><td>Flow Pro</td><td><code>addon install flow /path/to/installer</code></td></tr>
+  <tr><td>FSRealistic+</td><td><code>addon install fsrealistic-plus /path/to/installer</code></td></tr>
+  <tr><td>Glass Cockpit DLSS Fix</td><td><code>addon install glass-cockpit-dlss-fix</code></td></tr>
+  <tr><td>iFly 737 MAX8 and iFly Manager</td><td><code>addon install ifly-737-max8 /path/to/installer</code></td></tr>
+  <tr><td>Just Flight RJ Professional</td><td><code>addon install just-flight-rj-professional /path/to/installer</code></td></tr>
+  <tr><td>Lorby Axis and Ohs</td><td><code>addon install axis-and-ohs /path/to/installer</code></td></tr>
+  <tr><td>Maddog MD-80 (Leonardo)</td><td><code>addon install maddog-md80 /path/to/installer</code></td></tr>
+  <tr><td>MSFS AutoFPS</td><td><code>addon install msfs-autofps /path/to/installer</code></td></tr>
+  <tr><td>Navigraph Hub</td><td><code>addon install navigraph-hub /path/to/installer</code></td></tr>
+  <tr><td>Navigraph Simlink</td><td><code>addon install navigraph-simlink /path/to/installer</code></td></tr>
+  <tr><td>Orbx Central</td><td><code>addon install orbx-central /path/to/installer</code></td></tr>
+  <tr><td>PMDG Operations Center 3</td><td><code>addon install pmdg-oc3 /path/to/installer</code></td></tr>
+  <tr><td>ReShade</td><td><code>addon install reshade /path/to/installer</code></td></tr>
+  <tr><td>SayIntentions.AI</td><td><code>addon install sayintentions /path/to/installer</code></td></tr>
+  <tr><td>simMarket</td><td><code>addon install simmarket /path/to/installer</code></td></tr>
+  <tr><td>TFDi Design MD-11</td><td><code>addon install tfdi-md-11 /path/to/installer</code></td></tr>
+  <tr><td>TriTriSim Hub</td><td><code>addon install tritrisim-hub /path/to/installer</code></td></tr>
+  <tr><td>Volanta</td><td><code>addon install volanta /path/to/installer</code></td></tr>
+  <tr><td>vRAAS</td><td><code>addon install vraas /path/to/installer</code></td></tr>
+</table>
+</div>
+
+<h2>Installers run alone</h2>
+<p>This is the rule behind most failed installs. Each <code>protontricks-launch</code> starts its own container, and the Wine server of a prefix belongs to whoever started first. A program that runs in a different container from the server can't list the modules of any process, its own included, and Windows calls that fail with error 5 ("Access denied"). .NET installers do that at the very end, to register themselves, so the failure arrives after the files are already unpacked.</p>
+<p>Measured on the test machine on 13 October 2026: the ChasePlane installer ended with "Installation failed" and an access denied message while PMDG Operations Center 3 was open in the same prefix. With nothing else open, ChasePlane and Flow installed on the first try. Calling the system's <code>wine</code> on the prefix with Operations Center 3 open failed the same way. Why the kernel refuses is a guess, based on <code>ptrace_scope</code>. What was measured is the table of outcomes.</p>
+<p>So: one installer at a time, with the simulator and every other program of the prefix closed. <a href="rules.html">The ground rules</a> have the rest, and the command to run an installer by hand:</p>
+<pre><code>protontricks-launch --no-term --appid 2537590 /path/to/Setup.exe</code></pre>
+
+<h2>Store apps leave the installer unrun</h2>
+<p>Contrail and simMarket download the installer <code>.exe</code> of a product into the prefix's <code>Downloads</code> folder and stop. Nothing runs it. That folder is <code>drive_c/users/steamuser/Downloads</code> under the prefix that <code>bin/flightsim-on-linux machine --json</code> prints as <code>prefix</code>. Close the store, then give the file to <code>addon install</code> or to <code>protontricks-launch</code>. The store holds the prefix while it is open, and an installer started next to it fails as above.</p>
+
+<h2>Paths over 260 characters</h2>
+<p>Windows installers stop at 260 characters in a path, and Wine does not lift the limit. On 18 October 2026, on the test machine, the .NET 4.8 installer exited with code 42 when the path to it, as Wine sees it with a <code>Z:</code> drive in front, passed about 260 characters. A Fenix helper printed <code>Cabinet extraction failed: 122</code> from a work folder of about 290 characters. Both worked from the cache in <code>~/.cache/flightsim-on-linux</code> and from short folders.</p>
+<p>Keep installers in a short folder such as <code>~/Downloads</code>, not deep inside a project tree. Don't point <code>FSOL_CACHE</code> at a long path: the Fenix add-on refuses a cache folder longer than 150 characters, before it downloads anything, and asks for a shorter one.</p>
+
+<h2>.NET Framework 4.8 in a Windows 11 prefix</h2>
+<p>The prefix of Proton FS2024 reports Windows 11 (build 22000). On 18 October 2026 the .NET 4.8 installer, run as <code>ndp48-x86-x64-allos-enu.exe /q /norestart</code> in a new prefix, exited with code 0 and installed nothing. Its own log said that .NET 4.8 or later was already installed. The exit code reports success while nothing was installed.</p>
+<p>The <a href="dotnet48.html">.NET Framework 4.8 add-on</a> handles it: <code>addon apply dotnet48</code> saves the Windows version keys (<code>Windows NT\CurrentVersion</code> in both registry views, and <code>Version</code> under <code>HKCU\Software\Wine</code>), switches the prefix to Windows 7 with <code>winecfg -v win7</code>, installs, and puts the keys back one value at a time. It stops if the result doesn't match what it saved. <code>winecfg -v win10</code> is not a way back: it writes another build and another <code>UBR</code> and rewrites the 32-bit view. <a href="dotnet48.html">The .NET 4.8 page</a> describes what the command does, and <code>addon apply fenix-a320</code> runs it as its first step. If another add-on asks you to install .NET 4.8 yourself, expect the same exit 0, and take that script as the only procedure that was tested.</p>
+
+<h2>Wine's PowerShell exits with zero</h2>
+<p>The <code>powershell.exe</code> in a prefix is a stand-in from Wine. It accepts any command line, prints nothing and exits with 0. A program that uses PowerShell as a tool gets an empty answer that looks like success.</p>
+<p>On the test machine this broke the PMDG Operations Center 3 twice. Its updater checks the installer's signature by reading JSON from PowerShell, and ended with "Unexpected end of JSON input". Its installer asks PowerShell whether a process is running in the install folder, gets a 0, reads it as "yes", and says it can't close the PMDG OC3 when nothing runs. Running the installer with <code>WINEDLLOVERRIDES=powershell.exe=d</code> makes Wine stop offering the stand-in, so the installer falls back to <code>tasklist | find</code>, which Wine implements.</p>
+<p>Use that setting for installers built with electron-builder. The <code>install</code> scripts of PMDG Operations Center 3, Orbx Central and Volanta set it. This project ships no PowerShell that always answers "valid": it would switch off a real security check for good.</p>
+<p>A mod that is only a Windows PowerShell script and only rewrites files in one Community package can run from the native <code>pwsh</code> instead, without the prefix. The <code>install</code> script of the BBS 757 weather radar mod does that.</p>
+
+<h2>WebView2</h2>
+<p>Several installers and managers draw their pages with WebView2, a Chromium that comes as a runtime. Two things can go wrong, and they are separate.</p>
+<p>The first is a page that stays grey, white or empty. That is the Wayland driver losing what the Chromium process drew. It needs Proton FS2024 and the WebView2 policy in the prefix, set once. <a href="proton-fs2024.html">The Proton FS2024 page</a> has the command and the rules: a value named after a program replaces the <code>*</code> value instead of adding to it, and GSX ignores the policy and takes <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code>.</p>
+<p>The second is the runtime itself. This project doesn't install it. The prefix of the test machine holds version 146.0.3856.62, registered on 22 July 2026, and nothing records how it got there. No installer failure is recorded as caused by a missing runtime, so there is no tested way to install it here.</p>
+
+<h2>Packages that are links</h2>
+<p>An add-on organiser can move a package out of Community and leave a Linux symlink in its place. Wine shows that symlink to Windows programs as an ordinary folder. Two things follow, both on the test machine:</p>
+<ul>
+  <li>On 17 October 2026 a Fenix Installer update replaced two aircraft packages that were symlinks. The folders they pointed at vanished from the organiser's library, with nothing in the trash, and the links in Community pointed to nothing. In a throwaway prefix with the Proton of that day, <code>rd /s /q</code> on the link, and a <code>move</code> followed by <code>rd</code>, each deleted the whole target folder and left the link dangling. Which call the Fenix Installer makes was not measured.</li>
+  <li>On 16 October 2026 the MSFS AutoFPS 0.5.4.4 installer stopped halfway, at "Deleting old Widget Version", on a link made by an organiser. The <code>install</code> script of MSFS AutoFPS removes that one link before it runs the installer, and prints where it pointed.</li>
+</ul>
+<p>Before you run an installer or an update, list the links in your Community folder with <code>find . -maxdepth 1 -type l</code>, run from inside it. For each package the installer will replace, remove the link itself with <code>rm</code>, without a trailing slash, so that only the link goes and your organiser's copy stays where it is. The installer then creates a real folder. Junctions that Windows installers made themselves, such as GSX's, are a different case, and <a href="rules.html">the ground rules</a> cover them.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,79 @@
+title: SayIntentions.AI
+description: How to install and run SayIntentions.AI in MSFS 2024 under Proton: the links watcher that keeps Wine's rmdir from emptying its packages, the WebView2 policy, .NET 4.8, fonts and voices, and the Proton FS2024 patches it relies on.
+---
+<h1>SayIntentions.AI</h1>
+<p class="lead">Tested with SayIntentions.AI Core 5.6.5.4 on 21 October 2026. It is a hard one: its Update Hub empties its own packages in Community under Wine unless a small service keeps them away, its window is a WebView2, and its helper program needs .NET Framework 4.8.</p>
+
+<p><span class="tag warn">touches add-on files</span> The fix copies <code>WebView2Loader.dll</code> beside <code>SayIntentionsAI.exe</code>, in the program's own folder. A copy that was already there is kept in <code>compatdata/2537590/flightsim-on-linux-backup/sayintentions</code>, and this puts it back, or removes the one the fix made:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo sayintentions</code></pre>
+
+<h2>Get it</h2>
+<p>SayIntentions.AI comes from <a href="https://www.SayIntentions.AI">www.SayIntentions.AI</a>. The price isn't recorded here. The download is <code>SayIntentionsAI_UpdateHub.exe</code>, an Inno Setup installer for the Update Hub, and the Hub then downloads the components itself. The Core version the fixes were measured with is 5.6.5.4. On the test machine the Hub's <code>local_manifest.json</code> already lists 5.6.6.0 and Telemetry 1.0.2.0; whether 5.6.6.0 is installed or only listed wasn't confirmed.</p>
+
+<h2>Install it</h2>
+<p>The Hub installs what it downloaded during a flight only when the simulator closes, and it re-links every package in Community right after installing it. To do that it runs <code>cmd.exe /C rmdir /S /Q "&lt;link&gt;"</code>, then <code>mklink /D</code>, then <code>mklink /J</code>, then copies the folder. On Windows <code>rmdir /S</code> on a link removes only the link. Under Wine it also empties the folder the link points to. On 14 October 2026 that made every opening of the Hub download the 610 MB of SimObjects Core and SkyOps again, and the packages were never in place while the simulator was open. A link made by Wine looks, from Linux, like an empty folder with the extended attribute <code>user.WINEREPARSE</code>. If the entry is removed from Linux first, the Hub's <code>rmdir</code> finds nothing to follow, and <code>mklink</code> makes the link again with its contents in place. That is what the links watcher does.</p>
+<p>The order:</p>
+<ol>
+  <li>Close the simulator and every other program in the prefix. <a href="rules.html">The ground rules</a> explain why installers run alone.</li>
+  <li>Make sure the prefix has .NET Framework 4.8. SayIntentions 5.6.5.4 brought a helper, <code>si_telemetry.exe</code>, that cannot run on wine-mono; without 4.8 the interface stays on its loading screen. <code>addon apply dotnet48</code> installs it; <a href="dotnet48.html">its guide</a> and <a href="installers.html">Installing add-ons</a> explain what it does and why.</li>
+  <li>Switch the links watcher on with <code>addon watcher sayintentions</code>, under "Start it". Leave it on.</li>
+  <li>Give the installer to the CLI:
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install sayintentions ~/Downloads/SayIntentionsAI_UpdateHub.exe</code></pre>
+  It runs the installer in the simulator's prefix with Direct3D 9 off for that one program, which the Hub needs. It refuses to start while the simulator runs or any program is open in the prefix, and it refuses while the links watcher is not running.</li>
+  <li>Let the Hub download and install its components, then close it. The watcher keeps the links away while it runs and gives them back when it ends.</li>
+  <li>Run <code>addon apply sayintentions</code>.</li>
+</ol>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply sayintentions</code></pre>
+<p>Close the simulator first. The command writes these settings with one <code>regedit</code> import, keeps what each one replaced, and copies one file:</p>
+<ul>
+  <li><strong>The WebView2 policy.</strong> The value <code>SayIntentionsAI.exe</code> under <code>HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments</code> gets the four software options: <code>--in-process-gpu --disable-gpu --disable-gpu-compositing --disable-software-rasterizer</code>. Without them the browser runs a separate GPU process, the Wayland driver loses what it draws, and the middle of the window stays grey. The program's own entry replaces the <code>*</code> entry instead of adding to it, so it repeats all four. An environment variable doesn't work here: the program passes its own arguments to WebView2 and they win.</li>
+  <li><strong>Windows 7 for the browser.</strong> <code>msedgewebview2.exe</code> gets <code>Version=win7</code> under <code>HKCU\Software\Wine\AppDefaults</code>. The prefix used to test the WebView2 fixes had it. Why the browser needs it isn't recorded.</li>
+  <li><strong>The native .NET for the helper.</strong> <code>si_telemetry.exe</code> gets <code>mscoree=native</code> under its own <code>DllOverrides</code>, so it runs on the prefix's .NET Framework 4.8, and only when 4.8 is there. On wine-mono it dies at start with <code>TypeLoadException</code>, because the mono has no <code>CertificateRequest</code> class. On 4.8 it runs further and then fails in its certificate, which is not an error that matters (see "Known problems").</li>
+  <li><strong>The WebView2 loader.</strong> It copies <code>runtimes\win-x64\native\WebView2Loader.dll</code> beside <code>SayIntentionsAI.exe</code>. wine-mono looks beside the program and doesn't look in <code>runtimes</code>, so without the copy the program warns "SayIntentions ... failed to load" and no browser process starts. With it, six <code>msedgewebview2.exe</code> processes started. An update of SayIntentions can delete the copy; run <code>apply</code> again.</li>
+  <li><strong>Six fonts.</strong> Tahoma, Tahoma Bold, Marlett, Symbol, Webdings and Wingdings in <code>HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts</code>. Proton's <code>wine.inf</code> registers them, and a prefix whose links were dangling during a run can lose them. Without Tahoma the WebView2 browser asks DirectWrite for it, doesn't find it, falls back to a font that leads back to Tahoma, and overflows its 8 MB stack. SayIntentions then warns that it failed to load; it did in all three openings tried on 18 October 2026. With the six back, a DirectWrite test found Tahoma and the program logged <code>WebView2 ready</code> on 18 October 2026.</li>
+</ul>
+<p>Not part of the command: the font substitutions for Segoe UI, Consolas and a few others, which keep the text from being drawn in Times New Roman. <code>bin/flightsim-on-linux doctor</code> offers them.</p>
+<p>It also needs four things from the Proton FS2024 build and one app from Steam:</p>
+<ul>
+  <li><code>win32u-cross-process-child-windows.patch</code>: the WebView2 part of the window comes from a second process, and stock Wine dropped what it drew.</li>
+  <li><code>winewayland-opaque-xrgb.patch</code>: the window no longer goes black on some outputs under KWin 6.8, which read the fourth byte of the pixel as transparency.</li>
+  <li>The audio session notification in Proton's <code>mmdevapi.dll</code>, which the Fenix overlay patch in the build adds. Without it the program closes a few seconds after it speaks, because its audio library gets "not implemented" when it unregisters a session notification and a finalizer turns that into a crash. The check looks at the build record.</li>
+  <li><code>ntdll-heap-bounded-free-list-scan.patch</code>, from 30 October 2026. See "Known problems": it is expected to help, and it hasn't been seen in flight.</li>
+  <li>The free Steam app <strong>Proton Voice Files</strong>, app 3086180, 75 MB. SayIntentions speaks through the SAPI voices Proton registers, and they point at a model file Proton doesn't ship. Without the app the program warns "ATIS audio can not play on this computer". Inside the simulator's container the other two variables the voices need come from the game's environment, and <code>flightsim-on-linux run</code> adds <code>PROTON_VOICE_FILES</code>. Started with <code>protontricks-launch</code> instead, the warning came back on 14 October 2026.</li>
+</ul>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut sayintentions</code></pre>
+<p>This writes an entry called "SayIntentions.AI" in your application menu. With the simulator closed it tells you to start the simulator first: the program runs inside the simulator's container. With the simulator running, it removes the SayIntentions links from Community (and only those: a link that points anywhere else, like GSX's, stays), then opens the Update Hub in the container with Direct3D 9 off. If the Hub is already open it says so and does nothing. <strong>Never open the Hub with the simulator running except through this entry.</strong> On 14 October 2026 a Hub opened directly with the simulator running left the four packages with zero files; opened through the launcher, 668, 1,129, 10 and 12 files stayed. The entry needs <code>getfattr</code>, from the <code>attr</code> package, to find the links.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher sayintentions</code></pre>
+<p>This writes the user service <code>flightsim-on-linux-sayintentions.service</code> and switches it on. It is a watcher of the <code>loop</code> kind, described in <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>: it starts no program with the simulator. It runs the add-on's <code>links-watcher</code> script for as long as the service lives and runs it again if it fails. Stopping the service stops the script, and the script gives the links back first.</p>
+<p>Every second it looks. While the Hub runs and the simulator doesn't, it saves the extended attribute of each SayIntentions link in your backup folder (<code>compatdata/2537590/flightsim-on-linux-backup/sayintentions/links</code>) and removes the entry. When the Hub is gone it gives back every link the Hub didn't make again, with the same attribute. It needs <code>getfattr</code> and <code>setfattr</code> (the <code>attr</code> package) and <code>iconv</code>. If you stop the service while the Hub is open, it gives the links back first. On the test machine, with stand-in processes for the Hub and the simulator on 14 October 2026, the four links left within 2 seconds and came back with identical attributes; with a simulator process present they stayed; and a copy of the watcher without the simulator test removed them.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check sayintentions</code></pre>
+<p>It prints ten lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the policy value for <code>SayIntentionsAI.exe</code> holds the four options;</li>
+  <li><code>msedgewebview2.exe</code> has <code>Version=win7</code>;</li>
+  <li>the prefix has .NET Framework 4.8 and <code>si_telemetry.exe</code> has <code>mscoree=native</code>;</li>
+  <li><code>WebView2Loader.dll</code> beside the program is the one in <code>runtimes</code>;</li>
+  <li>the six fonts are in the registry;</li>
+  <li>Proton has the child-window patch, the opaque pixel patch and the heap patch, and its <code>mmdevapi.dll</code> is the one the build recorded, with the overlay patch in the record;</li>
+  <li>the Steam app Proton Voice Files is in one of your libraries.</li>
+</ul>
+<p>The check doesn't look at the links watcher; <code>systemctl --user status flightsim-on-linux-sayintentions.service</code> does.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>One opening in three hangs before the WebView2 comes up. End the program and open it again.</li>
+  <li>The heap patch is expected, not seen. With the A321 and SayIntentions traffic, the process heap on the test machine held about 40,000 free blocks of up to 1,504 bytes in one list, and every 1,520-byte request walked all of them under the heap lock, which stopped the simulator for 50 to 185 ms once a second. The patch moves on to the next list after 64 blocks that are too small, and lets blocks up to 2 KiB reach the low-fragmentation heap after 2,048 allocations. The stalls should go away with SayIntentions open. Traffic is the likely trigger, not the proven one, and nobody has flown with this build and the Hub open yet, so this is what to expect, not what was seen.</li>
+  <li><code>si_telemetry.exe</code> crashes with <code>ArgumentException: The provided key does not match the public key for this certificate</code> and the program opens it again every 20 seconds. This is harmless as far as the test machine shows: ATC worked normally with it down, and the cause, probably in Wine's <code>crypt32</code> or <code>bcrypt</code>, wasn't measured.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut sayintentions --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon undo sayintentions
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher sayintentions --off</code></pre>
+<p>The first removes the menu entry. <code>undo</code> puts the registry settings back to what they were before <code>apply</code> (a policy text that was there is written again, and a value that wasn't there is deleted) and takes out the copy of <code>WebView2Loader.dll</code>, or puts back the one that was there. The last one switches off the links watcher and deletes its unit file. <code>undo</code> leaves the Update Hub, SayIntentions and its packages alone.</p>

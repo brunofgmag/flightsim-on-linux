@@ -1,0 +1,58 @@
+title: Active Sky FS
+description: How to run Active Sky FS in MSFS 2024 under Proton: the installer and its connector, the Calibri to Carlito replacement and the Proton fix behind it, the menu entry that starts it inside the simulator's container, why it is closed and never killed, and the licence dialog that ignores the mouse.
+---
+<h1>Active Sky FS</h1>
+<p class="lead">Tested with Active Sky FS 1.0.9720.20096 on 15 October 2026. It takes a few steps rather than one command: a font replacement that needs a Proton fix, a launch script, and a licence dialog you have to drive with the keyboard.</p>
+
+<h2>Get it</h2>
+<p>Active Sky FS is a paid add-on from HiFi, sold at <a href="http://www.hifisimtech.com/">hifisimtech.com</a>. You need a login and a licence key. The installer is <code>AS_FS_Install.exe</code>, an Inno Setup installer.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Active Sky has no <code>addon install</code> script, so run the installer the way the ground rules show:</p>
+<pre><code>protontricks-launch --no-term --appid 2537590 ~/Downloads/AS_FS_Install.exe</code></pre>
+<p>On the test machine the installer went into <code>C:\Program Files\HiFi\AS_FS</code> of the simulator's prefix. Which program ran it on 14 October 2026 wasn't recorded, and no installer problem was.</p>
+<p>That folder also holds <code>AS_FSConnectorInstall.exe</code>. The connector puts three things in place: the <code>asfs</code> package in Community, an <code>AddonFolder</code> with <code>ActiveSkyUtils.exe</code> under <code>AppData\Roaming\HiFi\AS_FS</code>, and an ActiveSky Utils entry in <code>exe.xml</code>. Whether the main installer starts the connector for you wasn't recorded. If Community has no <code>asfs</code> folder afterwards, run the connector the same way, from the same folder.</p>
+<p>Active Sky does not talk to the simulator by itself. The simulator starts ActiveSky Utils from <code>exe.xml</code>, Utils hands the simulator's data to <code>AS_FS.exe</code> through a named pipe, and a script in the <code>asfs</code> package asks Active Sky's local API for the weather and applies it.</p>
+
+<h2>Make it run</h2>
+<p>Install the Carlito font first. On Arch that is the <code>ttf-carlito</code> package; other distributions package Carlito under their own name. Then close the simulator and run:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply active-sky</code></pre>
+<p>It refuses when no Carlito font is installed, and writes nothing then. Otherwise it sets two values in <code>HKCU\Software\Wine\Fonts\Replacements</code> of the simulator's prefix: <code>Calibri</code> and <code>Calibri Medium</code>, both to <code>Carlito</code>. It keeps whatever those values held before, and <code>addon undo</code> puts it back.</p>
+<p>The registry values are only half of it. Active Sky asks GDI+ for the fonts Tahoma, Microsoft Sans Serif and Calibri. Wine's GDI+ finds a family only when the font's full name equals its family name, and Carlito's full name is "Carlito Regular", so on 15 October 2026 Active Sky stopped at its own error screen, <code>The requested FontFamily could not be found</code>. <a href="proton-fs2024.html">Proton FS2024</a> carries <code>gdiplus-font-family-after-substitution.patch</code>, the upstream Wine fix (commit <code>e6e9d7627c</code>, in Wine 11.17): GDI+ asks GDI which family it chose after the substitution, so the replacement works. The first workaround, copying Carlito into the prefix's <code>Fonts</code> folder under the name Calibri, was retired on 18 October 2026.</p>
+<p>On 18 October 2026, with the fix and the registry values, a font test program run in the simulator's container got GDI+ status 0 for Calibri. With the Calibri value removed it got 14, <code>FontFamilyNotFound</code>, and with the value back it got 0 again. Whether Active Sky's own screens draw the same was not checked.</p>
+<p>Active Sky also has to start inside the simulator's container. The launch script does that.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut active-sky</code></pre>
+<p>This writes an entry called "Active Sky" in your application menu, with Active Sky's own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close Active Sky" action. The entry starts Active Sky inside the running simulator's container. With the simulator closed it tells you to start the simulator first, and with Active Sky already open it says so and does nothing. There is no watcher: the simulator starts Utils from <code>exe.xml</code>, and you start Active Sky yourself.</p>
+<p>The "Close Active Sky" action asks Active Sky's window to close, the way the close button does, and never kills the process. That matters on this machine:</p>
+<ul>
+  <li>On 15 October 2026 three runs of Active Sky in a row, each started after the previous one was killed with <code>pkill</code>, logged <code>MSFS connection established!</code> and changed nothing in the simulator. The weather API answered 503 with <code>"message": "No sim connection"</code>, and a Mono trace showed a named-pipe connect timing out 43 times in two minutes. Closing Active Sky through its window and reopening it, with the same Utils still running, left the API at 200 and the simulator's script running.</li>
+  <li>On 30 October 2026, after a <code>pkill</code>, the next openings stopped at "Existing Session": HiFi's server still held the old session, and it was still there eight minutes later. After a <code>taskkill</code> without <code>/f</code>, the next opening logged in at once.</li>
+</ul>
+<p>If Active Sky stays after the request, the action says so and leaves it. Close it from its own window.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check active-sky</code></pre>
+<p>It prints five lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the Proton was built with <code>gdiplus-font-family-after-substitution.patch</code>, and its <code>gdiplus.dll</code> is the one the build recorded;</li>
+  <li>a Carlito font is installed;</li>
+  <li><code>Calibri</code> and <code>Calibri Medium</code> are each replaced by Carlito in the prefix, one line each;</li>
+  <li>the weather API answers 200. This line looks only when Active Sky and the simulator both run. With Active Sky closed it says so and passes.</li>
+</ul>
+<p>The API is <code>http://127.0.0.1:19285/ActiveSky/API/GetWeatherInfoJson</code>, and you can ask it yourself with <code>curl -s</code>. It lists the weather layers when Active Sky is feeding the simulator, and answers 503 when it isn't. Read the API and not Active Sky's log: the log said "MSFS connection established!" in the three runs above that changed nothing.</p>
+<p>When the first line fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the font lines fail, run <code>addon apply</code> again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The OK button of the licence dialog, "Active Sky FS License", ignores the mouse, and so does the X of that window. Press Tab until OK is selected, then Space. On 15 October 2026 that went through. A window list taken inside the container showed the dialog visible and enabled, the Login window behind it disabled, and no other modal window. Why the click doesn't reach this one dialog, while it reaches the Login window and the main window, wasn't measured.</li>
+  <li>A killed Active Sky leaves the weather API at 503 and the account on "Existing Session", as above. To get the weather back, close Active Sky, close ActiveSky Utils (<code>pkill -f 'ActiveSkyUtils[.]exe'</code>) and open Utils again inside the container: <code>bin/flightsim-on-linux run 'C:\users\steamuser\AppData\Roaming\HiFi\AS_FS\AddonFolder\ActiveSkyUtils.exe'</code>. On 15 October 2026, reopening only Utils took the API to 200 in 18 seconds.</li>
+  <li>Not errors: the log says <code>Could not find file ...\Weather\tempsfc.bin</code> four times for every download, then "Download failed, retrying..." and "Download complete". Active Sky's own processing of the GFS data runs a <code>cmd</code> pipe through <code>wgrib2</code> and <code>findstr</code> that doesn't write that file, so it falls back to the download HiFi's servers already processed, and the weather arrives all the same. Why the pipe fails wasn't measured.</li>
+  <li>Active Sky runs in the simulator's container. In another Wine server, <code>ActiveSkyUtils.exe</code> closes within seconds, because it looks for a process called <code>FlightSimulator2024</code> and doesn't see one. A 17 KB stand-in program with that name kept it alive in a test on the test machine, and this add-on doesn't use it.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo active-sky
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut active-sky --remove</code></pre>
+<p>The first puts the two <code>Replacements</code> values back to what they were before <code>apply</code>, or removes them if they didn't exist. It leaves the Carlito font installed, and leaves a value alone that was already Carlito before <code>apply</code>. The second takes out the menu entry.</p>

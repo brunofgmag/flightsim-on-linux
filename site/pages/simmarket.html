@@ -1,0 +1,42 @@
+title: simMarket
+description: How to run simMarket in MSFS 2024's prefix under Proton: the Electron option it needs, the notification stub it must not see, the menu entry that also closes it, and what the test machine did with a second GPU.
+---
+<h1>simMarket</h1>
+<p class="lead">Tested with simMarket 4.20.0 on 14 October 2026. It installs like any Windows program and needs one Electron option, which the menu entry gives it. Nothing in the prefix changes.</p>
+
+<h2>Get it</h2>
+<p>simMarket is a store for add-ons, an Electron program. Its Windows installer used here was <code>simMarket-4.20.0.win-x64.exe</code>, a Squirrel setup of about 158 MB. Where it is downloaded from and what it costs aren't recorded here; get it from simMarket.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install simmarket ~/Downloads/simMarket-4.20.0.win-x64.exe</code></pre>
+<p>The command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. It then runs the installer in the simulator's prefix. On the test machine the installer needed no setting of its own.</p>
+<p>simMarket downloads the installer of a product into the prefix's Downloads folder and stops there; it doesn't run it. Close simMarket, then run that installer yourself, alone, as the ground rules say.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simmarket</code></pre>
+<p>This changes nothing in the prefix, and then runs the check. The launch script gives simMarket two things:</p>
+<ul>
+  <li><code>--disable-gpu-sandbox</code>, the Electron option that let it run on the test machine.</li>
+  <li><code>toaststub=d</code>, which turns off a stand-in DLL for that one program. On 14 October 2026 simMarket opened, drew normally and then closed itself after the login. The log ends with a request for <code>Windows.UI.Notifications.ToastNotificationManager</code> and an invalid read at <code>0xFFFFFFFFFFFFFFFF</code> inside <code>simMarket.exe</code>, with <code>0x80004001</code> (not implemented) in a register. That class is not Wine's: the prefix pointed it at <code>C:\appresolver\toaststub.dll</code>, a stand-in installed in July 2026 for .NET programs that crashed when the notification API didn't exist. The stand-in says the class exists and answers "not implemented" to several methods. The guess is that Chromium goes further into it than it would without the class and can't handle that answer. It was not separated from other causes. The override only matters on a prefix where a stand-in of that kind is registered. On any other it does nothing.</li>
+</ul>
+<p>The override was not exercised for what it is meant to prevent: in the next three starts no notification was requested. On 17 October 2026 the log had two <code>ToastNotificationManager</code> lines and no <code>Unhandled page fault</code>. Whether <code>toaststub=d</code> reaches a DLL that the registry names by its full path was not measured either.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut simmarket</code></pre>
+<p>This writes an entry called "simMarket" in your application menu, with simMarket's own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close simMarket" action. The entry starts the newest <code>app-*</code> folder's program in the simulator's prefix. With simMarket already open it says so and does nothing. The action asks all of simMarket's processes to end, the way a polite <code>kill</code> does, and never uses <code>kill -9</code>. Close simMarket before you start the simulator or run an installer, since a program left open in the prefix holds it.</p>
+<p>With the simulator running, the entry starts simMarket inside the simulator's container with the same two settings. The test machine did not run it that way with only those: it has a second GPU, and there simMarket got the integrated Radeon card (the Vulkan loader's <code>VK_LOADER_DRIVERS_SELECT</code> set to <code>*radeon*</code>, and <code>DXVK_FILTER_DEVICE_NAME</code> and <code>VKD3D_FILTER_DEVICE_NAME</code> set to <code>RADV</code>) plus the Chromium options <code>--in-process-gpu --disable-gpu --disable-gpu-compositing</code>, to keep it off the card the simulator draws on. That is a choice for a machine with two GPUs, so the script leaves it out. If simMarket takes video memory from the simulator on yours, you can pass the Chromium options after the script name with <code>addon launch simmarket launch -- --in-process-gpu --disable-gpu --disable-gpu-compositing</code>. A plain start with the simulator open, without any of them, has not been measured.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check simmarket</code></pre>
+<p>It prints one line, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open: simMarket is installed in the prefix, and the newest <code>app-*</code> folder is named.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>simMarket closed itself once after the login, in the notification stand-in described above.</li>
+  <li>Product installers are left in the prefix's Downloads folder, unrun.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo simmarket</code> has nothing to restore, because <code>apply</code> changed nothing. Take out the menu entry with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut simmarket --remove</code></pre>

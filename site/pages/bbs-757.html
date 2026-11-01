@@ -1,0 +1,48 @@
+title: BlueBird 757-200
+description: How to run the BlueBird Simulations 757-200 in MSFS 2024 under Proton: it is installed by BBS Nest from your BlueBird account, its systems need Nest open beside the simulator, and what to expect from its weather, its terrain and its memory.
+---
+<h1>BlueBird Simulations 757-200</h1>
+<p class="lead">Tested with the 757-200 0.1.0 and its liveries 1.0.0. The test machine flew Heathrow to Keflavik on 27 October 2026, and the systems and the terrain on the navigation display worked on 28 October. The aircraft needs nothing in the prefix. <a href="bbs-nest.html">BBS Nest</a> is the hard part, and it has its own page.</p>
+
+<h2>Get it</h2>
+<p>The aircraft comes from your BlueBird Simulations account, and BBS Nest installs it. There is no separate installer for the aircraft. This page doesn't know whether it is paid or what the account's address is. Nest installs two packages in your Community folder: <code>bluebirdsim-aircraft-757-200</code> and <code>bluebirdsim-aircraft-757-200-liveries</code>.</p>
+
+<h2>Install it</h2>
+<ol>
+  <li>Install Nest, following <a href="bbs-nest.html">the Nest page</a>: <code>addon install bbs-nest</code>, with the simulator and every other program of the prefix closed.</li>
+  <li>Open Nest alone, with the simulator closed and nothing else in the prefix (<code>addon launch bbs-nest</code>), and let it install the aircraft. On the test machine it installed both packages on 24 October 2026, and the sizes in each package's <code>layout.json</code> matched the files on disk.</li>
+  <li>Check that Nest's Settings folder is your real Community folder. On the test machine Nest had stored another folder, <code>Community2024</code>, and showed the aircraft as NOT INSTALLED. Change it in Nest's Settings and open Nest again. The check below reads that value.</li>
+</ol>
+<p>Nest is a program of the prefix, so <a href="rules.html">the ground rule</a> applies: run it alone when you install or update, never next to another installer.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply bbs-757</code></pre>
+<p>This changes nothing and runs the check. The aircraft's own needs are met somewhere else:</p>
+<ul>
+  <li><strong>Nest open beside the simulator.</strong> Without it the EFB shows <code>BBS|NEST is not running. Please start BBS|NEST to run the aircraft systems.</code> and the systems stay off. Open it from the menu entry of the <a href="bbs-nest.html">Nest page</a>, with the simulator running.</li>
+  <li><strong>Terrain on the navigation display.</strong> Nest draws it from files relative to its own folder, so it has to be started the way the launch script does, with <code>start /d</code>. The Nest page has the details.</li>
+  <li><strong>The pacing patch in Proton FS2024.</strong> It took Nest from 21.3% to 11.3% of the GPU's streaming multiprocessors on the test machine. <code>addon check bbs-nest</code> proves it is in your build.</li>
+</ul>
+
+<h2>Start it</h2>
+<p>There is nothing to start for the aircraft. Open Nest, as above, and load the 757 in the simulator. Open Nest <strong>after the 757 is loaded</strong>: if the simulator's handshake with Nest is slow, Nest can leak memory at 43 to 90 MB a minute, and the Nest page explains how to see it.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check bbs-757</code></pre>
+<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the aircraft package is in Community, with its version, and every file in its <code>layout.json</code> is on disk with the listed size;</li>
+  <li>the same for the liveries package;</li>
+  <li>BBS Nest is installed in the prefix.</li>
+</ul>
+<p>A <code>FAIL</code> on a package names the files that are missing or have another size. Reinstall the package with Nest.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li><strong>The stock 0.1.0 draws no weather on the navigation display.</strong> That is not a Linux fault: the aircraft's gauge module has the functions for terrain, traffic and the other symbols, and none for weather. <a href="bbs-757-weather-radar.html">The weather radar mod</a> adds it.</li>
+  <li><strong>Nest can leak memory</strong> through an orphan SimConnect connection, and <strong>alone it won't close with the X button</strong>. Both are on the <a href="bbs-nest.html">Nest page</a>, with the workarounds.</li>
+  <li><strong>The simulator's own memory grows on long flights.</strong> After a flight of 4 hours 30 minutes on 27 October 2026, with the 757, the simulator reached 34.2 GB of RAM and 29 GB of swap. At 00:39 on 28 October the system's out-of-memory service (systemd-oomd) ended the simulator's container, with 63.3 of 64.9 GB of RAM and 58.7 of 64.9 GB of compressed swap in use. Nest was part of that, and the simulator grew more than Nest did. The simulator's growth has not been investigated and needs a long measured flight.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo bbs-757</code> has nothing to restore, because <code>apply</code> changes nothing. To remove the aircraft, use Nest.</p>

@@ -1,0 +1,70 @@
+title: Navigraph Simlink
+description: How to install and run Navigraph Simlink for MSFS 2024: its own Wine prefix with your system Wine, SimConnect over TCP, the sign-in link handler, opening it at login, and the watcher that restarts it when it loses the simulator and never reconnects.
+---
+<h1>Navigraph Simlink</h1>
+<p class="lead">Tested with Navigraph Simlink 1.1.41 on 30 October 2026. It runs in a Wine prefix of its own with the Wine of your distribution, not in the simulator's prefix, so it takes several steps: the install, the SimConnect port, a link handler for the sign-in, and an optional watcher.</p>
+
+<p><span class="tag warn">touches add-on files</span> The fix writes <code>SimConnect.cfg</code> beside <code>NavigraphSimlink.exe</code>, in Simlink's own folder. A <code>SimConnect.cfg</code> that was already there is kept in <code>compatdata/2537590/flightsim-on-linux-backup/navigraph-simlink/cfg</code>, and this puts it back, or removes the one the fix wrote:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo navigraph-simlink</code></pre>
+
+<h2>Get it</h2>
+<p>Simlink is Navigraph's program, and it needs a Navigraph account. The installer is <code>Navigraph+Simlink.exe</code>, an Inno Setup 6.2.2 installer, version 1.1.41. The address to download it from isn't recorded here, and neither is the price. Simlink sends the aircraft's position to Navigraph Charts. It needs no plugin in the simulator, and works with MSFS 2020 and 2024.</p>
+
+<h2>Install it</h2>
+<p>Install the <code>wine</code> package of your distribution first. The test machine used Wine 11.20 from Arch's <code>wine</code>. This add-on uses neither Proton nor the simulator's prefix. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install navigraph-simlink ~/Downloads/Navigraph+Simlink.exe</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command makes a new prefix in <code>${XDG_DATA_HOME:-~/.local/share}/flightsim-on-linux/navigraph-simlink</code> with <code>wineboot -i</code>, then runs the installer in it with <code>/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /LOG=C:\simlink-install.log</code>. It installs into <code>C:\Program Files\Navigraph\Simlink</code> of that prefix. It refuses while Simlink is open.</p>
+<p>The command runs Wine with its menu builder switched off. A new prefix of the system Wine otherwise writes into <code>~/.local/share/applications</code> six file associations (<code>.chm</code>, <code>.crt</code>, <code>.hlp</code>, <code>.msp</code>, <code>.reg</code>, <code>.vbs</code>) that open those files in the Simlink prefix, a handler for <code>navigraph-traffic-desktop</code> that competes with the one this add-on sets, and a menu entry that opens Simlink without the launch script. On 18 October 2026 all of them had to be deleted by hand.</p>
+<p>Why a prefix of its own: in the simulator's prefix, the Wine there doesn't run the <code>Run</code> registry key, and a program opened outside the simulator's container competes with it for the prefix, so Simlink opened only by hand, after the simulator. In its own prefix it opens at login and finds the simulator over TCP.</p>
+
+<h2>Make it run</h2>
+<p>Three commands, in this order. The first needs the simulator closed.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut navigraph-simlink
+~/flightsim-on-linux/bin/flightsim-on-linux addon apply navigraph-simlink</code></pre>
+<p>The last one does two things, and fails with the command to run when something is missing:</p>
+<ul>
+  <li><strong>It writes <code>SimConnect.cfg</code> next to <code>NavigraphSimlink.exe</code></strong>, with <code>Protocol=IPv4</code>, <code>Address=127.0.0.1</code> and the port that <code>SimConnect.xml</code> declares. A SimConnect client finds the simulator through a pipe, which lives on the simulator's Wine server and which a program in another prefix can't see, or through a <code>SimConnect.cfg</code>. Simlink has the client inside its exe. On 18 October 2026, with a <code>SimConnect.cfg</code> pointing at port 5112 and a listener on that port, it looked in its own folder, in Documents and in Public Documents, tried the pipe, then connected to 5112 every 6 seconds until the server answered. So it can open before the simulator. The file is not in Documents, because in a prefix of the system Wine, Documents is a link to your home folder. <code>simconnect-tcp</code> is what moves the simulator's port from 500, which Linux doesn't let it open, to 5111.</li>
+  <li><strong>It makes the menu entry the handler for the sign-in link.</strong> The Sign in button opens Navigraph's page in your browser, and the page ends by calling <code>navigraph-traffic-desktop://oidc_sign_in_redirect?...</code>. On Windows that starts a second copy of the exe with the link, and the copy hands the code to the first through a named pipe. Without a handler on Linux nothing happens, and Simlink sits at "Please wait for user authentication". The command runs <code>xdg-mime default</code> for that link scheme, so the menu entry's launch script gets the link. It starts the second copy in the same prefix, which finds the first because the pipe lives on that prefix's Wine server. On 18 October 2026 the log recorded <code>OIDC_authorization_code_flow</code> and the login went through. <code>apply</code> remembers the handler you had before, and <code>addon undo</code> puts it back.</li>
+</ul>
+<p>The launch script does two more things, which you don't have to set up. It starts Simlink with <code>QT_OPENGL=software</code>, because Simlink is a Qt 5 program and the package brings <code>opengl32sw.dll</code>. Started that way it drew its login window and didn't show in <code>nvidia-smi</code>. And it sends the program's output to <code>/dev/null</code>, because Simlink prints the access token and the refresh token of your Navigraph account there. Don't add a log. It also refuses any argument that isn't a <code>navigraph-traffic-desktop:</code> link.</p>
+
+<h2>Start it</h2>
+<p>The menu entry you wrote before is called "Navigraph Simlink". It starts Simlink in its prefix, and with Simlink already open it says so and does nothing. It doesn't need the simulator.</p>
+<p>To open Simlink when you log in, as Windows does:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch navigraph-simlink autostart</code></pre>
+<p>This writes <code>flightsim-on-linux-navigraph-simlink.desktop</code> in <code>~/.config/autostart</code>. <code>addon launch navigraph-simlink autostart -- --remove</code> takes it out. On KDE, on 25 October 2026, with the test machine's own autostart entry, the machine started at 12:24:19 and the Simlink process at 12:24:36, 17 seconds later, with no simulator. Other desktops weren't tested.</p>
+<p>To restart Simlink when it stops talking to the simulator:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher navigraph-simlink</code></pre>
+<p>Simlink has a bug. When its connection to the simulator drops, it keeps the error as a positive number (<code>0x40</code>, <code>ERROR_NETNAME_DELETED</code>), takes it for success, and never reconnects. On 30 October 2026 at 20:53, with the simulator open since 20:14, the Navigraph chart didn't show the aircraft. Simlink had no TCP connection at all, not even to the cloud, but kept renewing its token every 45 minutes. A restart fixed it: at 21:02 the new Simlink connected in under 3 seconds with the same simulator.</p>
+<p>The watcher is a user service called <code>flightsim-on-linux-navigraph-simlink.service</code>. It looks every 10 seconds. When Simlink is running, the simulator is listening on the SimConnect port, and Simlink has had no connection to it for 60 seconds, it runs the add-on's <code>restart</code> script. That script closes Simlink by force, with <code>taskkill /f</code> in Simlink's own prefix and nowhere else, waits for it to go, and starts it again. It restarts at most three times per simulator, and it never starts Simlink by itself and never stops it. Simlink hasn't hung in front of the watcher yet: it was tested with a fake Wine and a fake launcher in both directions, and the restart itself was done by hand.</p>
+<p>The watcher watches port 5111, written in the add-on's <code>addon.json</code> because a watcher setting can't read <code>SimConnect.xml</code>. That is the port <code>simconnect-tcp</code> sets. If your <code>SimConnect.xml</code> declares another port, <code>addon check</code> fails and names the setting <code>watcher.health.connected_to</code>, so you can change it to match.</p>
+<p>The Simlink log, <code>AppData\Roaming\Navigraph\Simlink\logs\simlink_&lt;date&gt;.dlog</code> in the prefix, doesn't record connections, so it can't tell you whether Simlink is connected. This does, with Simlink and the simulator open:</p>
+<pre><code>ss -tnp | grep NavigraphSimlin</code></pre>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check navigraph-simlink</code></pre>
+<p>It prints six lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>Wine is installed;</li>
+  <li><code>NavigraphSimlink.exe</code> is in the prefix;</li>
+  <li><code>SimConnect.xml</code> declares a port above 1023;</li>
+  <li><code>SimConnect.cfg</code> points at that port;</li>
+  <li>the watcher watches that port;</li>
+  <li>the sign-in link opens the menu entry.</li>
+</ul>
+<p>Each failing line names the command that fixes it.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Simlink never reconnects after a drop, as above. What dropped the connection on 30 October 2026 wasn't measured. Whether Windows hands this callback an NTSTATUS instead of a Win32 error, which would make a Wine patch the real fix, is a guess from the binary and nothing more.</li>
+  <li>The log doesn't record connections, as above.</li>
+  <li>The Quit item of the tray menu closed a stuck Simlink in about a second. How the menu opens for someone who clicks the bar wasn't seen.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo navigraph-simlink
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut navigraph-simlink --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher navigraph-simlink --off
+~/flightsim-on-linux/bin/flightsim-on-linux addon launch navigraph-simlink autostart -- --remove</code></pre>
+<p>The first removes <code>SimConnect.cfg</code> and gives the sign-in link back to the program that had it before. The prefix stays, with Simlink and your login in it. To delete it, quit Simlink and run <code>rm -r ~/.local/share/flightsim-on-linux/navigraph-simlink</code>.</p>

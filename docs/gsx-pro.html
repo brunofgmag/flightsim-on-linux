@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FSDT GSX Pro · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run FSDT GSX Pro in MSFS 2024 under Proton: the FSDT universal installer you run once yourself, the copy of wine-mono the updater needs, what that copy changes, and how to undo every step.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>FSDT GSX Pro</h1>
+<p class="lead">Tested with GSX Pro 4.0.23 on 17 October 2026. It is the hardest add-on in this guide to get right: the FSDT updater needs a copy of wine-mono in your prefix with two methods changed, an <code>exe.xml</code> entry has to be rewritten, and one step sits next to your licence. Read the next section before you run anything.</p>
+
+<h2>Read this first</h2>
+<p><span class="tag warn">touches add-on files</span> The fix changes a copy of wine-mono that lives in your prefix, the GSX entry in <code>exe.xml</code>, and files in <code>system32</code>. It doesn't edit a program file of GSX or of the FSDT Addon Manager.</p>
+<p><strong>The FSDT universal installer spends an activation, and this tool never runs it.</strong> <code>FSDT_Universal_Installer.exe</code> resets the local state of the installation and forces a new activation, so every run uses up one of the activations your licence has. On the test machine it ran once, in July. Run it once yourself, as "Install it" says, and never again on a prefix where GSX is already activated. Nothing here runs it for you: there is no <code>install</code> script for GSX Pro on purpose, and <code>addon install gsx-pro</code> only prints where to get the program. The commands on this page don't read, print or change serial numbers or activation state. The registration they write is generated from the manifest of <code>QlmLicenseLib.dll</code>, a file that holds no serial.</p>
+<p><strong>What the two changed methods do.</strong> The FSDT updater, <code>Couatl_Updater2.exe</code>, is a .NET program and runs on wine-mono. Every time it opens it calls <code>RegistrationServices.RegisterAssembly</code> on the licence library, and in wine-mono that method only throws <code>NotImplementedException</code>. The updater catches the exception, marks the installation as incomplete, and the Install button does nothing. The fix makes <code>RegisterAssembly</code> return <code>true</code> without doing anything. That is honest only because <code>apply</code> writes the COM registration the method would have made, from the manifest. The second method is <code>Process.Responding</code>. GSX starts its engine through a watchdog, <code>couatl64_boot.exe</code>, that asks every few seconds whether the engine answers, and in wine-mono the property is always false. On 13 October 2026 the watchdog killed a working engine 60 seconds after each "stopped responding", seven times in a row, once every 80 seconds. The fix makes the property return <code>true</code>. The price is that the watchdog can no longer restart an engine that is really hung: use the restart command in the GSX panel.</p>
+<p><strong>How to undo it.</strong> <code>addon undo gsx-pro</code> puts back everything the fix changed, from the originals it kept in <code>compatdata/2537590/flightsim-on-linux-backup/gsx-pro</code>. "Undo" below lists each step. By hand, deleting <code>drive_c/windows/mono</code> in the prefix removes the wine-mono copy, and the two patches go with it.</p>
+
+<h2>Get it</h2>
+<p>GSX Pro is made by FSDT (<a href="http://www.fsdreamteam.com">www.fsdreamteam.com</a>) and is paid, with a limited number of activations. The program you download is <code>FSDT_Universal_Installer.exe</code>, version 1.3.6 on the test machine, an Inno Setup installer. It installs the Addon Manager, and the products come through its updater, <code>Couatl_Updater2.exe</code>. The version on the test machine was GSX Pro 4.0.23.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program in its prefix, and run one thing at a time. <a href="rules.html">The ground rules</a> explain why and show how to run an installer by hand. Then:</p>
+<ol>
+  <li>Run the universal installer <strong>once</strong>, with the simulator closed. This is the step that spends an activation, and the only time it runs. Which command ran it on the test machine wasn't recorded; <code>protontricks-launch --no-term --appid 2537590 /path/to/FSDT_Universal_Installer.exe</code> is the way <a href="rules.html">the rules</a> give for any installer.</li>
+  <li>Make the fixes the updater needs:
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply gsx-pro</code></pre>
+  It stops with a message if the Addon Manager folder has no <code>QlmLicenseLib.dll.manifest</code>, which means step 1 didn't happen.</li>
+  <li>Open the updater:
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch gsx-pro</code></pre>
+  It runs <code>Couatl_Updater2.exe /SILENT /INSTALLMODE</code>, which shows the list of products with their Install and Activate buttons. Click Install on GSX Pro. The command refuses while the simulator or any program of the prefix is open. An update works the same way.</li>
+  <li>When the install has finished, run <code>addon apply gsx-pro</code> once more. The updater adds the GSX entry to <code>exe.xml</code> itself, and the fix can only change an entry that exists.</li>
+</ol>
+<p>Without the fixes, three things go wrong in this order, measured on the test machine in July and on 13 October 2026. The Install button does nothing, and the updater's last log line, in the registry value <code>updater_lastlogline</code> under <code>HKCU\Software\Fsdreamteam</code>, reads <code>Cannot install GSX Pro: Addon Manager install is incomplete (QlmLicenseLib.dll not registered)</code>. With that solved, the FSDT installer still prints that it cannot run <code>C:\windows\Microsoft.NET\Framework\v4.0.30319\RegAsm.exe</code>, because the folder has no such program. And with that solved, the 13 GB of GSX Pro and the 5 GB of World of Jetways download from FSDT's server, but the engine doesn't arrive. The engine, the sounds and part of the textures live in packages on GitHub, and the updater downloads those with <code>curl.exe</code>, which Wine doesn't have. The updater then falls back to a method that asks for a URL that answers 404, and the install looks finished while <code>couatl64_boot.exe</code> is missing, and <code>exe.xml</code> already points at it.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply gsx-pro</code></pre>
+<p>It prints the first two warnings above, then does these things, and runs the check at the end:</p>
+<ul>
+  <li><strong>RegAsm.exe.</strong> It links <code>RegAsm.exe</code> in <code>Microsoft.NET/Framework/v4.0.30319</code> and <code>Framework64/v4.0.30319</code> to the stub Wine ships, so the updater's call to start it succeeds. The stub does nothing; the COM registration comes from the next step. A <code>RegAsm.exe</code> that is already there is left alone.</li>
+  <li><strong>COM registration.</strong> It generates a <code>.reg</code> file from the <code>QlmLicenseLib.dll.manifest</code> in the Addon Manager folder (22 classes in the version on the test machine) and imports it with <code>regedit</code>, in the four places the updater might read: both views of <code>HKEY_CLASSES_ROOT</code> and both of <code>HKCU\Software\Classes</code>. The updater is a 32-bit program, which is why the 32-bit views matter. It keeps the matching removal file in the backup folder only when this run did the registration: a registration that was already in the registry is left to whoever made it, and <code>undo</code> does not remove it.</li>
+  <li><strong>The wine-mono copy.</strong> It copies the newest wine-mono folder of Proton to <code>drive_c/windows/mono/mono-2.0</code>. Wine looks there before it looks in Proton's folder, so Proton's own files stay as they are and the copy survives Proton updates. In the copy it changes <code>RegisterAssembly</code> in <code>mscorlib.dll</code> to return <code>true</code> and <code>Process.Responding</code> in <code>System.dll</code> to return <code>true</code>, and it keeps the original of each. It finds the two methods by name in the .NET metadata, checks that their bodies are what it expects (<code>newobj</code> then <code>throw</code>, and <code>ldc.i4.0</code> then <code>ret</code>), and refuses to touch a file where they are not. The copy affects every .NET Framework program in the prefix that runs on wine-mono, not only the updater, and it stays at the wine-mono version it was copied from. When Proton ships another version, <code>check</code> says so, and <code>apply</code> copies again.</li>
+  <li><strong>curl.exe.</strong> It downloads curl 8.22.0 (build 3) for Windows from <a href="https://curl.se/windows/">curl.se</a>, checks the zip against a sha256 pinned in the script (<code>f38b0ac2e3a280fd414b607c874a21e6dd4d1ed0e2ae622afbf0020917446561</code>), and copies <code>curl.exe</code> and its CA bundle into <code>system32</code> and <code>syswow64</code>. The updater is 32-bit and looks in <code>system32</code>, which for it is <code>syswow64</code>; the 64-bit program runs from both. The download stays in the cache folder. To use another build, set <code>GSX_CURL_URL</code> and <code>GSX_CURL_SHA256</code> before <code>apply</code>. A file that already exists is kept in the backup folder first.</li>
+  <li><strong>The engine entry in exe.xml.</strong> GSX ignores the WebView2 policy that other add-ons use. Its flightsim.to window takes the browser options from the environment variable <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> instead. <code>apply</code> builds <code>com-environment.exe</code>, a small program that sets that variable to the four software-drawing options (<code>--in-process-gpu --disable-gpu --disable-gpu-compositing --disable-software-rasterizer</code>), starts the engine's <code>couatl64_boot.exe</code> in its own folder and waits for it. It needs <code>x86_64-w64-mingw32-gcc</code> to build (<code>mingw-w64-gcc</code> on Arch, <code>gcc-mingw-w64-x86-64</code> on Debian and Ubuntu). It copies the program to <code>C:\flightsim-on-linux</code> and points the <code>Couatl</code> entry of <code>exe.xml</code> at it, with the original path as its argument. The original <code>exe.xml</code> is kept in the backup folder. If the entry already starts through <code>com-environment.exe</code>, <code>apply</code> only puts the program back when it is missing, and says it did not change <code>exe.xml</code>. If the entry starts through it with other WebView2 options than these four, <code>apply</code> changes nothing, fails, and says to put the entry back to starting <code>couatl64_boot.exe</code> directly before it runs again; it never rewrites an entry it did not make. On 17 October 2026 the browser of the GSX window came up with the options, and the flightsim.to page appeared inside the window.</li>
+</ul>
+<p>GSX also needs <a href="proton-fs2024.html">Proton FS2024</a>. Its flightsim.to window is a WebView2 whose content comes from a second process, and stock Wine drops what that process draws, so the window stays white. The patch is <code>win32u-cross-process-child-windows.patch</code>.</p>
+
+<h2>Start it</h2>
+<p>The GSX engine starts from <code>exe.xml</code>, so there is no service to switch on. The updater has a menu entry:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut gsx-pro</code></pre>
+<p>This writes an entry called "FSDT Installer" in your application menu, with the updater's own icon when <code>7z</code> and <code>magick</code> are installed. It does what <code>addon launch gsx-pro</code> does. Despite its name, that entry is the updater. Don't run <code>FSDT_Universal_Installer.exe</code> again: that spends an activation. <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a> has the details.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check gsx-pro</code></pre>
+<p>It prints up to nine lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li><code>RegAsm.exe</code> exists in both <code>v4.0.30319</code> folders;</li>
+  <li>every class of the manifest is in the registry with <code>mscoree.dll</code> as its server;</li>
+  <li>the wine-mono copy has the patched <code>RegisterAssembly</code>, and the patched <code>Process.Responding</code>;</li>
+  <li>the copy is the wine-mono version Proton ships now. A copy of an older version that still has both patches passes too, and the line names both versions and says to run <code>addon apply gsx-pro</code> to refresh it, then <code>addon apply axis-and-ohs</code>. An older copy without the patches fails;</li>
+  <li><code>curl.exe</code> and its certificates are in <code>system32</code> and <code>syswow64</code>;</li>
+  <li>Proton was built with <code>win32u-cross-process-child-windows.patch</code>;</li>
+  <li><code>exe.xml</code> starts the engine through <code>com-environment.exe</code> with the four options, and that program exists.</li>
+</ul>
+<p>The <code>exe.xml</code> lines fail until GSX is installed. After a Proton update the wine-mono line is the one to watch: it stays <code>ok</code> while the old copy has both patches, and when you are ready, run <code>apply</code> to take the new copy and run <code>addon apply axis-and-ohs</code> too if you use it, because it shares the copy and the new copy starts without its patch.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>A really hung engine is no longer restarted by the watchdog. Use the restart command in the GSX panel.</li>
+  <li>A GSX update that rewrites <code>exe.xml</code> brings the white window back. Run <code>addon apply gsx-pro</code> again.</li>
+  <li>Every .NET Framework program of the prefix that runs on wine-mono uses the copy. If one starts failing after a Proton update, run <code>addon check gsx-pro</code>, then <code>addon apply gsx-pro</code> to copy again. Deleting <code>drive_c/windows/mono</code> and running <code>apply</code> does the same by hand.</li>
+</ul>
+<p>These look like errors and aren't:</p>
+<ul>
+  <li>In Community, the GSX packages show on Linux as empty folders with a <code>?</code> at the end of the name. That is how this Wine stores a junction: an empty folder with the target in the extended attribute <code>user.WINEREPARSE</code>. Inside Wine the name has no <code>?</code> and the folder lists its files. Don't replace them with Linux links, and don't move them from Linux: a move keeps the name and loses the attribute.</li>
+  <li>A <code>WINE_MONO_TRACE</code> of the updater shows thousands of certificate exceptions, <code>COMException</code> and <code>IndexOutOfRangeException</code>. They are inside the updater and stop nothing.</li>
+  <li>The WMI error <code>0x8004100e</code> is the updater looking for Windows Defender.</li>
+  <li><code>exception UNRECOGNIZED_ID (3) in call SetDataOnSimObject</code> in <code>Couatl.err</code>, about half a minute after the engine starts. It keeps appearing while the engine stays up.</li>
+</ul>
+<p>On 13 October 2026, with the watchdog fixed, the engine stayed up for more than 14 minutes and served a request. That run was in the simulator.</p>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo gsx-pro</code></pre>
+<p>Close the simulator and the updater first. It puts the GSX entry in <code>exe.xml</code> back to starting <code>couatl64_boot.exe</code> directly and removes <code>com-environment.exe</code>; removes the QlmLicenseLib registration with the removal file it kept; gives back the two original methods; deletes the wine-mono copy when this tool made it and no other add-on uses it (Axis and Ohs uses it too); takes <code>curl.exe</code> and the certificates out of <code>system32</code> and <code>syswow64</code>, or puts back the ones that were there; and removes the <code>RegAsm.exe</code> links it made. It leaves the FSDT programs alone, with their licences and serial numbers, and every file the FSDT installers wrote. After an undo the updater goes back to refusing to install, and a running GSX engine goes back to the watchdog killing it.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

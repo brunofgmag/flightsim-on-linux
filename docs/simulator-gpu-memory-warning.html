@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MSFS 2024 GPU memory warning · Flightsim on Linux</title>
+  <meta name="description" content="How to hide the simulator&#x27;s &quot;Resource usage exceeds GPU memory capacity&quot; notification on Linux: what the fix changes inside the simulator&#x27;s own files, how to put them back, and why hiding the message does not change what the simulator does with memory.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>MSFS 2024 GPU memory warning</h1>
+<p class="lead">Tested with simulator 1.9.21.0 on 29 October 2026. One command, run with the simulator closed. <span class="tag warn">touches add-on files</span>: it edits two files of the simulator's own <code>fs-base-ui</code> package, and <code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo simulator-gpu-memory-warning</code> puts the originals back.</p>
+
+<h2>What the warning is</h2>
+<p>The simulator shows a notification, "Resource usage exceeds GPU memory capacity, lower graphics settings for better performance", when its video memory use goes past the budget it planned for. The simulator offers no setting for it, and a Community package can't replace the page that shows it.</p>
+<p>The warning is only a symptom. Hiding it doesn't give the simulator more memory and doesn't change what it does when it passes the budget. On 29 October 2026, on the test machine, the warning came with a jump in the simulator's own RAM:</p>
+<ul>
+  <li>With a 1,870 MiB reserve in the launch options (see <a href="proton-fs2024.html">Proton FS2024</a>) and the FSLabs A321 loaded, the warning reached the simulator's notification manager at 10:36:08. Between 10:36:39 and 10:37:39 the simulator's RAM and swap together grew by 26.2 GB, then by 5.4, 2.0, 1.2 and 0.7 GB in the next minutes. The simulator was closed at 10:44 with 6.1 GB of RAM free.</li>
+  <li>In a third session that day, with the reserve taken out and the same aircraft, the video memory filled up without passing the budget. No warning came, and RAM and swap stayed at 20.0 to 20.2 GB for the 20 minutes until the simulator was closed.</li>
+</ul>
+<p>So the warning marks the moment the simulator passed its budget. The test machine's measurements point at the reserve as what pushes it past, and the cause of the RAM jump hasn't been proven. If you see the warning, look at the simulator's memory before you flick it away.</p>
+
+<h2>Make it run</h2>
+<p>Close the simulator, then:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simulator-gpu-memory-warning</code></pre>
+<p>It does three things, then runs the check:</p>
+<ol>
+  <li>It adds a small script to <code>Packages/fs-base-ui/html_ui/Global/notifications.html</code> in the simulator's install folder, right after the line that loads the page's bundle. The script waits for the page's <code>NotificationsManager</code> and wraps the three methods that show or update a notification. A notification is dropped when it carries the key <code>NOTIF_LOW_GPU_MEMORY_CAPACITY</code> or the warning's text. The texts are read from the simulator's own language files (<code>fs-base/*.locPak</code>), so each language the simulator ships is covered. Every other notification shows as before.</li>
+  <li>It corrects the size of that page in the package's <code>layout.json</code>, so the file list still describes the files on disk.</li>
+  <li>It deletes the Community package <code>flightsim-on-linux-gpu-memory-warning</code> if an earlier version of this fix put it there. The simulator mounts Community packages too late for this page.</li>
+</ol>
+<p>Before it changes anything it keeps both originals in <code>compatdata/2537590/flightsim-on-linux-backup/simulator-gpu-memory-warning</code>. Running <code>apply</code> again is safe: it starts from the saved original and rebuilds the page. If the page already carries the filter and the saved original is gone, it stops and says so rather than guess.</p>
+<p>On 29 October 2026 the simulator loaded the filter on its own, and a copy of the warning sent to its notifications never reached the screen. The real warning has not been seen to stay hidden in flight.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check simulator-gpu-memory-warning</code></pre>
+<p>It changes nothing, so you can run it with the simulator open. Each line starts with <code>ok</code> or <code>FAIL</code>:</p>
+<ul>
+  <li>the saved original of <code>notifications.html</code> is there (without it the check stops at one <code>FAIL</code> and says to run <code>apply</code>);</li>
+  <li>the page on disk is the saved original plus the filter, rebuilt from your current language files;</li>
+  <li><code>layout.json</code> gives the page's size on disk;</li>
+  <li>the old Community package is not there. This line appears only when it is, as a <code>FAIL</code>.</li>
+</ul>
+
+<h2>Known problems</h2>
+<ul>
+  <li>A simulator update puts the original page back. The check then fails on the first or second line. Run <code>apply</code> again, with the simulator closed.</li>
+  <li>If a simulator update changes the page so that the line loading the bundle is no longer there exactly once, <code>apply</code> stops with a <code>FAIL</code> and changes nothing. The fix then needs updating for that simulator version.</li>
+  <li>The filter hides one notification. It does nothing about the memory behind it.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo simulator-gpu-memory-warning</code></pre>
+<p>Close the simulator first. It puts the saved <code>notifications.html</code> and the page's original size back, deletes the old Community package if it is still there, and then deletes the backup folder. If the page doesn't carry the filter, for example after a simulator update, it leaves the page alone.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

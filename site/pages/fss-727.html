@@ -1,0 +1,29 @@
+title: FSS Boeing 727-200
+description: How to run the FSS Boeing 727-200 freighters in MSFS 2024 under Proton: nothing beyond the Aerosoft One store they come from, and why moving the store's library removes the aircraft.
+---
+<h1>FSS Boeing 727-200</h1>
+<p class="lead">Tested with the FSS Boeing 727-200 1.1.7 on 15 October 2026. Nothing Linux-specific is needed beyond the store it comes from: the aircraft is a set of MSFS packages that runs inside the simulator.</p>
+
+<h2>Get it</h2>
+<p>The 727 comes from the Aerosoft One store, as the packages <code>fss-aircraft-boeing-727-200f</code> (the freighter) and <code>fss-aircraft-boeing-727-200re</code>. This guide doesn't have the store page or the price, so look in the store. <code>addon install fss-727</code> only prints where it comes from.</p>
+
+<h2>Install it</h2>
+<p>Install the aircraft with Aerosoft One, as on Windows. <a href="aerosoft-one.html">Its guide</a> covers the app itself, which is a native Linux program that needs two options on its command line and has to be pointed at the simulator's packages folder. On 14 October 2026 Aerosoft One installed the aircraft into its own library on the test machine and made links to it in the Community folder.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install fss-727</code></pre>
+<p>That command prints the store and the kind of installer, and runs nothing.</p>
+
+<h2>Make it run</h2>
+<p>Nothing. The aircraft needs no Proton FS2024 patch and no setting in the prefix. It was tested on Proton FS2024, and stock Proton was not tried. <code>addon apply fss-727</code> says there is nothing to apply and then runs the check.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fss-727</code></pre>
+<p>It prints one line for each of the two packages that is in your Community folder, starting with <code>ok</code> and giving the version, and it changes nothing. A link that resolves counts, because that is how Aerosoft One installs. It prints <code>FAIL</code> when neither package is there, when a package is a link to a folder that is gone, or when a package has no readable <code>manifest.json</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Moving the Aerosoft One library removes the aircraft, because the links in Community point into the old place. The check then reports a link to a folder that is gone. Keep the library where Aerosoft One put it.</li>
+  <li>On 15 October 2026 both freighters flew on the test machine and activated on their first load. The passenger version, the 200REP, was not seen.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo fss-727</code> has nothing to restore, because nothing was changed. Remove the aircraft with Aerosoft One.</p>

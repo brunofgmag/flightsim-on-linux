@@ -1,0 +1,51 @@
+title: REX Atmos Core
+description: How to run REX Atmos Core in MSFS 2024 under Proton: the WebView2 policy value, the two Proton FS2024 fixes it needs (the window and the sliders), the menu entry that starts it inside the simulator's container, and what to expect.
+---
+<h1>REX Atmos Core</h1>
+<p class="lead">Tested with REX Atmos Core 8.1.2025.1210 on 27 October 2026. One registry value and two Proton FS2024 fixes make it work, and one command checks all three. It has to run inside the simulator's container.</p>
+
+<h2>Get it</h2>
+<p>REX Atmos Core comes from <a href="https://rexaxis.com">rexaxis.com</a> and needs a serial. The installer is <code>rexatmoscore_setup.msi</code>, a Windows Installer package, version 8.1.2025.1210. Whether it is paid wasn't recorded.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. REX has no <code>addon install</code> script. It went into <code>C:\REX Atmos Core</code> of the simulator's prefix on 14 October 2026; which program ran the MSI wasn't recorded, and no installer problem was.</p>
+<p>On the test machine REX activated on its first opening and wrote <code>startup.json</code> with the name of this computer, so the licence is tied to the machine.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply rex-atmos-core</code></pre>
+<p>Run it with the simulator closed. It changes one registry value and then runs the check. The value is <code>weathercreator.exe</code>, under <code>HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments</code>, and it holds <code>--in-process-gpu --disable-gpu --disable-gpu-compositing --disable-software-rasterizer</code>. It keeps any value that name held before, and <code>addon undo</code> puts it back.</p>
+<p>REX's whole interface is a Blazor page inside a WebView2. Under Wine's Wayland driver, the WebView2 area belongs to a second process (<code>msedgewebview2.exe</code>), and stock Wine drops what that process draws. Two things have to hold for REX to show its window:</p>
+<ul>
+  <li><a href="proton-fs2024.html">Proton FS2024</a> with <code>win32u-cross-process-child-windows.patch</code>, which makes Wine keep what the second process draws. On 15 October 2026, before this patch, REX opened, activated and said "Simulator Link: Active", but its window stayed empty. It has drawn since 17 October 2026.</li>
+  <li>WebView2 drawing in software, which the policy value does. The patch only helps a WebView2 that composes in software. A value named after a program replaces the <code>*</code> value for that program instead of adding to it, so it repeats all four options.</li>
+</ul>
+<p>The sliders need a second fix. The Rayleigh, atmosphere depth, scattering height, phase function and particle sliders work by writing one pointer inside the simulator's code. The write goes through REX's own DLL, which writes into the simulator's memory from outside, and the page it lands on is one Wine reports as writable copy-on-write but Linux maps read-only (<code>r-x</code>). Windows copies the page on write. Wine's server used <code>process_vm_writev</code>, which Linux refuses on that page, and REX doesn't check the result. On 27 October 2026, without the fix, the sliders moved and only Overall Light Tuning changed the simulator; Rayleigh R, G and B, Atmosphere Depth, Scattering Height, Phase Function and the particle sliders did nothing, and REX reported no failure. Proton FS2024 has <code>server-process-vm-write-falls-back-to-ptrace.patch</code>, which writes that page with ptrace when <code>process_vm_writev</code> refuses it. With it, the sliders worked the same day.</p>
+<p>The launch script also turns Direct3D 9 off for REX, as the test machine ran it. REX is a WPF program, and <a href="rules.html">the ground rules</a> say why WPF programs get that setting. Whether REX still needs it on Proton FS2024 wasn't measured. The script chooses nothing about which GPU REX uses.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut rex-atmos-core</code></pre>
+<p>This writes an entry called "REX Atmos Core" in your application menu, with REX's own icon when <code>7z</code> and <code>magick</code> are installed. The entry starts REX inside the running simulator's container. With the simulator closed it tells you to start the simulator first, and with REX already open it says so and does nothing. REX has no watcher, so nothing starts it for you.</p>
+<p>REX must stay on the simulator's Wine server. It writes into the simulator's memory, and a program on another Wine server can't do that.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check rex-atmos-core</code></pre>
+<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the Proton's <code>fs2024-build.txt</code> lists <code>win32u-cross-process-child-windows.patch</code>, and its <code>win32u.so</code> is the one the build recorded;</li>
+  <li>the same for <code>server-process-vm-write-falls-back-to-ptrace.patch</code> and the Proton's <code>wineserver</code>;</li>
+  <li>the WebView2 policy has a <code>weathercreator.exe</code> value with the four software options.</li>
+</ul>
+<p>When one of the first two fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the last one fails, run <code>addon apply</code> again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Without the wineserver fix, the sliders move and most never reach the simulator, and REX shows no error. The check catches it.</li>
+  <li>Why that page is <code>r-x</code> in Linux is unexplained. The guess, not measured, is an <code>mprotect</code> call made by the simulator's own protection code with a direct system call, outside Wine. Comparing <code>/proc/&lt;pid&gt;/maps</code> of the simulator just after its image loads with the same file at the main menu would tell.</li>
+  <li>The ptrace path answers an unmapped address with <code>STATUS_ACCESS_DENIED</code> where it used to answer <code>STATUS_PARTIAL_COPY</code>, as Wine did before it used <code>process_vm_writev</code>. <code>kernelbase</code> refuses free memory before it gets there, so programs that write through it don't see the change.</li>
+  <li>REX used to be used through a web page in a browser, because its window stayed empty. That route was retired on 17 October 2026, and nothing here needs it.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo rex-atmos-core
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut rex-atmos-core --remove</code></pre>
+<p>The first puts the policy value back to what it was before <code>apply</code>, or removes it if it didn't exist. The second takes out the menu entry. Both Proton fixes stay, because other add-ons use them.</p>

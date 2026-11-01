@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aerosoft A340-600 Professional · Flightsim on Linux</title>
+  <meta name="description" content="How to run the Aerosoft A340-600 Professional in MSFS 2024 under Proton: nothing beyond the Aerosoft One store it comes from, and why moving the store&#x27;s library removes the aircraft.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Aerosoft A340-600 Professional</h1>
+<p class="lead">Tested with the Aerosoft A340-600 Professional 1.0.5 on 15 October 2026. Nothing Linux-specific is needed beyond the store it comes from: the aircraft is an MSFS package that runs inside the simulator.</p>
+
+<h2>Get it</h2>
+<p>The A346 Pro comes from the Aerosoft One store, as the package <code>aerosoft-aircraft-a346-pro</code>. This guide doesn't have the store page or the price, so look in the store. <code>addon install aerosoft-a346-pro</code> only prints where it comes from.</p>
+
+<h2>Install it</h2>
+<p>Install the aircraft with Aerosoft One, as on Windows. <a href="aerosoft-one.html">Its guide</a> covers the app itself, which is a native Linux program that needs two options on its command line and has to be pointed at the simulator's packages folder. On 14 October 2026 Aerosoft One installed the aircraft into its own library on the test machine and made a link to it in the Community folder.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install aerosoft-a346-pro</code></pre>
+<p>That command prints the store and the kind of installer, and runs nothing.</p>
+
+<h2>Make it run</h2>
+<p>Nothing. The aircraft needs no Proton FS2024 patch and no setting in the prefix. It was tested on Proton FS2024, and stock Proton was not tried. <code>addon apply aerosoft-a346-pro</code> says there is nothing to apply and then runs the check. A separate add-on, <a href="a340-performance-tool.html">the A340 Performance Tool</a>, protects one of the aircraft's log files during a flight; it is optional.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check aerosoft-a346-pro</code></pre>
+<p>It prints one line, starting with <code>ok</code> and giving the version, and it changes nothing. A link that resolves counts, because that is how Aerosoft One installs. It prints <code>FAIL</code> when the package isn't in your Community folder, when it is a link to a folder that is gone, or when it has no readable <code>manifest.json</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Moving the Aerosoft One library removes the aircraft, because the link in Community points into the old place. The check then reports a link to a folder that is gone. Keep the library where Aerosoft One put it.</li>
+  <li>The aircraft flew on the test machine on 15 October 2026, and no problem is open.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo aerosoft-a346-pro</code> has nothing to restore, because nothing was changed. Remove the aircraft with Aerosoft One.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,60 @@
+title: MSFS AutoFPS
+description: How to install and run MSFS AutoFPS in MSFS 2024 under Proton: the installer with Direct3D 9 off, the Linux link in Community that stops it, the menu entry, the service that starts it with the simulator, and what to expect.
+---
+<h1>MSFS AutoFPS</h1>
+<p class="lead">Tested with MSFS AutoFPS 0.5.4.4 on 16 October 2026. It takes a few steps rather than one command: the installer needs Direct3D 9 off and an empty prefix, and the program has to start inside the simulator's container, so it can't start from <code>exe.xml</code>.</p>
+
+<h2>Get it</h2>
+<p>The author publishes MSFS AutoFPS on <a href="https://github.com/ResetXPDR/MSFS_AutoFPS/releases">the project's releases page on GitHub</a>, where the downloads are public. Get <code>MSFS_AutoFPS-installer-v0.5.4.4.exe</code> or a newer one. It is a Windows installer with a WPF window.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps ~/Downloads/MSFS_AutoFPS-installer-v0.5.4.4.exe</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command does three things the installer can't do for itself:</p>
+<ul>
+  <li>It refuses to start while the simulator runs or any program is open in the prefix, and names those programs.</li>
+  <li>It removes <code>Community/autofps-html-widget-panel</code> when that is a Linux link, and prints which link it removed and where it pointed. The installer replaces that folder by deleting it through Windows calls, and Wine can't delete a Linux link. On 16 October 2026 the 0.5.4.4 installer stopped at "Deleting old Widget Version" on a link made by a Community organiser. A real folder is never touched. If you want the link back, make it again after the install.</li>
+  <li>It runs the installer in the simulator's prefix with Direct3D 9 off for that one program, as the test machine installed it. The installer is a WPF program, and the reason is in "Make it run".</li>
+</ul>
+<p>In the installer, leave "Close to Tray" checked if you want the tray icon. In AutoFPS's own settings, keep Auto-Start on "Retain". Choosing "MSFS" writes AutoFPS into <code>exe.xml</code> and renames that file to <code>EXE.xml</code>, and AutoFPS can't start from there anyway.</p>
+<p>The in-app update doesn't work. On 14 October 2026 AutoFPS offered 0.5.4.4, logged "Auto update in progress." and quit, and the installed version stayed 0.5.4.3. To update, download the new installer and run the command above again.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply msfs-autofps</code></pre>
+<p>This changes nothing in the prefix, and then runs the check. AutoFPS needs three things, and none of them is a setting in the prefix:</p>
+<ul>
+  <li><a href="proton-fs2024.html">Proton FS2024</a> with its tray icon patch. AutoFPS makes its tray icon in two calls. The second one names the icon by GUID only. Wine 11.0 looks an icon up by window and id and ignores the GUID, so the second call failed and AutoFPS 0.5.4.3 died at startup with <code>TrySetMostRecentVersion failed</code>. <code>shell32-notifyicon-guid.patch</code> makes Wine find the icon by GUID. On 16 October 2026, with the patch and "Close to Tray" checked, AutoFPS 0.5.4.4 created its tray icon and went on waiting for the simulator.</li>
+  <li>Direct3D 9 off for AutoFPS, set in the environment of the program when it starts. On 14 October 2026, on the Proton the test machine used then, AutoFPS died on its first frame inside the simulator's container with <code>importing the supplied dmabufs failed</code>. Four ways of turning Direct3D 9 off after the program started all failed, and only the environment of the process worked. Whether AutoFPS still needs it on Proton FS2024 was not measured, and the launch script keeps it off.</li>
+  <li>The simulator's container, because AutoFPS reads the simulator's memory. The launch script also empties <code>DXVK_CONFIG</code> for AutoFPS, so it sees the whole video memory of the card even when your launch options limit what the simulator sees.</li>
+</ul>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut msfs-autofps</code></pre>
+<p>This writes an entry called "MSFS AutoFPS" in your application menu, with AutoFPS's own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close MSFS AutoFPS" action. The entry starts AutoFPS inside the running simulator's container. With the simulator closed it tells you to start the simulator first, and with AutoFPS already open it says so and does nothing. The action asks AutoFPS's window to close, the way the close button does, and never kills the process. That matters: on 14 October 2026 a test run killed AutoFPS in flight, after it had lowered the simulator's terrain level of detail (TLOD) to its minimum and before it could put it back. Every start after that found the wrong TLOD in memory, failed its own compatibility check and cleared its saved memory addresses. If AutoFPS stays after the request, with "Close to Tray" on it goes to the tray instead of exiting, and you quit it from the tray menu. That is what the code expects. It has not been seen in flight.</p>
+<p>To have it start by itself:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher msfs-autofps</code></pre>
+<p>This writes a user service called <code>flightsim-on-linux-msfs-autofps.service</code> and switches it on. It looks for the simulator every 8 seconds. About 20 seconds after a new simulator appears, it starts AutoFPS, once for that simulator and never when AutoFPS is already open, so an AutoFPS you closed by hand stays closed until the next simulator. When the simulator closes and AutoFPS is still open, it asks AutoFPS to close and moves on. A service is the way because <code>exe.xml</code> starts its programs with the simulator's environment, which turns Direct3D 9 on. Nothing that <code>exe.xml</code> accepts, a path and a command line, can change that. Stopping the service leaves AutoFPS running, because a kill in flight can leave the TLOD lowered. Close it from its window before you end a flight early.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check msfs-autofps</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the Proton was built with <code>shell32-notifyicon-guid.patch</code>, and its <code>shell32.dll</code> is the one the build recorded;</li>
+  <li><code>Community/autofps-html-widget-panel</code> is a real folder, not a Linux link and not missing.</li>
+</ul>
+<p>When the first fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the second fails, run the install command again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>AutoFPS won't start from <code>exe.xml</code>, for the reason in "Start it".</li>
+  <li>"Elevated Privileges Detected" is expected under Wine. Nothing is wrong.</li>
+  <li>The in-app update doesn't install. Use the installer, as above.</li>
+  <li>VRAM+ does nothing without GPU-Z, because AutoFPS reads video memory from the shared memory that GPU-Z creates.</li>
+  <li>Killing AutoFPS in flight leaves the TLOD lowered. Close it from its window or the menu action.</li>
+</ul>
+
+<h2>Undo</h2>
+<p>Take out the menu entry and the service:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut msfs-autofps --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher msfs-autofps --off</code></pre>
+<p><code>addon undo msfs-autofps</code> has nothing to restore, because <code>apply</code> changed nothing. If the install removed a Linux link from Community, the command printed where it pointed.</p>

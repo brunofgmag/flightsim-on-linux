@@ -18,6 +18,8 @@
         <a href="proton-fs2024.html">Proton FS2024</a>
         <a href="rules.html">Ground rules</a>
         <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
         <a href="ai.html" aria-current="page">With an AI</a>
       </nav>
     </div>
@@ -52,6 +54,9 @@ Rules for you:
 <ul>
   <li>learn the machine first with <code>bin/flightsim-on-linux machine --json</code> and <code>doctor --json</code>;</li>
   <li>fix the environment rather than the add-on, and say so before touching any add-on file;</li>
+  <li>install an add-on with <code>addon install &lt;id&gt; &lt;file&gt;</code> instead of a Wine command of its own, because that command refuses to start while anything holds the prefix;</li>
+  <li>ask before writing a menu entry or a service: <code>addon shortcut</code> writes under your home folder, and <code>addon watcher</code> also switches a user service on. Each has a command that takes it out again;</li>
+  <li>clear <code>NoDefaultCurrentDirectoryInExePath</code> when starting Wine by hand, because Claude Code sets it and Wine installers fail with it;</li>
   <li>never touch licensing, never print licence keys, and never re-run an installer that spends an activation;</li>
   <li>diagnose from a trace taken from the very start of the program, with <code>WINE_MONO_TRACE=E:all</code> for .NET apps;</li>
   <li>prove each fix by reverting it and watching its check fail.</li>

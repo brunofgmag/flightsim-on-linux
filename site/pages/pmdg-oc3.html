@@ -1,0 +1,64 @@
+title: PMDG Operations Center 3
+description: How to install, update and run PMDG Operations Center 3 for the PMDG 737 and 777 in MSFS 2024 under Proton: the installer with PowerShell off, updates by downloading the installer, the two Electron options, the window frame setting, and the optional dark window colours.
+---
+<h1>PMDG Operations Center 3</h1>
+<p class="lead">Tested with PMDG Operations Center 3 (OC3) 3.0.289 on 13 October 2026. It takes one registry value, two options on OC3's command line, and an update that has to come from outside the app. No Proton FS2024 patch is involved. On the test machine OC3 installed the 737-800 (4.0.63) and the 777 (2.4.147), and no fix of the aircraft themselves was needed.</p>
+
+<h2>Get it</h2>
+<p>OC3 is the PMDG client that installs and updates the PMDG aircraft. PMDG publishes the current installer on its own download server, and a public manifest at <code>https://cdn.pmdg.com/oc3-client-releases/prod.yml</code> names the file and its SHA-512 hash. You don't have to find the file yourself: the <code>update</code> command below reads that manifest and downloads the installer. The sources don't say what the aircraft cost, so check PMDG's store page for that.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch pmdg-oc3 update</code></pre>
+<p>This does four things, in this order:</p>
+<ul>
+  <li>It reads PMDG's manifest and downloads the installer it names into the cache folder, unless that file is already there.</li>
+  <li>It computes the SHA-512 of the file and compares it with the manifest. If they differ, it deletes the file and stops. If they match, it says so. The hash shows that the file is the one PMDG published. It does not replace the signature check that OC3 would do on Windows.</li>
+  <li>It hands the file to <code>addon install pmdg-oc3</code>, which refuses to start while the simulator runs or any program is open in the prefix, and names those programs.</li>
+  <li>It runs the installer in the simulator's prefix with <code>powershell.exe</code> turned off for that one program.</li>
+</ul>
+<p>To download and check the file without installing it, add <code>--download-only</code>: the command then prints where the file is. If you already have an installer, give it to the CLI yourself:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install pmdg-oc3 ~/Downloads/oc3_setup_3.0.289.exe</code></pre>
+<p>The PowerShell override is there for this reason. The <code>powershell.exe</code> in a Wine prefix is a stand-in: it accepts any command line, prints nothing and exits with 0. The OC3 installer asks PowerShell whether OC3 is running, and the stand-in's 0 means yes. With OC3 closed, the installer still stops. On the test machine its message was <code>Não é possível fechar o PMDG OC3</code>, which is Portuguese for "can't close PMDG OC3". With <code>powershell.exe</code> off, the first question fails and the installer falls back to <code>tasklist | find</code>, which Wine implements.</p>
+<p>The same reason makes OC3's own update fail. OC3 downloads the new version up to 100% and then shows <code>Update download error: SyntaxError: Unexpected end of JSON input</code>. Its updater checks the installer's signature by calling PowerShell and reading the answer as JSON, and the stand-in's answer is empty. A fake PowerShell that always answered "signature valid" was rejected on purpose, because it would switch off a real security check for good. Update with the command above instead.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply pmdg-oc3</code></pre>
+<p>This sets one value for <code>PMDG OC3.exe</code> only, <code>Decorated</code> to <code>N</code>, in the X11 driver's section of the prefix registry (<code>HKCU\Software\Wine\AppDefaults\PMDG OC3.exe\X11 Driver</code>), and then runs the check. OC3 draws its own title bar. By default Wine asks the window manager for a frame as well, and the KDE title bar then sits on top of OC3's. With <code>Decorated=N</code> only OC3's bar is left, and Wine draws the resize border. On the test machine this was measured against two other arrangements, by screenshots: a KWin rule that hides the title bar and borders cut OC3's own bar at the top, so it was dropped. <code>apply</code> keeps what was there before in <code>compatdata/2537590/flightsim-on-linux-backup/pmdg-oc3</code>. The key belongs to the X11 driver, and OC3 was measured with the simulator closed, where Proton uses that driver unless you turned the Wayland driver on (see <a href="rules.html">the ground rules</a>). Whether the Wayland driver reads the key was not measured.</p>
+<p>OC3 also needs two options on its command line, and the menu entry and the launch script always add them:</p>
+<ul>
+  <li><code>--disable-gpu-sandbox</code>. Without it OC3 closes about a second after it opens. The log shows <code>GPU process launch failed: error_code=43</code> nine times, then <code>GPU process isn't usable. Goodbye.</code> Chromium starts a child process for the GPU inside its sandbox, and Wine can't create that process the way Chromium asks. Only the GPU process loses its isolation; the rest of the sandbox stays.</li>
+  <li><code>--disable-gpu</code>. With acceleration on, OC3 drew its content one menu row below where the clicks landed, with a black strip under the title bar. On screen that looks like the pointer on one item and the highlight on the item below it.</li>
+</ul>
+<p>The Wine virtual desktop for OC3 alone was tried and changed neither the black strip nor the pointer.</p>
+
+<h3>Option: dark window colours</h3>
+<p>This is cosmetic, and it is not part of <code>apply</code>. Without the KDE frame, the border that Wine draws uses colours from the prefix, and by default they are light. The wide resize border uses <code>ActiveBorder</code> and <code>InactiveBorder</code>. The two thin relief lines outside it use <code>ButtonHilight</code>, <code>ButtonLight</code>, <code>ButtonShadow</code> and <code>ButtonDkShadow</code>. Setting all six to <code>18 18 18</code>, the colour of OC3's background, gives the border the colour of OC3's background. The colours belong to the whole prefix, not to OC3, and every program in it that draws classic buttons and dialogs uses them. Set them only if the light border bothers you more than a change in how those programs look. With OC3 and the simulator closed:</p>
+<pre><code>protontricks -c 'wine reg add "HKCU\Control Panel\Colors" /v ActiveBorder /t REG_SZ /d "18 18 18" /f' 2537590
+protontricks -c 'wine reg add "HKCU\Control Panel\Colors" /v InactiveBorder /t REG_SZ /d "18 18 18" /f' 2537590
+protontricks -c 'wine reg add "HKCU\Control Panel\Colors" /v ButtonHilight /t REG_SZ /d "18 18 18" /f' 2537590
+protontricks -c 'wine reg add "HKCU\Control Panel\Colors" /v ButtonLight /t REG_SZ /d "18 18 18" /f' 2537590
+protontricks -c 'wine reg add "HKCU\Control Panel\Colors" /v ButtonShadow /t REG_SZ /d "18 18 18" /f' 2537590
+protontricks -c 'wine reg add "HKCU\Control Panel\Colors" /v ButtonDkShadow /t REG_SZ /d "18 18 18" /f' 2537590</code></pre>
+<p>A program that is already open keeps the old colours, so close it and open it again. These were the values on the test machine before: <code>255 255 255</code> for <code>ActiveBorder</code>, <code>InactiveBorder</code> and <code>ButtonHilight</code>, <code>227 227 227</code> for <code>ButtonLight</code>, <code>166 166 166</code> for <code>ButtonShadow</code> and <code>106 106 106</code> for <code>ButtonDkShadow</code>. Run the same commands with those values to go back. A light line of one pixel stays around the window either way. It uses <code>ButtonFace</code>, the background of every classic button and dialog in the prefix, whose text is black, so darkening it would need a dark theme for the whole prefix. That was left alone.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut pmdg-oc3</code></pre>
+<p>This writes an entry called "PMDG OC3" in your application menu, with OC3's own icon when <code>7z</code> and <code>magick</code> are installed. It starts OC3 with both options. With the simulator closed it starts OC3 in the simulator's prefix. With the simulator running it starts OC3 inside the simulator's container, as the ground rules describe. With OC3 already open it says so and does nothing. The output of OC3 goes to a log file in the cache folder. Updates and installs still need the simulator and everything else closed. OC3 has no background service: you open it when you want it.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check pmdg-oc3</code></pre>
+<p>It prints one line, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing: it reads <code>user.reg</code> in the prefix and wants <code>Decorated</code> to be <code>N</code> for <code>PMDG OC3.exe</code>. When it fails, run <code>apply</code>. The two Electron options can't be checked from outside; the menu entry and the launch script carry them.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>A light line of one pixel stays around the window, as above.</li>
+  <li>OC3's own update fails, as above. Use the <code>update</code> command.</li>
+  <li>If OC3 closes about a second after it starts, it was started without <code>--disable-gpu-sandbox</code>. Start it from the menu entry or from the launch script.</li>
+  <li>No fix of the PMDG aircraft themselves is recorded. The 737-800 and the 777 that OC3 installed on the test machine needed none.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo pmdg-oc3
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut pmdg-oc3 --remove</code></pre>
+<p>The first command puts <code>Decorated</code> back to what it was, or removes it when <code>apply</code> added it. A value that was already <code>N</code> before <code>apply</code>, because you set it, stays. The second command takes out the menu entry. The colours have their own commands, above.</p>

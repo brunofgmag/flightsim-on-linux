@@ -1,0 +1,63 @@
+title: BBS Nest
+description: How to install and run BBS Nest, the program the BlueBird Simulations 757 needs beside MSFS 2024 under Proton: its installer, why it must start from its own folder, the Proton FS2024 patch that halves its GPU use, the memory leak it can cause and how to see it, and why it won't close alone.
+---
+<h1>BBS Nest</h1>
+<p class="lead">Tested with Nest 1.0.0.0, binaries of 26 October 2026, on 28 October 2026. The <a href="bbs-757.html">BlueBird 757-200</a> keeps its systems off unless Nest runs beside the simulator. Nest installs without help. It then needs to start from its own folder, one <a href="proton-fs2024.html">Proton FS2024</a> patch, and two known problems to be handled by hand.</p>
+
+<h2>Get it</h2>
+<p>Nest comes from your BlueBird Simulations account. The download is <code>BlueBirdNestSetup.exe</code>, a self-contained .NET setup program. Nest itself is a WPF program on .NET 10, and the setup checks for .NET Desktop 10 and the Visual C++ runtime through the registry. The page here doesn't know whether Nest is paid or what its download address is. Earlier builds came as a <code>BBS Nest.zip</code>, which is not what this page covers.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix, and run nothing else while the setup works. <a href="rules.html">The ground rules</a> explain why. Then give the setup to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install bbs-nest ~/Downloads/BlueBirdNestSetup.exe</code></pre>
+<p>Without the file name the command only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it runs the setup alone in the simulator's prefix, which puts Nest in <code>AppData\Local\Programs\BlueBird Simulations\NEST</code>. On the test machine the setup was run alone with the simulator closed, on 28 October 2026. It exited with code 3 that time. The script keeps the setup's exit code and says so, and the install is judged by <code>addon check bbs-nest</code>.</p>
+<p>Nest keeps the path of your Community folder in the prefix's registry (<code>HKCU\Software\BlueBirdSimulations\Nest</code>, value <code>MSFS2024CommunityPath</code>), and it checks its packages only when it opens. On its first start on the test machine it stored <code>Community2024</code>, the second Community folder of MSFS 2024, while the 757 was in <code>Community</code>, and it showed the 757 as NOT INSTALLED. Open Nest once, set the folder in its Settings to the Community folder that holds the aircraft, and open Nest again. The check below reads that value.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply bbs-nest</code></pre>
+<p>This changes nothing and runs the check. What Nest needs from Linux is already in two other places, and the check proves both:</p>
+<ul>
+  <li><strong>It has to start from its own folder.</strong> The aircraft's navigation display asks Nest for a terrain image. Nest draws it in OpenGL from terrain files in <code>ot\tr\</code> and shaders in <code>shdrsb/</code>, and both paths are relative to the Windows current folder. A program started in the simulator's container doesn't take the Linux folder as its Windows folder. Started plain on 24 October 2026, Nest looked for <code>Z:\ot\tr\...</code>, and the display stayed white with terrain switched on. Changing the Linux folder only moved the search to the simulator's own folder, where it failed with <code>not found (c000003a)</code>. Asking Wine for the folder works: <code>start /d "&lt;Nest folder&gt;" "&lt;Nest folder&gt;\bbs_nest.exe"</code>. With that, a Wine trace showed the terrain files opened in Nest's folder, and the display drew terrain with the scale <code>TERR 028/001</code>. On 28 October 2026, started this way from the folder the installer made, the terrain showed on the display the same day. The launch script does this. Any other program you start in the container that reads files by a relative path has the same trap, with the same remedy.</li>
+  <li><strong>Proton FS2024 needs the pacing patch.</strong> Nest draws that image in a second window with no title that is never shown. Under Wine's Wayland driver a hidden window got no frame pacing, so Nest swapped its buffers about 195 times a second. <code>nvidia-smi pmon</code> over 30 seconds at the Heathrow gate on 24 October 2026 gave the simulator 68.5% of the GPU's streaming multiprocessors (the <code>sm</code> column) and Nest 21.3%. With Nest closed the simulator had 87.3%. <code>winewayland-pace-hidden-gl-swaps.patch</code> makes a swap that asks for vsync on a window with no top-level surface wait one refresh period of the primary monitor. On a 120 Hz monitor the patch's check went from 33,193 swaps a second without it to 120 with it. On the same airport, in another scene, the simulator had 75.6% and Nest 11.3%. What is left is the cost of each frame at the monitor's rate, as on Windows.</li>
+</ul>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut bbs-nest</code></pre>
+<p>This writes an entry called "BBS Nest" in your application menu, with Nest's icon when <code>7z</code> and <code>magick</code> are installed, and a "Close BBS Nest" action. The entry does one of two things:</p>
+<ul>
+  <li>With the simulator running, it starts Nest inside the simulator's container with <code>start /d</code> and Nest's folder, which is what the test machine's own script did. The launch script passes that command to <code>flightsim-on-linux run</code>, which hands the arguments unchanged to the simulator's Wine. A test of the planner confirms that, and this project's <code>run</code> has not yet been tried against a live simulator with this command.</li>
+  <li>With the simulator closed, it starts Nest alone in the prefix with Proton's runner, from Nest's folder. This is how you update the 757. It refuses, and says so, while another program holds the prefix.</li>
+</ul>
+<p>Nest is not started by <code>exe.xml</code> or by a watcher. It doesn't close when the simulator closes, so you open it from the menu when you fly the 757. Open it with the 757 already loaded, for the reason under "Known problems". The "Close" action asks Nest's window to close, as the X button does, and never kills it. If Nest stays, the action says so and gives you the kill command. Alone, Nest does not close that way either.</p>
+<p>You see whether Nest is running from the 757's EFB. Without Nest it shows <code>BBS|NEST is not running. Please start BBS|NEST to run the aircraft systems.</code></p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check bbs-nest</code></pre>
+<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li><code>bbs_nest.exe</code> is in the prefix;</li>
+  <li>the folder Nest stored in <code>MSFS2024CommunityPath</code> is the same folder as the simulator's Community folder. It follows the Windows path through the prefix's drive letters and ignores differences in capitals;</li>
+  <li>the Proton was built with <code>winewayland-pace-hidden-gl-swaps.patch</code>, and its <code>winewayland.so</code> is the one the build recorded.</li>
+</ul>
+<p>When the third fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the second fails, set the folder in Nest's Settings and open Nest again.</p>
+
+<h2>Known problems</h2>
+<h3>Nest can leak memory through an orphan SimConnect connection</h3>
+<p>The fault is in BlueBird's Nest, not in Wine, and it has been reported to them. Nest's <code>SubSystem.dll</code> opens a SimConnect connection, waits one second for the simulator's handshake, and waits three seconds more if it hasn't come. Read from the code and checked in a live process on 28 October 2026: if the handshake arrives in that second wait, Nest opens a second connection and doesn't close the first. The first stays subscribed to a client data area, and every write to it becomes an 8 KB message in a queue nobody reads. With the installer's Nest at the Heathrow gate on that day it grew about 90 MB a minute with the weather radar switched on and about 43 MB a minute with it off. The terrain display didn't change the rate. At 10:18 the queue held 399,621 messages, 3,137 MB. A 4 hour 30 minute flight on 27 October 2026 with the zip's Nest, an earlier build, peaked at 5 GB of RAM and 12.2 GB of swap for Nest.</p>
+<p>The trigger is a handshake that takes more than one second. Between 10:54 and 10:57 that morning Nest was opened three times with the 757 already loaded and powered, and each time it kept a single connection with an empty queue. The two handshakes that were timed took 0.30 and 0.25 seconds. So the workaround is to <strong>open Nest with the 757 already loaded</strong>. That the trigger is a slow handshake, and that it explains the earlier leaks, has not been confirmed. The test that would confirm it, opening Nest in the main menu before the flight, hasn't been done.</p>
+<p>To see how many connections Nest has while it runs:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch bbs-nest connections</code></pre>
+<p>It lists each connection with the number of messages waiting. With one connection it says so. With more than one it says Nest is leaking and tells you to close Nest and open it again with the 757 running, and it exits with code 2. It reads Nest's memory by fixed offsets in the <code>SubSystem.dll</code> of 26 October 2026 (<code>TimeDateStamp</code> <code>0x6adf9e53</code>), so a newer build of that file can move them. The script prints a warning line when the build differs, and then its numbers are not to be trusted. The case with two connections has not been tried on a live Nest, because none was leaking when the script was written.</p>
+
+<h3>Alone, Nest doesn't close with the X button</h3>
+<p>When you open Nest alone to install or update the 757, clicking the X leaves the process running, its main thread at 100% of a core, and the desktop marks the window as not responding. It happened in both tries on 28 October 2026. It happens only with Wine's X11 driver, which is what Nest gets when it runs without the simulator: inside the simulator's container, with the Wayland driver, Nest closed from the X in under five seconds. The X11 driver activates the window before it handles the close request, the input method calls into WPF, and WPF then waits in a call that never returns. Forcing the Wayland driver on the alone path makes Wine load no window driver at all, and Nest crashes. Close it alone with:</p>
+<pre><code>pkill -9 -f 'NEST\\bbs_nest\.ex[e]'</code></pre>
+<p>That is safe when you are only installing or updating, and no flight is running. The "Close BBS Nest" action does not run this for you.</p>
+
+<h3>The 757's weather</h3>
+<p>The stock 757 0.1.0 draws no weather on the navigation display. That is not a Linux fault. See <a href="bbs-757-weather-radar.html">the weather radar mod</a>.</p>
+
+<h2>Undo</h2>
+<p><code>addon undo bbs-nest</code> has nothing to restore, because <code>apply</code> changes nothing. Take out the menu entry with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut bbs-nest --remove</code></pre>
+<p>Nest registers its own uninstaller in the prefix. If you remove Nest with it, do that with the simulator closed.</p>

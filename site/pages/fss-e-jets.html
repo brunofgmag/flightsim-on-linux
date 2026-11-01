@@ -1,0 +1,30 @@
+title: FSS E-Jets
+description: How to run the FSS E-Jets (E190, E195 and the freighters) in MSFS 2024 under Proton: nothing beyond the Contrail store, the navdata that the aircraft's EFB downloads, and the navdata updater that crashes and is not needed.
+---
+<h1>FSS E-Jets</h1>
+<p class="lead">Tested with the FSS E-Jets 1.0.2 on 15 October 2026. Nothing Linux-specific is needed beyond the store they come from: the aircraft is a set of MSFS packages that runs entirely inside the simulator.</p>
+
+<h2>Get it</h2>
+<p>The E-Jets come from the Contrail store, as two packages: <code>fss-aircraft-e19x</code> for the E190 and E195, and <code>fss-aircraft-e19xfreighter</code> for the freighters. This guide doesn't have the store page or the price, so look in the store. <code>addon install fss-e-jets</code> only prints where it comes from.</p>
+
+<h2>Install it</h2>
+<p>Install the packages with Contrail, as on Windows. Close the simulator and every other program of its prefix first. <a href="rules.html">The ground rules</a> explain why. Contrail is a Windows program, and it needs a few things before it opens and closes properly under Proton: <a href="contrail.html">its guide</a> has them. The E-Jets themselves needed nothing. On 14 October 2026 Contrail 2.4.6 installed both packages on the test machine. Make sure Contrail puts them in your Community folder; the check below tells you if it didn't.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install fss-e-jets</code></pre>
+<p>That command prints the store and the kind of installer, and runs nothing.</p>
+
+<h2>Make it run</h2>
+<p>Nothing. The aircraft is WASM only and needs no Proton FS2024 patch and no setting in the prefix. It was tested on Proton FS2024, and stock Proton was not tried. <code>addon apply fss-e-jets</code> says there is nothing to apply and then runs the check.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fss-e-jets</code></pre>
+<p>It prints one line for each of the two packages that is in your Community folder, starting with <code>ok</code> and giving the version, and it changes nothing. It prints <code>FAIL</code> when neither package is there, when a package is a link to a folder that is gone, or when a package has no readable <code>manifest.json</code>. You may own only one of the two packages, and then you get one line.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li><code>navdata-updater.exe</code>, in the root of each package, crashes about a second after its window opens. On 15 October 2026 it did so every time, in the same place (it reads from a null pointer), both with the simulator closed under the X11 driver and with the simulator running inside its container. Users report that it opens on Windows, and why it fails here wasn't found. You don't need it.</li>
+  <li>Download the navdata from the aircraft's own EFB instead, once for each package. The E190 and the E195 share the navdata of <code>fss-aircraft-e19x</code>, and the two freighters share that of <code>fss-aircraft-e19xfreighter</code>. The EFB saves the new file in the package's WASM <code>work</code> folder, and the aircraft loads it on the next flights. On the test machine the freighter shipped with the 2503 AIRAC, and the EFB downloaded 2610 on 15 October 2026.</li>
+  <li>The X button of the Contrail window does not close it. Use the close action of its menu entry, which <a href="contrail.html">its guide</a> describes.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo fss-e-jets</code> has nothing to restore, because nothing was changed. Remove the aircraft with Contrail.</p>

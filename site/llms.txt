@@ -9,7 +9,9 @@ When helping someone, ask them to run `~/flightsim-on-linux/bin/flightsim-on-lin
 - [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html): setup from a working simulator to a checked Proton FS2024.
 - [Proton FS2024](https://brunofgmag.github.io/flightsim-on-linux/proton-fs2024.html): what it contains, how it is built, checked and swapped, how to undo it.
 - [Ground rules](https://brunofgmag.github.io/flightsim-on-linux/rules.html): installers run alone, programs next to the simulator join its container, PROTON_NO_NTSYNC=1 as the first remedy for freezes, Community junctions, WPF in software, fonts, secrets.
-- [Add-ons](https://brunofgmag.github.io/flightsim-on-linux/addons.html): what each add-on needs and the state of its guide.
+- [Add-ons](https://brunofgmag.github.io/flightsim-on-linux/addons.html): what each add-on needs, with a guide for each.
+- [Installing add-ons](https://brunofgmag.github.io/flightsim-on-linux/installers.html): the order of work, `addon install`, and the traps many installers share (installers run alone, 260-character paths, .NET 4.8 in a Windows 11 prefix, Wine's PowerShell, WebView2, store apps, packages that are links).
+- [Shortcuts and watchers](https://brunofgmag.github.io/flightsim-on-linux/shortcuts-and-watchers.html): `addon shortcut` for application menu entries, `addon watcher` for services that start a program with the simulator, how to read their log and what stops when.
 - [With an AI assistant](https://brunofgmag.github.io/flightsim-on-linux/ai.html): a starting prompt for chat assistants and notes for coding agents.
 
 ## For agents with a shell

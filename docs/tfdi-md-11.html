@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TFDi Design MD-11 · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run the TFDi Design MD-11 in MSFS 2024 under Proton: the Install Manager, the NavData step that looks stuck and the command that finishes it natively, the Extended Simulation package, AIRAC through Navigraph Hub, and how to undo.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>TFDi Design MD-11</h1>
+<p class="lead">Tested with the MD-11 package 1.1.32 and NavData 1.1.22 on 13 October 2026. The Install Manager works until it reaches the NavData, where it looks stuck. One command finishes that step. <span class="tag warn">touches add-on files</span></p>
+<p>That command, <code>fix-navdata</code>, changes three files: the package's <code>layout.json</code>, the Install Manager's <code>installation.xml</code> and its <code>NavData_FS24.cache</code>. Before it changes anything it copies the three to <code>compatdata/2537590/flightsim-on-linux-backup/tfdi-md-11</code>, in a folder named for the date and time. <code>addon undo tfdi-md-11</code> puts them back as they were before the last run. <code>installation.xml</code> holds your activation code, so the copy holds it too. Never paste either file into an issue, a forum post or an AI chat.</p>
+
+<h2>Get it</h2>
+<p>The MD-11 asks for an activation code. You get the Install Manager, <code>MD11InstallManager.exe</code>, from your vendor account (TFDi Design). This guide doesn't have the download page. The Install Manager is a WPF program that runs on wine-mono, and it downloads and installs the aircraft packages. On the test machine the core package was 1.1.32.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix first, and run nothing else while the Install Manager works. <a href="rules.html">The ground rules</a> explain why. Then give it to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install tfdi-md-11 ~/Downloads/MD11InstallManager.exe</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it runs the Install Manager in the simulator's prefix. On 13 October 2026 the Install Manager did not run from a Bottles prefix, where it failed for lack of a window driver. The cause was not found. In the simulator's prefix it ran, and no Proton FS2024 patch was needed.</p>
+<p>The Install Manager needs your activation code, and then it downloads the packages. The download bar is fine. The step that looks stuck is "Installing NavData_FS24". The NavData package holds about 94,600 small JSON files, and creating that many files through Wine's file layer is far slower than creating them natively, so the Install Manager crawls and looks frozen. When it stops at that step, close the Install Manager and run:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch tfdi-md-11 fix-navdata</code></pre>
+<p>It refuses to run while the simulator or the Install Manager is open. Then it does these things in this order:</p>
+<ul>
+  <li>It finds the newest <code>TFDi_Design_MD11.NavData_FS24.&lt;version&gt;.zip</code> in the prefix's <code>Temp</code> folder, which is where the Install Manager downloaded it, and tests the zip.</li>
+  <li>It copies the three files aside, as above.</li>
+  <li>It unpacks the zip natively, with <code>unzip</code>, into the folder where the Install Manager's <code>installation.xml</code> says the FS24 packages go. If that path can't be found, it uses your Community folder.</li>
+  <li>It rewrites the NavData part of <code>layout.json</code>: it keeps every entry that is not under <code>data/primary/</code> and lists the files now on disk, with their sizes and times.</li>
+  <li>It sets the NavData_FS24 version in <code>installation.xml</code>, adding the line if it is missing, and writes the cache file.</li>
+</ul>
+<p>It prints each step and the number of files. The step recurs with each NavData update, because the Install Manager meets the same wall each time.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply tfdi-md-11</code></pre>
+<p>This changes nothing. The MD-11 needs no setting in the prefix and no Proton FS2024 patch. It was tested on Proton FS2024, and stock Proton was not tried.</p>
+<p>The first time you load the aircraft, the simulator compiles its WASM module for about 4 minutes. That is normal, and the result is cached afterwards. Don't kill the simulator while it does, as <a href="rules.html">the ground rules</a> explain.</p>
+<h3>AIRAC</h3>
+<p>The AIRAC cycle for the MD-11 comes through <a href="navigraph-hub.html">Navigraph Hub</a>, not through the Install Manager. The Hub unpacks the AIRAC with its own 7-Zip, inside Wine, and that is slow for the same reason as above. On the test machine the Hub's unpacker needed 27 minutes 31 seconds for the 97,203 files of the 2610 package, on 14 October 2026, and the native <code>7z</code> unpacked the same package in 509 milliseconds. The Hub's guide has the stand-in for its <code>procgov.exe</code> that sends the unpacking to the native <code>7z</code>. Two things to know: the Hub puts its own <code>procgov.exe</code> back when it updates itself, and after an AIRAC update the MD-11 button in the Hub can stay on INSTALL until you reopen the Hub, although the files are already in place.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut tfdi-md-11</code></pre>
+<p>This writes an entry called "MD-11 Extended Simulation" in your application menu, with the program's own icon when <code>7z</code> and <code>magick</code> are installed. It opens the MD-11 Extended Simulation package. With the simulator closed it opens it in the simulator's prefix, and with the simulator running it opens it inside the simulator's container. With the package already open it says so and does nothing.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check tfdi-md-11</code></pre>
+<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing. It lists the NavData files on disk, which took about a second for 95,000 files in a throwaway test folder:</p>
+<ul>
+  <li><code>installation.xml</code> lists NavData_FS24, and the line gives the version;</li>
+  <li>the MD-11 package is in the folder that <code>installation.xml</code> names for FS24, or in your Community folder, and the line says which;</li>
+  <li><code>layout.json</code> lists every NavData file that is on disk under <code>Data/Primary</code>. It may list more without failing: on the test machine it listed 95,578 and the disk held 4,658, and the cause was not traced.</li>
+</ul>
+<p>The third line fails when the Install Manager stopped before it finished, because the files and the list disagree. Close the Install Manager and run <code>fix-navdata</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The NavData step stalls at each NavData update, and <code>fix-navdata</code> finishes it each time.</li>
+  <li>The first load of the aircraft compiles for about 4 minutes.</li>
+  <li>The Hub restores its own <code>procgov.exe</code> when it updates itself, and its MD-11 button can stay on INSTALL after an AIRAC update until you reopen it.</li>
+  <li>The Install Manager did not run from Bottles. The cause was not found.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo tfdi-md-11
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut tfdi-md-11 --remove</code></pre>
+<p>The first command, with the simulator closed, puts <code>layout.json</code>, <code>installation.xml</code> and the cache file back as they were before the last <code>fix-navdata</code>. If the cache file did not exist before, it is deleted. Running it twice gives the same result. It does not delete the NavData files that were unpacked. Don't run it after the Install Manager has updated the package by itself since then, because it would bring back an older <code>layout.json</code>. The second command takes out the menu entry.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

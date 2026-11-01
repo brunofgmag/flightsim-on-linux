@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlyByWire Installer · Flightsim on Linux</title>
+  <meta name="description" content="How to use the native Linux FlyByWire Installer with MSFS 2024: the AppImage options, the trap in its folder settings that puts 49 GB of traffic outside Community, and the check that reads only the two folder settings.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>FlyByWire Installer</h1>
+<p class="lead">Tested with FlyByWire Installer 3.7.2 on 14 October 2026. It is a native Linux program, so it doesn't go into the simulator's prefix. It has one trap: if you give it only the simulator's base folder, it writes the same path as the Community folder and as the install folder.</p>
+
+<h2>Get it</h2>
+<p>FlyByWire Simulations publishes the installer as an AppImage for Linux, 122 MB for this version. On the test machine its SHA-512 was checked against the <code>latest-linux.yml</code> of the FlyByWire CDN. Where it is downloaded from and what it costs aren't recorded here; get it from FlyByWire.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install flybywire-installer</code></pre>
+<p>This prints where to get it and what kind of program it is. It installs nothing.</p>
+
+<h2>Install it</h2>
+<p>Make the AppImage executable and run it with these options. With them it drew its window and stayed out of <code>nvidia-smi</code> on the test machine:</p>
+<pre><code>chmod +x FlyByWire-Installer-3.7.2-x86_64.AppImage
+./FlyByWire-Installer-3.7.2-x86_64.AppImage --no-sandbox --disable-gpu</code></pre>
+<p>It doesn't find the simulator by itself and asks for the "MSFS 2024 base path". Give it the folder that holds <code>UserCfg.opt</code>, which the CLI prints as <code>base</code>:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux machine</code></pre>
+
+<h2>The trap</h2>
+<p>With only the base path, the installer saved that same path as the Community folder and as the folder to install into, in <code>~/.config/FlyByWire Installer/config.json</code>. On 14 October 2026 the FSLTL Traffic Base Models 1.6.1 (49 GB) were installed to <code>fsltl-traffic-base</code> in the base folder, outside <code>Packages/Community</code>, where the simulator doesn't look.</p>
+<p>So set the Community folder in the installer's settings to the simulator's Community folder, which the CLI prints as <code>community</code>, before you install anything. The test machine moved the package that had landed in the base folder into Community, and after that the installer showed the Base Models as installed, so later updates go to the right place. Reinstalling the installer, or changing the folders in its settings, can bring the problem back, so check again then.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply flybywire-installer</code></pre>
+<p>This changes nothing. It reads two settings of the MSFS 2024 block of <code>~/.config/FlyByWire Installer/config.json</code>, <code>communityPath</code> and <code>installPath</code>, follows links and compares both with the simulator's Community folder. It prints those two paths and nothing else from the file, which can hold data of your account.</p>
+
+<h2>Start it</h2>
+<p>There is no menu entry, because the AppImage can be anywhere on your disk. To make one, point a <code>.desktop</code> file at your copy with the same two options.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check flybywire-installer</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open: <code>communityPath</code> is the simulator's Community folder, and <code>installPath</code> is too. A failing line names the path it found and the one it wants.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>It doesn't find the simulator on its own.</li>
+  <li>Giving it only the base folder sends the downloads outside Community, as above.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo flybywire-installer</code> has nothing to restore, because <code>apply</code> changed nothing.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

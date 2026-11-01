@@ -8,12 +8,14 @@ The site is at https://brunofgmag.github.io/flightsim-on-linux/. Start there if 
 
 | Path | What it is |
 |---|---|
-| `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check`, `dxvk build`, `dxvk check`, `run`, `addon list`, `addon apply`, `addon check`, `addon undo` |
-| `bin/flightsim-on-linux-gui` | The same, through zenity or kdialog dialogs |
+| `bin/flightsim-on-linux` | Command-line helper: `machine`, `doctor`, `proton build`, `proton check`, `dxvk build`, `dxvk check`, `run`, `addon list`, `addon install`, `addon apply`, `addon check`, `addon undo`, `addon launch`, `addon shortcut`, `addon watcher`, `addon watch`, `sim-env` |
+| `bin/flightsim-on-linux-gui` | The main commands in zenity or kdialog dialogs: fix add-ons, install one, add menu shortcuts, start add-ons with the simulator, check and build Proton |
 | `proton/build-proton-fs2024.sh` | Builds Proton FS2024 from a Proton-CachyOS release, checks it and swaps it in |
 | `dxvk/build-dxvk-fenix.sh` | Builds the DXVK the Fenix displays need in GPU mode, checks it and keeps it in the cache |
 | `checks/` | Tests a Proton or that DXVK in a throwaway prefix |
-| `addons/` | One folder per add-on fix, with its apply, check and undo scripts; `addons/README.md` has the format |
+| `addons/` | One folder per add-on: scripts to apply, check and undo its fix, plus install, launch and close scripts, menu entries and a watcher where the add-on has them. `addons/README.md` has the format |
+| `shims/` | Sources of small Windows programs that some add-ons need. Your machine builds them |
+| `tools/` | Helper scripts for the add-on scripts, the shim builder and `build_site.py` |
 | `patches/wine/` | The Wine patches this project adds |
 | `patches/dxvk/` | The DXVK patches the Fenix displays need |
 | `patches/vkd3d-proton/` | The vkd3d-proton patches the Glass Cockpit DLSS Fix needs |
@@ -30,6 +32,8 @@ git clone https://github.com/brunofgmag/flightsim-on-linux.git ~/flightsim-on-li
 ```
 
 `doctor` needs only Python 3. The build needs git, curl, a C toolchain with autoconf, flex, bison, perl, the MinGW-w64 C and C++ cross compilers, meson, ninja, glslang and widl; `doctor` lists what is missing. See [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html) for the full walk-through.
+
+Once Proton FS2024 is in place, each add-on goes in with `addon install <id> <installer>` and `addon apply <id>`. `addon shortcut <id>` adds its menu entry, and `addon watcher <id>` starts it with the simulator. The site has a page on [installing add-ons](https://brunofgmag.github.io/flightsim-on-linux/installers.html), one on [shortcuts and watchers](https://brunofgmag.github.io/flightsim-on-linux/shortcuts-and-watchers.html) and one for each add-on.
 
 ## Working on it
 
@@ -51,7 +55,8 @@ Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-o
 
 ## Licences
 
-- Code (`bin/`, `fsol/`, `proton/`, `checks/`, `addons/`, `tools/`, `tests/`): MIT, in `LICENSE`.
+- Code (`bin/`, `fsol/`, `proton/`, `checks/`, `addons/`, `shims/`, `tools/`, `tests/`): MIT, in `LICENSE`.
 - Text of the site and the guides (`site/`, `docs/`, the Markdown files): CC BY 4.0, in `LICENSE-docs`.
 - Wine patches (`patches/wine/`): LGPL-2.1-or-later, like Wine itself, in `patches/wine/COPYING`.
 - vkd3d-proton patches (`patches/vkd3d-proton/`): LGPL-2.1, like vkd3d-proton itself, in `patches/vkd3d-proton/COPYING`.
+- OpenDeck patches (`addons/opendeck/patches/`): GPL-3.0, like OpenDeck itself, in `addons/opendeck/patches/COPYING`.

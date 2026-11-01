@@ -1,0 +1,112 @@
+title: Shortcuts and watchers
+description: What an add-on's menu entry and its watcher are, how to switch them on and off with addon shortcut and addon watcher, how to read a watcher's log, what stops when, and why a watcher instead of exe.xml.
+---
+<h1>Shortcuts and watchers</h1>
+<p class="lead">Two extras that some add-ons have. A menu entry starts the add-on's program the right way, from your application menu. A watcher is a background service that starts it for you when the simulator starts. Both live under your home folder, and one command takes each of them out again. Both passed their tests against a fake simulator, and the ones this project writes have not been through a real flight yet.</p>
+<p>Every command below starts with <code>~/flightsim-on-linux/bin/flightsim-on-linux</code>. The helper app has the same two things as <em>Add menu shortcuts</em> and <em>Start add-ons with the simulator</em>, and offers only the add-ons that have them.</p>
+
+<h2>What a menu entry is</h2>
+<p>An entry is two files, both outside the prefix and outside this project:</p>
+<ul>
+  <li>a <code>.desktop</code> file called <code>flightsim-on-linux-&lt;id&gt;.desktop</code> in <code>~/.local/share/applications</code> (a second entry of the same add-on gets <code>-2</code>);</li>
+  <li>the icon, in <code>~/.local/share/icons/hicolor/256x256/apps</code>.</li>
+</ul>
+<p>If <code>XDG_DATA_HOME</code> is set, it replaces <code>~/.local/share</code>. KDE and GNOME read the same folders. The test machine runs KDE, with its own earlier menu entries; the entries this project writes haven't been tried on a real desktop yet.</p>
+<p>The entry runs <code>flightsim-on-linux addon launch &lt;id&gt; &lt;script&gt;</code>, with the full path of the command, so the add-on's own <code>launch</code> script decides how the program starts. When the program has to run inside the simulator's container, the script says <code>start Microsoft Flight Simulator 2024 first; this program runs inside the simulator's container</code> if the simulator is closed, and <code>it is already running</code> if you start it twice. With no terminal attached, those lines also arrive as a desktop notice, through <code>notify-send</code>, if you have it. An add-on with a <code>close</code> script adds a <em>Close</em> action to the entry's right-click menu.</p>
+
+<h2>Add and remove a menu entry</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut &lt;id&gt;
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut &lt;id&gt; --remove</code></pre>
+<p>You can give several ids. The first command lists the files it wrote. If the add-on isn't installed yet, it says <code>note &lt;name&gt; is not installed yet; the menu entry starts nothing until it is</code> and writes the entry anyway. It then asks <code>update-desktop-database</code> and <code>kbuildsycoca6</code> to reread the menu, if you have them.</p>
+<p><code>--remove</code> deletes only the files that carry this add-on's own marker, a line <code>X-FlightsimOnLinux-Addon=&lt;id&gt;</code>. An entry you made by hand stays. Because the entry holds the full path of the command, moving the project folder breaks it. Run <code>addon shortcut &lt;id&gt;</code> again from the new place.</p>
+
+<h3>Icons</h3>
+<p>The icon comes out of the program's own <code>.exe</code>. The command unpacks its icon resources with <code>7z</code>, takes the largest one and shrinks it to at most 256 by 256 with ImageMagick's <code>magick</code>. So both programs have to be installed. Without them, or when the program is an AppImage, or when the <code>.exe</code> has no icon, the entry is written anyway with the default icon, and one line says why: <code>no icon for &lt;title&gt;: &lt;reason&gt;; the menu entry has the default icon</code>.</p>
+
+<h3>Add-ons with menu entries</h3>
+<p>The list at the time of writing. <code>addon list</code> marks the same add-ons with <code>[menu]</code> once their entries are written.</p>
+<ul>
+  <li>A340 Performance Tool: <code>addon shortcut a340-performance-tool</code></li>
+  <li>Active Sky FS: <code>addon shortcut active-sky</code></li>
+  <li>BBS Nest (BlueBird Simulations 757): <code>addon shortcut bbs-nest</code></li>
+  <li>BeyondATC: <code>addon shortcut beyondatc</code></li>
+  <li>ChasePlane: <code>addon shortcut chaseplane</code></li>
+  <li>Contrail: <code>addon shortcut contrail</code></li>
+  <li>Fenix A320, A319 and A321: <code>addon shortcut fenix-a320</code></li>
+  <li>FlightSim Dispatch: <code>addon shortcut flightsim-dispatch</code></li>
+  <li>Flow Pro: <code>addon shortcut flow</code></li>
+  <li>FSDT GSX Pro: <code>addon shortcut gsx-pro</code></li>
+  <li>FSLabs A321 and Control Center: <code>addon shortcut fslabs-a321</code></li>
+  <li>iFly 737 MAX8 and iFly Manager: <code>addon shortcut ifly-737-max8</code></li>
+  <li>Lorby Axis and Ohs: <code>addon shortcut axis-and-ohs</code></li>
+  <li>Maddog MD-80 (Leonardo): <code>addon shortcut maddog-md80</code></li>
+  <li>MSFS AutoFPS: <code>addon shortcut msfs-autofps</code></li>
+  <li>Navigraph Hub: <code>addon shortcut navigraph-hub</code></li>
+  <li>Navigraph Simlink: <code>addon shortcut navigraph-simlink</code></li>
+  <li>Orbx Central: <code>addon shortcut orbx-central</code></li>
+  <li>PMDG Operations Center 3: <code>addon shortcut pmdg-oc3</code></li>
+  <li>REX Atmos Core: <code>addon shortcut rex-atmos-core</code></li>
+  <li>SayIntentions.AI: <code>addon shortcut sayintentions</code></li>
+  <li>simMarket: <code>addon shortcut simmarket</code></li>
+  <li>TFDi Design MD-11: <code>addon shortcut tfdi-md-11</code></li>
+  <li>TriTriSim Hub: <code>addon shortcut tritrisim-hub</code></li>
+  <li>Volanta: <code>addon shortcut volanta</code></li>
+  <li>vRAAS: <code>addon shortcut vraas</code></li>
+</ul>
+
+<h2>What a watcher is</h2>
+<p>A watcher is a user service called <code>flightsim-on-linux-&lt;id&gt;.service</code>, written to <code>~/.config/systemd/user</code> (or <code>XDG_CONFIG_HOME</code>). It runs <code>flightsim-on-linux addon watch &lt;id&gt;</code>, one loop for every add-on. Every few seconds the loop looks at the running processes, 8 seconds apart unless the add-on says otherwise. The add-on's <code>addon.json</code> tells it which program to look for, which script starts it, when to start it and when to stop it. The service starts with your login session.</p>
+<p>One add-on has a watcher of another kind, the <code>loop</code> kind, for a job that is not starting a program. The service then runs one script of the add-on for as long as it lives, with <code>flightsim-on-linux addon launch &lt;id&gt; &lt;script&gt;</code>, and runs it again if it fails. It looks at nothing and starts nothing by itself. SayIntentions.AI uses it to keep its links out of Community while its Update Hub runs. Stopping a loop service stops the script. You switch it on and off with the same two commands as any other watcher, and the journal holds the script's own output instead of the loop's lines.</p>
+
+<h3>Why a watcher and not exe.xml</h3>
+<p>The simulator can start programs itself from <code>exe.xml</code>. A program started that way inherits the simulator's environment, and some programs only open with settings that environment overrides. MSFS AutoFPS is the example: the simulator's environment turns Direct3D 9 on, and on 14 October 2026, on the Proton the test machine used then, AutoFPS, a WPF program, died on its first frame with <code>importing the supplied dmabufs failed</code>. Nothing that <code>exe.xml</code> accepts, a path and a command line, can turn it off again. Whether Proton FS2024 still needs it was not measured. A watcher starts the program from its own <code>launch</code> script, where the environment is under the add-on's control.</p>
+<p>The rule used here is that WPF programs start from a watcher and the rest from <code>exe.xml</code>. It is decided by what the program imports. The Fenix bootstrapper is one exception, because it refuses to run any other way than from <code>exe.xml</code>. The FSLabs Control Center is another: <a href="fslabs-a321.html">its guide</a> has both ways.</p>
+
+<h3>When it starts and what stops</h3>
+<p>By default the watcher starts the program once for each simulator process, about 20 seconds after the simulator appears, and never when the program is already running. A program you close by hand stays closed until the next simulator. Some add-ons wait for another process first, or start only when the simulator loads a matching aircraft.</p>
+<p>What happens when the simulator closes depends on the add-on's <code>stop</code> setting. With <code>never</code>, the watcher leaves the program alone. With <code>with_simulator</code>, it stops the program when the simulator closes. <code>with_simulator_if_started</code> does the same, but leaves a program you opened yourself. <code>on_other_aircraft</code> stops the program when a different aircraft loads, and when the simulator closes if the watcher started it.</p>
+<p>To stop a program, the watcher runs the add-on's <code>close</code> script if it has one. Otherwise it sends the program SIGTERM. It never sends SIGKILL, because killing some programs in flight leaves the simulator changed: AutoFPS killed in flight leaves the terrain level of detail lowered. The service itself uses <code>KillMode=process</code>, so stopping or switching off the service leaves the program running, whatever <code>stop</code> says.</p>
+
+<h3>Add-ons with a watcher</h3>
+<p>The list at the time of writing. <code>addon list</code> marks the same add-ons with <code>[watcher]</code> once the service file is there.</p>
+<ul>
+  <li>ChasePlane: <code>addon watcher chaseplane</code></li>
+  <li>FSLabs A321 and Control Center: <code>addon watcher fslabs-a321</code></li>
+  <li>Lorby Axis and Ohs: <code>addon watcher axis-and-ohs</code></li>
+  <li>Maddog MD-80 (Leonardo): <code>addon watcher maddog-md80</code></li>
+  <li>MSFS AutoFPS: <code>addon watcher msfs-autofps</code></li>
+  <li>Navigraph Simlink: <code>addon watcher navigraph-simlink</code></li>
+  <li>SayIntentions.AI: <code>addon watcher sayintentions</code></li>
+  <li>Volanta: <code>addon watcher volanta</code></li>
+  <li>vRAAS: <code>addon watcher vraas</code></li>
+</ul>
+
+<h2>Switch a watcher on and off</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher &lt;id&gt;
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher &lt;id&gt; --off</code></pre>
+<p>The first command writes the service file and runs <code>systemctl --user enable --now</code> on it, then says <code>wrote &lt;path&gt; and switched it on</code>. The second disables the service and deletes the file, and says that <code>&lt;unit&gt; is off and its file is deleted</code>. If <code>systemctl</code> fails, the line says <code>FAIL</code> and gives its exit code. Both need a systemd user session.</p>
+
+<h2>Reading a watcher's log</h2>
+<p>The service writes to the journal. To read it, or to follow it as it grows:</p>
+<pre><code>journalctl --user -u flightsim-on-linux-&lt;id&gt;
+journalctl --user -u flightsim-on-linux-&lt;id&gt; -f</code></pre>
+<p>The loop writes one line for each change of state, never one for each look, and each line starts with the time. The lines you can expect are <code>watching for &lt;name&gt;</code>, <code>simulator &lt;pid&gt; running</code>, <code>starting the program</code>, <code>the program is already running; leaving it alone</code>, <code>simulator &lt;pid&gt; closed</code> and <code>closing the program the simulator no longer needs</code>. A script that fails shows as <code>&lt;script&gt; exited with code &lt;n&gt;</code>. <code>systemctl --user status flightsim-on-linux-&lt;id&gt;</code> says whether the service itself is running.</p>
+
+<h2>The aircraft trigger</h2>
+<p>A few programs should start only for one aircraft. The FSLabs Control Center, for example, starts when an FSLabs aircraft loads. For that the watcher has to ask the simulator which aircraft loaded, and it asks over SimConnect. That needs three things:</p>
+<ul>
+  <li>Node.js, with <code>node</code> on your path;</li>
+  <li>the <code>node-simconnect</code> module, which the base add-on <code>simconnect-tcp</code> installs when you run <code>flightsim-on-linux addon apply simconnect-tcp</code> and npm is installed;</li>
+  <li>a simulator that listens for SimConnect on TCP. By default its <code>SimConnect.xml</code> declares port 500, and Linux doesn't let the simulator open ports below 1024. The same <code>simconnect-tcp</code> add-on moves it to 5111 and its check fails below 1024.</li>
+</ul>
+<p>If Node.js is missing, the log says <code>node is not installed; the aircraft trigger needs Node.js</code>. If the module is missing, it says <code>node-simconnect is missing; run: flightsim-on-linux addon apply simconnect-tcp; trying again every 60 s</code>. Either way the watcher says it once and tries again every minute, and nothing else about it changes. The trigger has run against a fake simulator only.</p>
+
+<h2>Nothing restarts without a limit</h2>
+<ul>
+  <li>The program starts once for each simulator process. With an aircraft trigger it starts on each matching aircraft when it isn't already running.</li>
+  <li>A health restart, for an add-on that restarts its program when the simulator is up and the program has had no connection to it for a set time, runs at most three times for each simulator process, that set time apart. After the third the log says <code>restarted 3 times without a connection; giving up until the simulator restarts</code>.</li>
+  <li>The helper process that reads the aircraft is started again 8 seconds after it dies.</li>
+  <li>A script that is still running after 120 seconds is killed, the log says so, and the loop moves on. A program the script already started keeps running.</li>
+  <li>The service uses <code>Restart=on-failure</code> with a pause of 5 seconds.</li>
+</ul>
+<p>The full list of watcher settings is in <a href="https://github.com/brunofgmag/flightsim-on-linux/blob/main/addons/README.md"><code>addons/README.md</code></a>. The <a href="installers.html">installers page</a> covers what comes before this one.</p>

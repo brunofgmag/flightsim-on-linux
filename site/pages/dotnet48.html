@@ -1,0 +1,41 @@
+title: .NET Framework 4.8
+description: How to put Microsoft's .NET Framework 4.8 into MSFS 2024's prefix under Proton: why the installer exits 0 and installs nothing in a Windows 11 prefix, what the command does about it, the files and registry values it sets, and which add-ons build on it.
+---
+<h1>.NET Framework 4.8</h1>
+<p class="lead">Tested with the .NET Framework 4.8 offline installer (<code>ndp48-x86-x64-allos-enu.exe</code>) on 18 October 2026. One command, with the simulator and every other program of the prefix closed. It is a base piece: it puts the framework into the prefix and writes no setting for any single add-on.</p>
+
+<h2>Get it</h2>
+<p>Microsoft's framework is free. The command downloads two files from Microsoft and checks both against pinned sha256 hashes before it uses them: the 4.8 installer, <code>ndp48-x86-x64-allos-enu.exe</code>, and the 4.0 installer, <code>dotNetFx40_Full_x86_x64.exe</code>. The second one is only opened to take Microsoft's <code>mscoree.dll</code> out of it. Neither file is part of this project, and both are kept in the project's cache folder (<code>~/.cache/flightsim-on-linux/downloads</code>), so the next run does not download them again.</p>
+<p>The command needs <code>7z</code> and <code>cabextract</code> on your <code>PATH</code> for the <code>mscoree.dll</code> step. If the cache folder's path is longer than 150 characters it stops before downloading: Windows installers inside Wine fail on paths over 260 characters, and <a href="installers.html">Installing add-ons</a> explains why. Set <code>FSOL_CACHE</code> to a shorter folder.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply dotnet48</code></pre>
+<p>Close the simulator and every other program of the prefix first; <a href="rules.html">the ground rules</a> say why installers run alone. The command skips any step that is already done:</p>
+<ol>
+  <li><strong>It installs .NET Framework 4.8.</strong> The prefix of Proton FS2024 reports Windows 11 (build 22000). On 18 October 2026, on the test machine, the 4.8 installer run as <code>/q /norestart</code> in such a prefix exited with code 0 and installed nothing. Its own log said that .NET 4.8 or later was already installed. So the command saves the Windows version keys (<code>Windows NT\CurrentVersion</code> in both registry views, and <code>Version</code> under <code>HKCU\Software\Wine</code>), switches the prefix to Windows 7 with <code>winecfg -v win7</code>, deletes the links Proton leaves in the <code>v4.0.30319</code> folders, runs the installer with the <code>fusion</code> DLL set to builtin, and puts the keys back one value at a time. It stops if the result does not match what it saved. <code>winecfg -v win10</code> is not a way back: it writes another build and another <code>UBR</code> and rewrites the 32-bit view. If an earlier run was interrupted, the next run gives the saved keys back first. It then reads <code>clr.dll</code> in both <code>Framework</code> folders and fails if it is not a 4.8 build.</li>
+  <li><strong>It puts Microsoft's <code>mscoree.dll</code> in <code>system32</code> and <code>syswow64</code>.</strong> The command takes version 4.0.31106.0 out of the 4.0 installer and checks it against a pinned hash for each folder. The file it replaces, or the link to Wine's builtin, is kept first. A program uses Microsoft's file only when an add-on sets <code>mscoree</code> to <code>native</code> for it; every other program stays on wine-mono.</li>
+  <li><strong>It sets four registry values.</strong> <code>mscoree</code> stays <code>builtin</code> under <code>HKCU\Software\Wine\DllOverrides</code>, so no program gets Microsoft's by accident. <code>InstallRoot</code> under <code>HKLM\Software\Microsoft\.NETFramework</code> names the 64-bit <code>Framework64</code> folder in the 64-bit view and the <code>Framework</code> folder in the 32-bit view. <code>*</code> is <code>gac=n</code> under <code>HKCU\Software\Wine\Mono\AsmOverrides</code>: with 4.8 in the Windows GAC, wine-mono would look there first and load Microsoft's WPF, and Axis and Ohs died at start with a <code>MissingMethodException</code> on the test machine. Before it writes, the command exports the keys it is about to change to <code>.reg</code> files in the backup folder.</li>
+</ol>
+<p>The backup folder is <code>compatdata/2537590/flightsim-on-linux-backup/dotnet48</code>. A machine that ran the Fenix add-on before this one existed keeps its backups in <code>flightsim-on-linux-backup/fenix-a320</code>, and the command keeps using that folder until a <code>dotnet48</code> one exists.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check dotnet48</code></pre>
+<p>It prints eight lines and changes nothing. Four look at the registry values above. Two read the product version of <code>clr.dll</code> in <code>Framework64\v4.0.30319</code> and <code>Framework\v4.0.30319</code> and want 4.8. Two compare <code>mscoree.dll</code> in <code>system32</code> and <code>syswow64</code> with the pinned hashes of Microsoft's 4.0.31106.0 files.</p>
+
+<h2>Who uses it</h2>
+<ul>
+  <li><a href="fenix-a320.html">The Fenix A320</a> runs five of its programs on Microsoft's .NET. <code>addon apply fenix-a320</code> runs this step first, then sets its own <code>mscoree=native</code> overrides.</li>
+  <li><a href="maddog-md80.html">The Maddog MD-80</a> runs MDClient on it, because on wine-mono MDClient keeps the wineserver busy. <code>addon apply maddog-md80</code> sets the override once this is in the prefix.</li>
+  <li><a href="sayintentions.html">SayIntentions.AI</a> needs it for <code>si_telemetry.exe</code>, which cannot run on wine-mono. Without it the interface stays on its loading screen.</li>
+  <li><a href="axis-and-ohs.html">Axis and Ohs</a> sets the same <code>gac=n</code> value itself and is not changed by this step.</li>
+</ul>
+
+<h2>Known problems</h2>
+<ul>
+  <li>An installer exit code of 0 from the 4.8 setup does not prove anything in a Windows 11 prefix. The command trusts <code>clr.dll</code>, not the exit code.</li>
+  <li>The command does not change the Windows version for good. If it stops between the switch to Windows 7 and the restore, run it again: the first thing it does is give the saved keys back.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo dotnet48</code></pre>
+<p>It puts the original <code>mscoree.dll</code> back in <code>system32</code> and <code>syswow64</code> from the backup folder. .NET Framework 4.8 stays installed, and the four registry values stay: with 4.8 in the Windows GAC, taking <code>gac=n</code> away makes wine-mono programs load Microsoft's WPF and crash. The overrides that other add-ons set for their own programs are theirs to undo, and they ask for the Microsoft <code>mscoree.dll</code> that this undo takes away, so undo those first.</p>

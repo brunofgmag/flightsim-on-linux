@@ -1,0 +1,54 @@
+title: Contrail
+description: How to run Contrail in MSFS 2024's prefix under Proton: the winhttp stand-in that gets it past the splash screen, Direct3D 9 off, the menu entry that also closes it, and what happens when Contrail updates itself.
+---
+<h1>Contrail</h1>
+<p class="lead">Tested with Contrail 2.4.6 on 14 October 2026. It installs like any Windows program, but it stays on its splash screen without a small stand-in for <code>winhttp.dll</code> placed next to it, so this fix adds files to the add-on's folder.</p>
+
+<p><span class="tag warn">touches add-on files</span> The fix adds two files, <code>winhttp.dll</code> and <code>winhttp_wine.dll</code>, to the newest <code>app-*</code> folder of Contrail in the prefix. If that folder already had a <code>winhttp.dll</code> of Contrail's own, it is kept in <code>compatdata/2537590/flightsim-on-linux-backup/contrail</code>. This takes both files out and puts a kept file back:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo contrail</code></pre>
+
+<h2>Get it</h2>
+<p>Contrail is a store for add-ons, written in WPF on .NET 6. Its installer for Windows is <code>ContrailSetup.exe</code>, a Squirrel setup of about 147 MB. Where it is downloaded from and what it costs aren't recorded here; get it from Contrail.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install contrail ~/Downloads/ContrailSetup.exe</code></pre>
+<p>The command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. It then runs the installer in the simulator's prefix. On the test machine the installer needed no setting of its own.</p>
+<p>Contrail's products are another matter. It downloads the ones that come as an installer <code>.exe</code> into <code>C:\users\steamuser\Downloads</code> in the prefix and stops there; it doesn't run them. Close Contrail, then run each installer yourself, one at a time, as <a href="rules.html">the ground rules</a> say. The products that come as zip files it unpacks by itself.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply contrail</code></pre>
+<p>Contrail 2.4.6 opened its window for choosing the simulator and, once MSFS 2024 was chosen, stayed on the splash screen. The process stayed alive and the main window was never created. In a trace, the .NET <code>WinHttpHandler</code> asks for the images of the store (<code>cdn.contrail.shop</code>) and calls <code>WinHttpAddRequestHeaders</code> with a string that holds only a line break. Windows accepts that call and does nothing. Wine 11 answers with error 12153, <code>ERROR_WINHTTP_INVALID_HEADER</code>, and .NET raised that exception in a loop, 230 more in ten seconds.</p>
+<p>Two things change that, and the launch script does both every time:</p>
+<ul>
+  <li>A <code>winhttp.dll</code> stand-in, built on your machine with MinGW, goes next to <code>Contrail.exe</code>. It passes 48 functions on to a copy of Proton's own <code>winhttp.dll</code>, named <code>winhttp_wine.dll</code>, and implements only <code>WinHttpAddRequestHeaders</code>: it strips the line breaks at the start and answers success when nothing is left. Contrail is started with <code>winhttp=n,b</code>, so the copy next to it loads first. With the stand-in, the warnings and the exceptions dropped to zero and the main window appeared. Without it, in the same session, only the splash screen. A copy next to the program is enough because <code>winhttp</code> is not on the prefix's list of system-only DLLs; <code>ole32</code> is, which is why the <a href="tritrisim-hub.html">TriTriSim Hub</a> needed a different way.</li>
+  <li>Direct3D 9 is turned off for Contrail with <code>d3d9=d</code>. Outside the simulator's container the WPF window didn't crash, but DXVK couldn't get a Vulkan swapchain (<code>VK_ERROR_INITIALIZATION_FAILED</code>), fell back to presenting through GDI, and the window came out with black rectangles. With Direct3D 9 off, WPF draws in software and the window is whole.</li>
+</ul>
+<p>Contrail's updater, Squirrel, makes a new <code>app-*</code> folder for each version, so the launch script copies the two files into the newest one on every start, and <code>apply</code> does the same by hand. On the test machine Contrail updated itself from 2.4.6 to 3.0.0 on 22 October 2026. The test machine's own launch script found the new folder and the two files were in it, but the fix was measured on 2.4.6, and 3.0.0 hasn't been tested as a version of its own. Starting Contrail with the simulator running, inside its container, hasn't been run either.</p>
+<p>The stand-in needs <code>x86_64-w64-mingw32-gcc</code>: install <code>mingw-w64-gcc</code> (Arch), <code>gcc-mingw-w64-x86-64</code> (Debian, Ubuntu) or <code>mingw64-gcc</code> (Fedora).</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut contrail</code></pre>
+<p>This writes an entry called "Contrail" in your application menu, with Contrail's own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close Contrail" action. The entry copies the two files, then starts Contrail in the simulator's prefix. With the simulator running it starts Contrail inside the simulator's container, and with Contrail already open it says so and does nothing.</p>
+<p>The window's X doesn't close Contrail. After clicking it, the window stayed visible on the test machine, because the title bar belongs to the MahApps library and the click doesn't reach it. The action asks all of Contrail's processes to end, the way a polite <code>kill</code> does, and never uses <code>kill -9</code>. Close Contrail this way before you start the simulator or run an installer, since a program left open in the prefix holds it.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check contrail</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the newest <code>app-*</code> folder has the <code>winhttp.dll</code> stand-in built from this repository;</li>
+  <li><code>winhttp_wine.dll</code> in it is the <code>winhttp.dll</code> of the Proton in use.</li>
+</ul>
+<p>After a Contrail update the first line fails until Contrail has been started from its menu entry once, or <code>apply</code> has run. After a Proton rebuild the second one can fail, and the same two ways fix it.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The window's X doesn't close Contrail. Use the menu action.</li>
+  <li>Product installers are left in the prefix's Downloads folder, unrun.</li>
+  <li>Contrail 3.0.0 and the start inside the simulator's container are expected to work and haven't been tried as separate tests.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo contrail
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut contrail --remove</code></pre>
+<p>The first removes the two files from every <code>app-*</code> folder and puts back a <code>winhttp.dll</code> that Contrail shipped, if there was one. Until you apply the fix again, Contrail stays on its splash screen. The second takes out the menu entry.</p>

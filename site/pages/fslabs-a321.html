@@ -1,48 +1,87 @@
 title: FSLabs A321
-description: How to run the FSLabs A321 and its Control Center in MSFS 2024 under Proton: Proton FS2024 for the displays and the EFB, the Control Center started from exe.xml, what the check looks at, and the problems that remain.
+description: How to run the FSLabs A321 and its Control Center in MSFS 2024 under Proton: Proton FS2024 for the displays and the EFB, what each display patch changed and what is only expected, the Control Center started from exe.xml or by a service, what the check looks at, and the problems that remain.
 ---
 <h1>FSLabs A321 and Control Center</h1>
-<p class="lead">Tested with Control Center 2.0.1.197 on 21 October 2026. The A321 needs nothing in the prefix beyond Proton FS2024, and one command checks everything it needs. It changes nothing, in the prefix or in the FSLabs folders.</p>
+<p class="lead">Tested with Control Center 2.0.1.197. The display patches below were flown on the test machine on 30 October 2026. The A321 needs nothing in the prefix beyond <a href="proton-fs2024.html">Proton FS2024</a>, and one command checks everything it needs. It changes nothing, in the prefix or in the FSLabs folders.</p>
 
-<h2>Before you start</h2>
-<p>The A321 needs <a href="proton-fs2024.html">Proton FS2024</a> for two reasons:</p>
+<h2>Get it</h2>
+<p>The A321 and the Control Center come from <a href="https://www.flightsimlabs.com/">flightsimlabs.com</a>. The installer is an Inno Setup program called <code>FSLControlCenter_2.0.1.197.exe</code>. This page doesn't know whether the aircraft is paid. <code>addon install fslabs-a321</code> prints this address and the kind of installer.</p>
+
+<h2>Install it</h2>
+<p>Run the FSLabs installer with the simulator and every other program of the prefix closed, one at a time, following <a href="rules.html">the ground rules</a>. On the test machine it went into the simulator's prefix on 14 October 2026, to <code>C:\FlightSimLabs\ControlCenter</code>, with <code>FlightSimLabs2024\msfs_interface</code> next to it. The program that ran it was not recorded, and no patch or setting was needed for the installer itself. Then activate the aircraft in the Control Center, as on Windows.</p>
+
+<h2>Make it run</h2>
+<p>The A321 needs <a href="proton-fs2024.html">Proton FS2024</a> for three reasons. Pick it for the simulator in Steam.</p>
 <ul>
   <li>The cockpit displays are drawn with GDI+, and stock Wine skips four features of its gradient brushes. Each display then sits under a glare of white edges that fade to the centre, and the MCDU and clock letters lose their right side. With the brightness turned all the way down you can see the real picture underneath.</li>
   <li>The EFB is a Chromium (CEF) page. Chromium checks that a page it locks was writable first. Stock Wine reports the wrong protection, so every renderer process stops at that check within half a second and the EFB stays dark. Proton FS2024 fixes this for <code>cef_browser.exe</code>, the process that hosts those renderers.</li>
+  <li>The displays also cost a lot of CPU in Wine's drawing code. On 29 October 2026, in flight, <code>win32u.so</code> held 24.6% of the simulator's cycles, spread over 44 threads. About 15 points were region arithmetic, 4.7 the blending of translucent images and 3.3 the enumeration of fonts. Seven Proton FS2024 patches came out of that and of the display faults, and the table lists them with the older gradient patch and one that targets a different stall.</li>
 </ul>
-<p>Pick Proton FS2024 for the simulator in Steam. Install the A321 and the Control Center with the FSLabs installer, and activate the aircraft in the Control Center, as on Windows. Run the installer with the simulator closed, following <a href="rules.html">the ground rules</a>.</p>
+<p><code>addon apply fslabs-a321</code> changes nothing. It reports what <code>exe.xml</code> does with the Control Center and then runs the check.</p>
 
-<h2>The Control Center starts with the simulator</h2>
+<h3>What the display patches changed</h3>
+<p>The numbers were measured on the test machine. A "test" figure comes from a small program that calls the Wine function, not from a flight. The last column says what has been seen in flight.</p>
+<table>
+  <tr><th>Patch</th><th>What changes for you</th><th>Measured</th><th>In flight</th></tr>
+  <tr><td><code>gdiplus-path-gradient-and-centered-text</code> (15 Oct)</td><td>The displays lose the white edge glow. MCDU and clock letters are whole.</td><td></td><td>Flown.</td></tr>
+  <tr><td><code>gdiplus-nested-containers</code> (29 Oct)</td><td>The PFD sky and ground fill the horizon window in turns, and the ND traffic arrows sit on the traffic.</td><td>Test: 9,657 of 49,889 pixels of the window were black at 15 degrees without the patch, and 0 with it.</td><td>Flown on 30 October: the sky and ground filled the window in turns. The pilot judged the traffic arrows apparently correct, with and without the traffic selector.</td></tr>
+  <tr><td><code>gdiplus-sourcecopy-text-covers-glyphs</code> (29 Oct)</td><td>The PFD numbers lose their black boxes.</td><td></td><td>Flown on 30 October.</td></tr>
+  <tr><td><code>win32u-larger-font-caches</code> (29 Oct)</td><td>The font caches keep 256 fonts instead of 10 and 5, so the simulator stops creating fonts all the time.</td><td>Font creation fell from 790 a second to 0 in level flight and 206 to 316 a second in turns.</td><td>Flown on 30 October.</td></tr>
+  <tr><td><code>win32u-banded-region-from-rects</code> (29 Oct)</td><td>The displays stop burning CPU on screen regions.</td><td>Test: a circle of 2,000 lines took 6.6 ms and now takes 0.005 ms.</td><td>Flown on 30 October.</td></tr>
+  <tr><td><code>gdiplus-font-family-lookup-in-collection</code> (29 Oct)</td><td>Finding a font family no longer lists the fonts each time.</td><td>Test: 6.7 microseconds down to 0.1 in a private collection, and 57 down to 0.6 in the installed fonts.</td><td>Flown on 30 October.</td></tr>
+  <tr><td><code>win32u-alpha-blend-sse2</code> (30 Oct)</td><td>Expected: translucent images blend four pixels at a time, with the same bytes as before.</td><td>Test: 2.10 ms down to 0.44 ms per megapixel.</td><td>Not confirmed. One reading in cruise, with the phase of flight not noted, showed this function at 0.76% of the cycles.</td></tr>
+  <tr><td><code>gdiplus-premultiply-sse2</code> (30 Oct)</td><td>Expected: pixels are premultiplied four at a time, with the same bytes as before.</td><td>Test: 0.98 ms down to 0.36 ms per megapixel.</td><td>Not confirmed.</td></tr>
+  <tr><td><code>ntdll-heap-bounded-free-list-scan</code> (30 Oct)</td><td>Expected to end the stalls of 50 to 185 ms once a second, seen with AI traffic injected into the simulator. The patch makes Wine stop walking a very long heap free list.</td><td>Test: the scan of a 60,000-block list took 981 microseconds and now takes 0.2.</td><td>Not seen. Only the Proton build's own checks passed.</td></tr>
+</table>
+<p>The patches of 29 October together, in the flight of 30 October: <code>win32u.so</code> fell from 24.6% of the simulator's cycles to about 9% at 5,000 ft, and the simulator used 1 to 2 cores less there than on 29 October. The earlier measurement did not note the phase of flight, so that range is wide. A measurement on the ground does not compare, and the phase of flight moves the total more than the patches do.</p>
+<p>The two SSE2 patches and the heap patch are written as expected because the first flight with them is still to be measured. Only a test program showed the SSE2 gains, and only the Proton build's own checks passed for the heap patch. In the flight of 30 October, at 5,000 ft, the blending and conversion functions still took about 1 core together, which is what the two SSE2 patches aim at.</p>
+
+<h2>Start it</h2>
+<h3>From exe.xml</h3>
 <p>The Control Center writes its own entry in <code>exe.xml</code>, and the simulator starts it from there. On the test machine, under Wine's Wayland driver and on Proton FS2024, it opened that way, drew its window normally and validated the A321 licence. Nothing has to be set up for it.</p>
+
+<h3>By hand</h3>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut fslabs-a321</code></pre>
+<p>This writes an entry called "FSLabs Control Center" in your application menu, with the program's own icon when <code>7z</code> and <code>magick</code> are installed. With the simulator running, it starts the Control Center inside the simulator's container. Otherwise it starts it through the prefix. Either way it turns Direct3D 9 off for that one program: the Control Center opens without that, but it then takes 156 MiB of GPU memory, and the override keeps it off the GPU. It starts the program from its own folder, and with the Control Center already open it says so and does nothing. To start it from a terminal with the same options as <code>exe.xml</code>:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch fslabs-a321 launch -- -NOTIFY</code></pre>
+<p><code>-NOTIFY</code> is the option the Control Center's own <code>exe.xml</code> entry passes.</p>
+
+<h3>If you play inside gamescope</h3>
+<p>gamescope shows one window at a time. On the test machine the Control Center, started by the simulator, opened inside gamescope, covered the simulator and left it without a mouse pointer. Without gamescope, under the Wayland driver, it opened in its own window on the desktop, so skip this section unless you use gamescope.</p>
+<p>Switch off the Control Center entry: in <code>exe.xml</code>, in the folder that holds <code>UserCfg.opt</code>, set its <code>Disabled</code> to <code>True</code>. Keep a copy of the file first. Then let a service start the Control Center with the aircraft:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher fslabs-a321</code></pre>
+<p>The first command makes the simulator listen for SimConnect clients on a TCP port above 1023, which is how the service learns which aircraft is loaded. The second writes a user service called <code>flightsim-on-linux-fslabs-a321.service</code> and switches it on. It looks at the simulator every 8 seconds. When the loaded aircraft's string contains "FSLabs A3" or "fsl-a32x" (case ignored; on the test machine the string was <code>SimObjects\Airplanes\FSLabs A321-NEO PW\aircraft.CFG</code>), it starts the Control Center with <code>-NOTIFY</code> inside the simulator's container, and never a second copy. It closes the Control Center only when the simulator closes, and only if the service started it. <code>run</code> gives the program the desktop's display, so it opens outside gamescope. A script of the test machine's own, older than this service, worked like this from 16 October 2026, and the Control Center validated the licence. This project's service has not yet been run with an FSLabs aircraft. <code>exe.xml</code> is still the plain way.</p>
+<p>With that service file in place the check accepts the switched-off entry. Without it, a switched-off entry is a <code>FAIL</code>, because then nothing starts the Control Center.</p>
 
 <h2>Check it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check fslabs-a321</code></pre>
-<p>It prints three lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<p>It prints one line for each of these, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
 <ul>
   <li>the Proton's <code>user_settings.py</code> turns on copy-on-write tracking for <code>cef_browser.exe</code>;</li>
-  <li>the Proton was built from this repository's GDI+ patch, and its <code>gdiplus.dll</code> is the one the build recorded;</li>
-  <li><code>exe.xml</code> has the Control Center entry, switched on.</li>
+  <li>the Proton's <code>gdiplus.dll</code> carries five patches: the gradient and centred text one and the ones for nested containers, source-copy text, font-family lookup and SSE2 premultiplying. <code>fs2024-build.txt</code> lists this repository's version of each, and the file is the one the build recorded;</li>
+  <li>the same for the three patches in <code>win32u.so</code>: larger font caches, banded regions and SSE2 blending;</li>
+  <li>the same for the heap patch in <code>ntdll.dll</code>;</li>
+  <li><code>exe.xml</code> has the Control Center entry, switched on, or switched off with the service file above in place;</li>
+  <li>when that service file exists, SimConnect listens on a TCP port above 1023.</li>
 </ul>
-<p>When the first two fail, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the last one fails because the entry is missing, start the Control Center and run the check again. When it fails because the entry is switched off, the simulator won't start the Control Center. That is only right if you start it yourself, as the gamescope section below explains.</p>
+<p>A line that lists patches names every one the build lacks. When one fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the <code>exe.xml</code> line fails because the entry is missing, start the Control Center and run the check again. When it fails because the entry is switched off, the simulator won't start the Control Center, which is only right if the service above starts it.</p>
 
-<h2>Starting the Control Center yourself</h2>
-<p>With the simulator running, start it inside the simulator's container:</p>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux run 'C:\FlightSimLabs\ControlCenter\FSLControlCenter.exe' -NOTIFY</code></pre>
-<p><code>-NOTIFY</code> is the option the Control Center's own <code>exe.xml</code> entry passes.</p>
-
-<h2>If you play inside gamescope</h2>
-<p>gamescope shows one window at a time. On the test machine the Control Center, started by the simulator, opened inside gamescope, covered the simulator and left it without a mouse pointer. Without gamescope, under the Wayland driver, it opened in its own window on the desktop, so skip this section unless you use gamescope.</p>
-<p>Switch off the Control Center entry: in <code>exe.xml</code>, in the folder that holds <code>UserCfg.opt</code>, set its <code>Disabled</code> to <code>True</code>. Keep a copy of the file first. Then start the Control Center yourself, about 20 seconds after the simulator, with the command in the previous section. <code>run</code> gives it the desktop's display, so it opens outside gamescope. The test machine worked like this from 16 October 2026, with a small script that waited for the simulator, and the Control Center validated the licence. In this setup the check reports the switched-off entry as <code>FAIL</code>, and that is expected.</p>
-
-<h2>Smaller textures for less VRAM</h2>
+<h2>Known problems</h2>
+<h3>Changing aircraft freezes the simulator</h3>
+<p>On the test machine, switching from the A321 to another aircraft in the same session froze the simulator twice on 18 October 2026. To fly something else, quit the simulator and start it again. While the A321 is loaded, a thread inside the simulator keeps one CPU core at 100%, busy in Wine's locale and string-comparison functions called from the FSLabs module. The cause hasn't been found.</p>
+<h3>The automatic jetway call fails with GSX</h3>
+<p>When the A321 loads, it asks GSX for the jetway by itself. On the test machine that request failed in both sessions, because it arrived just as GSX was taking over the newly loaded aircraft, and the A321 doesn't reopen the GSX menu when it retries. Calling the jetway from the GSX menu worked in both. The same race could happen on Windows if GSX is slow to take over.</p>
+<h3>The Control Center log holds your key</h3>
+<p><code>AppData\Roaming\FlightSimLabs\CCLog.txt</code> in the prefix stores the activation key in plain text. Never paste it into an issue, a forum post or an AI chat. For the same reason the launch script sends the Control Center's output to <code>/dev/null</code> and keeps no log of it.</p>
+<h3>Smaller textures for less VRAM</h3>
 <p>An A321neo uses about 4.2 GB of textures, and 46 of them are 8192 pixels wide. On the test machine, an RTX 4080 with 16 GB, the VRAM was full as soon as the cockpit loaded. A separate fix caps them:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply fslabs-a321-textures</code></pre>
 <p>Every DDS file already carries its own smaller copies (mip levels), so the fix drops the largest levels and re-encodes nothing: what is left is, byte for byte, what the simulator shows from a little further away. Textures the exterior models use stop at 2048 pixels, and those of the cockpit at 4096, so the panels keep their sharpness. It also writes the new sizes into the package's <code>layout.json</code>. Across the whole package, 234 textures went from 5.4 GB to 0.9 GB, and one A321neo from about 4.2 GB to 2.7 GB. On 24 October 2026 the simulator stayed at about 13 GB with the A321neo at the gate, and the pilot saw no difference from the cockpit or the outside camera. Up close, the edges of the livery's lettering are slightly softer.</p>
-<p>This changes the add-on's own files. The originals are kept in <code>compatdata/2537590/flightsim-on-linux-backup/fslabs-a321-textures</code>, and <code>addon undo fslabs-a321-textures</code> puts every one back. Run either with the simulator and the Control Center closed. To cap only the 8192-pixel textures, set <code>FSL_TEXTURE_EXTERIOR=4096</code> before <code>apply</code>; <code>FSL_TEXTURE_COCKPIT</code> sets the cockpit cap. An FSLabs update brings the large textures back, and <code>addon check fslabs-a321-textures</code> then fails; run <code>apply</code> again.</p>
+<p><span class="tag warn">touches add-on files</span> This changes the add-on's own files. The originals are kept in <code>compatdata/2537590/flightsim-on-linux-backup/fslabs-a321-textures</code>, and <code>addon undo fslabs-a321-textures</code> puts every one back. Run either with the simulator and the Control Center closed. To cap only the 8192-pixel textures, set <code>FSL_TEXTURE_EXTERIOR=4096</code> before <code>apply</code>; <code>FSL_TEXTURE_COCKPIT</code> sets the cockpit cap. An FSLabs update brings the large textures back, and <code>addon check fslabs-a321-textures</code> then fails; run <code>apply</code> again.</p>
 
-<h2>Changing aircraft freezes the simulator</h2>
-<p>On the test machine, switching from the A321 to another aircraft in the same session froze the simulator twice on 18 October 2026. To fly something else, quit the simulator and start it again. While the A321 is loaded, a thread inside the simulator keeps one CPU core at 100%, busy in Wine's locale and string-comparison functions called from the FSLabs module. The cause hasn't been found.</p>
-<h2>The automatic jetway call fails with GSX</h2>
-<p>When the A321 loads, it asks GSX for the jetway by itself. On the test machine that request failed in both sessions, because it arrived just as GSX was taking over the newly loaded aircraft, and the A321 doesn't reopen the GSX menu when it retries. Calling the jetway from the GSX menu worked in both. The same race could happen on Windows if GSX is slow to take over.</p>
-<h2>The Control Center log holds your key</h2>
-<p><code>AppData\Roaming\FlightSimLabs\CCLog.txt</code> in the prefix stores the activation key in plain text. Never paste it into an issue, a forum post or an AI chat.</p>
+<h2>Undo</h2>
+<p><code>addon undo fslabs-a321</code> has nothing to restore, because <code>apply</code> changes nothing in the prefix, and the Control Center entry in <code>exe.xml</code> is the Control Center's own. Take out the menu entry and the service with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut fslabs-a321 --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher fslabs-a321 --off</code></pre>
+<p>Switch the <code>exe.xml</code> entry back on yourself if you turned it off for the service.</p>

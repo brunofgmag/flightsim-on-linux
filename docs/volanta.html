@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Volanta · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run Volanta for MSFS 2024 under Proton: where to get the Windows build, the add-ons prefix it runs in next to the simulator&#x27;s, the silent install with Wine&#x27;s PowerShell off, SimConnect over TCP, the menu entry and the service that opens it minimized.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Volanta</h1>
+<p class="lead">Tested with Volanta 1.19.2 on 30 October 2026. Volanta doesn't run on the simulator's Wine server: it gets a second Wine prefix of its own, so this takes the most steps.</p>
+
+<h2>Get it</h2>
+<p>Volanta's site, <a href="https://volanta.app">volanta.app</a>, serves a Linux AppImage, and that build can't reach MSFS. The flight data comes from a connector, <code>VolantaPlugin_x64.exe</code>, that the app downloads and runs, and the scanner that finds MSFS 2024 looks for <code>UserCfg.opt</code> from <code>LOCALAPPDATA</code>, a variable that exists only inside Wine. You need the Windows build.</p>
+<p>The Windows build is listed in the update channel of the app itself. Open <code>https://api.volanta.app/api/v1/ClientUpdate/latest.yml</code> in a browser: it gives the address of <code>volanta-1.19.2.exe</code> (or a newer one) and its SHA-512. Use a browser. The site and its CDN answer <code>curl</code> with 403 from Cloudflare. The installer is an electron-builder one. The price wasn't recorded.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install volanta ~/Downloads/volanta-1.19.2.exe</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command does three things:</p>
+<ul>
+  <li>It refuses to start while the simulator runs or any program is open in the simulator's prefix, and names those programs. It also refuses while Volanta itself is open.</li>
+  <li>It makes the add-ons prefix when it doesn't exist yet. The next section says what that is, and <code>addon apply</code> makes it too, so the order of the two doesn't matter.</li>
+  <li>It runs the installer in the add-ons prefix with <code>/S</code>, the silent mode, and with Wine's PowerShell switched off for that one run. Wine's <code>powershell.exe</code> accepts any command line, prints nothing and exits with zero. The electron-builder installer asks it whether a process is running in the install folder, takes the empty answer for "yes" and stops with a message that it can't close Volanta, even though Volanta was never installed. With <code>/S</code> and no override it exited with code 2. On 14 October 2026, with <code>powershell.exe</code> switched off, it installed the first time.</li>
+</ul>
+<p>Volanta goes into <code>C:\users\steamuser\AppData\Local\Programs\Volanta</code>. Because the two prefixes share <code>drive_c</code>, the simulator's prefix sees the same folder.</p>
+
+<h2>Make it run</h2>
+<p>First make the simulator listen for SimConnect clients on TCP, if you haven't:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp
+~/flightsim-on-linux/bin/flightsim-on-linux addon apply volanta</code></pre>
+<p>Run both with the simulator closed. The second one does two things.</p>
+<p><strong>It makes the add-ons prefix.</strong> A Wine server serves one prefix, and a program started next to the simulator joins the simulator's server. Volanta needs nothing from the simulator's memory, so it can leave. The add-ons prefix lives in <code>${XDG_DATA_HOME:-~/.local/share}/flightsim-on-linux/addons-prefix</code> and has:</p>
+<ul>
+  <li>its own registry, copied once from the simulator's prefix (<code>system.reg</code>, <code>user.reg</code>, <code>userdef.reg</code>), and its own Wine server;</li>
+  <li><code>drive_c</code> and the drive letters linked to the simulator prefix's, so installs, logins and settings are shared;</li>
+  <li><code>disable</code> in <code>.update-timestamp</code>, so Wine never rewrites the <code>windows</code> folder the two prefixes share;</li>
+  <li>Wine's menu builder switched off, and the X11 driver, because Wine picks the driver for a whole prefix. The X11 driver is the one that took Volanta's icon to the KDE tray: on 30 October 2026 it opened logged in and sat in the tray.</li>
+</ul>
+<p>The registry is a copy and nothing keeps it in step. A program you install in the simulator's prefix later isn't in the add-ons prefix's registry. If you make the prefix again with <code>FSOL_ADDONS_PREFIX_RESET=1</code>, which copies the registry again, whatever the add-ons wrote into the old registry is lost. <code>apply</code> never does that by itself: with the prefix there, it says so and leaves the registry alone. The command refuses while a Wine server holds either prefix.</p>
+<p><strong>It writes <code>SimConnect.cfg</code>.</strong> A program on another Wine server can't use the pipe SimConnect normally uses, so it reaches the simulator over TCP. <code>simconnect-tcp</code> moves the simulator's static IPv4 port from 500, which Linux doesn't let it open, to 5111. The file holds <code>Protocol=IPv4</code>, <code>Address=127.0.0.1</code> and the port that <code>SimConnect.xml</code> declares, and sits in the add-ons prefix folder. The launch script starts Volanta from that folder, which is where its connector looks. If <code>simconnect-tcp</code> hasn't been applied, <code>apply</code> stops and prints the command, and so does <code>check</code>.</p>
+<p>Volanta also gets Chromium options, <code>--in-process-gpu --disable-gpu --disable-gpu-compositing</code>. They keep Chromium's compositor inside the main process instead of a separate GPU process. Without them, on the test machine, the window in the simulator's container stayed white. In the add-ons prefix they draw under either driver, and the window turns white again if the DXVK overrides are missing, because Chromium then falls to Wine's own Direct3D. The prefix's Wine runner forces those overrides on.</p>
+<p>With the GPU inside the main process, Chromium creates a Direct3D 11 device through DXVK, which takes your default GPU. On the test machine that meant 1,186 MiB on the RTX 4080 on 14 October 2026, so the test machine moved Volanta to its integrated Radeon with settings that belong to that machine. The add-on leaves them out. If you have one GPU, do nothing: Volanta runs on it.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut volanta</code></pre>
+<p>This writes an entry called "Volanta" in your application menu, with Volanta's own icon when <code>7z</code> and <code>magick</code> are installed. Unlike most add-ons here, it doesn't need the simulator: it starts Volanta in the add-ons prefix, and with Volanta already open it says so and does nothing.</p>
+<p>To have it start with the simulator:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher volanta</code></pre>
+<p>This writes a user service called <code>flightsim-on-linux-volanta.service</code> and switches it on. It looks for the simulator every 8 seconds. About 20 seconds after a new simulator appears, it opens Volanta with <code>--minimized</code>, once for that simulator and never when Volanta is already open. It never closes Volanta, which stays open after the simulator closes. Stopping the service doesn't close it either. A service is the way because <code>exe.xml</code> would start Volanta on the simulator's Wine server, which is what this add-on avoids.</p>
+<p>On 30 October 2026, at 20:20, Volanta in a second prefix, set up by the test machine's own scripts, connected to the real simulator. Earlier, on 14 October 2026, in the simulator's container, its connector log had <code>Connected to Flight Simulator msfs24</code> and <code>Sending AIRCRAFT_UPDATE</code> for a 777F.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check volanta</code></pre>
+<p>It prints five lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the add-ons prefix exists and has its own registry;</li>
+  <li><code>drive_c</code> of the add-ons prefix is a link to the simulator prefix's;</li>
+  <li><code>.update-timestamp</code> holds <code>disable</code>;</li>
+  <li><code>SimConnect.xml</code> declares a port above 1023;</li>
+  <li><code>SimConnect.cfg</code> points at that port.</li>
+</ul>
+<p>When the prefix is missing, run <code>addon apply volanta</code>. When the fourth line fails, it prints <code>flightsim-on-linux addon apply simconnect-tcp</code>, which is the fix.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>At every start Volanta runs <code>VolantaPlugin_x86.exe</code>, the FSX and P3D connector, and it exits at once with <code>0xC0000135</code>, a missing DLL. It doesn't affect MSFS 2024, and wasn't investigated.</li>
+  <li>The window is white if the DXVK overrides are missing. Start Volanta through the menu entry or the service, which go through the prefix's Wine runner.</li>
+  <li>Don't run one program in both prefixes at once. The two Wine servers share the folder but not the file locks or the mutexes.</li>
+  <li>A flight saved to your Volanta account was never checked.</li>
+  <li>Programs in this prefix see another set of processes, so a program that looks for the simulator by its process name won't find it. Volanta finds the simulator through <code>UserCfg.opt</code> and SimConnect, so it isn't affected.</li>
+</ul>
+
+<h2>Undo</h2>
+<p>Take out the menu entry and the service:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut volanta --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher volanta --off</code></pre>
+<p><code>addon undo volanta</code> removes <code>SimConnect.cfg</code> and leaves the add-ons prefix, because it holds Volanta's registry. It prints the <code>rm -r</code> command that deletes the prefix, to run with Volanta closed. Volanta itself stays in <code>drive_c</code>. Uninstall it from Windows' own list in the simulator's prefix if you want it gone.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

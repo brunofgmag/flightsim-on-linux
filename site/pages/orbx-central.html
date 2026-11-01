@@ -1,0 +1,38 @@
+title: Orbx Central
+description: How to run the Windows build of Orbx Central in MSFS 2024's prefix under Proton: why the native Linux build hides products, the installer with powershell.exe off, the rule that it opens only with the simulator closed, and the menu entry.
+---
+<h1>Orbx Central</h1>
+<p class="lead">Tested with Orbx Central 4.5.50, the Windows build, on 16 October 2026. Use the Windows build in the simulator's prefix and not the Linux AppImage. Open it only with the simulator closed. Nothing in the prefix changes.</p>
+
+<h2>Get it</h2>
+<p>Orbx publishes Orbx Central for Windows and for Linux. Take the Windows installer, <code>orbx-central-4.5.50.exe</code> here, about 738 KB, built with electron-builder. Where it is downloaded from and what it costs aren't recorded here; get it from Orbx.</p>
+<p>The Linux AppImage runs, and on 16 October 2026 it showed only the Channel Islands. Its product list keeps a product only when the product is marked for Linux (<code>operatingSystems.linux</code>), whether you bought it or not. In the cache of that day, 245 of 2,372 products were marked for Linux. Two sound sets from Boris Audio Works for the PMDG 737NG and the B777 that the account owns (<code>owned: true</code> in the same cache) were marked for Windows only, so the AppImage hid them. The Windows build showed both and installed them. The catalogue changes, so these numbers will too: the <code>operatingSystems</code> of each product is in <code>AppData/Roaming/Orbx/Central/Persistence/product.cache.json</code> in the prefix.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install orbx-central ~/Downloads/orbx-central-4.5.50.exe</code></pre>
+<p>The command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. It runs the installer in the simulator's prefix with <code>powershell.exe</code> turned off. An electron-builder installer calls PowerShell, and Wine's <code>powershell.exe</code> exits with code 0 without doing anything. Without the override, this installer stopped on a message that Orbx Central was running (the message was in Portuguese on the test machine) with nothing running. With <code>powershell.exe</code> off, it installed without asking.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply orbx-central</code></pre>
+<p>This changes nothing in the prefix, and then runs the check. The launch script starts Orbx Central with <code>--disable-gpu-sandbox</code>, the Electron option that let it run on the test machine, and only when the simulator is closed.</p>
+<p>The reason for the second part: an open Orbx Central holds the prefix's wineserver. Steam then waits on it and does not start the simulator. On 16 October 2026 the simulator started five seconds after Orbx Central closed. So the menu entry refuses while the simulator runs, and you close Orbx Central, with its menu action, before you start the simulator.</p>
+<p>Orbx's Chromium draws on the GPU and takes video memory that the simulator then lacks: the GPU process of the Windows build held 295 MiB with no option, and the native one 485 MiB. On the test machine <code>--use-gl=angle --use-angle=swiftshader</code>, which draws on the CPU, drew normally and cut the Windows build to 64 MiB. That helps on a card whose memory the simulator needs and is not part of the script. If you want it, pass the options after the script name: <code>addon launch orbx-central launch -- --use-gl=angle --use-angle=swiftshader</code>. Two other ways failed: <code>--disable-gpu</code> did not open the native build, and selecting the integrated Radeon card for the Windows build gave a black window.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut orbx-central</code></pre>
+<p>This writes an entry called "Orbx Central" in your application menu, with its own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close Orbx Central" action. With Orbx Central already open the entry says so and does nothing. The action asks Orbx Central and its <code>saturn-win</code> helper processes to end, the way a polite <code>kill</code> does, and never uses <code>kill -9</code>.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check orbx-central</code></pre>
+<p>It prints one line, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open: the Windows build of Orbx Central is installed in the prefix.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Open, it keeps the simulator from starting through Steam. Close it first.</li>
+  <li>The native build hides products that Orbx hasn't marked for Linux.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo orbx-central</code> has nothing to restore, because <code>apply</code> changed nothing. Take out the menu entry with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut orbx-central --remove</code></pre>

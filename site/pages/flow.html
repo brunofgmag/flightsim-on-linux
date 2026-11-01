@@ -1,0 +1,47 @@
+title: Flow Pro
+description: How to install and run Parallel 42 Flow Pro in MSFS 2024 under Proton: the installer that needs an empty prefix, the two stand-ins for Windows components it shares with ChasePlane, and why the manager is opened through protontricks.
+---
+<h1>Flow Pro</h1>
+<p class="lead">Tested with Flow Pro 2026.44.2.7 on 28 October 2026. It needs the same two small stand-ins for Windows components as <a href="chaseplane.html">ChasePlane</a>, and nothing else in the prefix. Whether it works in flight was never checked.</p>
+
+<h2>Get it</h2>
+<p>Flow Pro is made by Parallel 42. Where to buy it and the price aren't recorded here. The installer on the test machine was <code>Flow Pro.exe</code>, version 2026.33.5.13 when it was installed; the package <code>p42-util-flow-pro</code> in Community is 26.44.2 now, and the manager that opens from it is <code>Flow for MSFS2024.exe</code>, 2026.44.2.7. The installer writes entries for the manager (<code>Flow Manager</code>) and for <code>FlowShare</code> in <code>exe.xml</code>, so the simulator starts both.</p>
+
+<h2>Install it</h2>
+<p>The prefix has to be empty: close the simulator and every other program, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why: on 13 October 2026 the ChasePlane installer ended with "Installation failed" and an access denied message while another program was open in the prefix, and with nothing else open ChasePlane and Flow both installed on the first try. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install flow ~/Downloads/"Flow Pro.exe"</code></pre>
+<p>It refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Nothing else is needed for the installer: no patch, no override. A package that is a Linux link in Community blocks it; <a href="installers.html">Installing add-ons</a> says why and what to do.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply flow</code></pre>
+<p>Close the simulator and the manager first. This is the part of the ChasePlane fix that Flow shares, and the two add-ons keep one copy of it. The command builds two small programs on your machine, copies them to <code>C:\appresolver</code> in the prefix and registers them:</p>
+<ul>
+  <li><code>AppResolverShim.dll</code>, a stand-in for the Windows COM class <code>CAppResolver</code>. The notification library that Parallel 42 programs use asks that class for the application id of the process, Wine doesn't have it, and the program stops in the constructor of its window. The stand-in answers with the name of the process. It needs the .NET SDK to build (<code>dotnet-sdk</code> on Arch, <code>dotnet-sdk-8.0</code> on Debian and Ubuntu), or else the compiler in Proton's wine-mono, run through Wine in your prefix.</li>
+  <li><code>toaststub.dll</code>, a stand-in for the WinRT class <code>Windows.UI.Notifications.ToastNotificationManager</code>, which Wine doesn't implement either. It answers with a notifier that does nothing. It needs <code>x86_64-w64-mingw32-gcc</code> to build (<code>mingw-w64-gcc</code> on Arch, <code>gcc-mingw-w64-x86-64</code> on Debian and Ubuntu).</li>
+</ul>
+<p>Flow needs no Proton patch of its own and no Steam launch option. If you also use ChasePlane, the <a href="chaseplane.html">ChasePlane page</a> has the patches that matter for it.</p>
+
+<h2>Start it</h2>
+<p>The simulator starts the manager from <code>exe.xml</code>. For a manager you open yourself, with the simulator closed:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut flow</code></pre>
+<p>This writes an entry called "Flow Pro" in your application menu, with the manager's own icon when <code>7z</code> and <code>magick</code> are installed. With the simulator closed it runs <code>wine &lt;manager&gt;; wineserver -w</code> through <code>protontricks -c</code>. Since 2026.44.2.7 the manager copies itself to <code>Temp\Parallel 42\Managers\</code> inside the prefix and exits, and <code>protontricks-launch</code> kills that copy when the first process returns. Waiting for the Wine server keeps the container, and the copy, alive. With the simulator open, the entry starts the manager in the simulator's container instead. There is no watcher: the manager and FlowShare run from <code>exe.xml</code>.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check flow</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li><code>AppResolverShim.dll</code> is in <code>C:\appresolver</code> and registered for the CAppResolver class;</li>
+  <li><code>toaststub.dll</code> is there and registered for the ToastNotificationManager class.</li>
+</ul>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Using Flow inside the simulator was never checked.</li>
+  <li>An installer or an update rewrites <code>exe.xml</code>.</li>
+  <li>The stand-ins date from July and were not measured again with each Flow build; a new build can ask Windows for something else.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut flow --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon undo flow</code></pre>
+<p>The first takes out the menu entry. <code>undo</code> removes the two stand-ins and their registry entries unless <a href="chaseplane.html">ChasePlane</a> still uses them, in which case they stay until you undo that too. A stand-in that was already in <code>C:\appresolver</code> before the fix is put back.</p>

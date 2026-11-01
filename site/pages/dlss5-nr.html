@@ -1,0 +1,73 @@
+title: DLSS 5 Neural Rendering
+description: How to run DLSS 5 Neural Rendering in MSFS 2024 under Proton on an RTX 40 card: a ReShade add-on built from source, the NVIDIA model it needs, and how to confirm from the log that it loaded.
+---
+<h1>DLSS 5 Neural Rendering</h1>
+<p class="lead">Tested on 20 October 2026 with an RTX 4080 and driver 615.78.08, using commit <code>5d493c9</code> of a fork of <a href="https://github.com/NapXDD/addon-dlssnr-linux">addon-dlssnr-linux</a> and the 310.8.0 model. This is a ReShade add-on that runs NVIDIA's model over the simulator's own DLSS output. It costs a lot of frame rate.</p>
+
+<p><span class="tag warn">touches add-on files</span> The model is not in this project, and this project doesn't host it. It is NVIDIA's <code>nvngx_dlssnr.dll</code>, and the RTX 40 build below is a copy that the community modified, without a signature. NVIDIA doesn't publish it. Decide for yourself whether you want to run it.</p>
+
+<p>There is no <code>addon</code> command for this one. You build two files, download a third and copy all three, so <code>addon list</code> doesn't show it and <code>addon check</code> can't prove it. The check is the log, further down.</p>
+
+<h2>What you need</h2>
+<ul>
+  <li>An NVIDIA RTX 40 or RTX 50 card and driver 610 or newer. Only an RTX 4080 was tested here.</li>
+  <li><a href="reshade.html">ReShade</a> in the simulator's folder.</li>
+  <li>DLSS turned on in the simulator's graphics settings. Without it the add-on does nothing.</li>
+</ul>
+<p>The test machine runs this on Proton FS2024 with no launch option for it. The add-on's own instructions ask for <code>PROTON_FORCE_NVAPI=1</code> and a <code>dxgi</code> override on other Protons. Neither is set here, and the <code>dxgi</code> one isn't needed for the reason <a href="reshade.html">the ReShade guide</a> gives.</p>
+
+<h2>Build the add-on</h2>
+<p>Use the fork, not the original project's releases. The releases have no model resolution setting, follow the wrong one of the simulator's two DLSS features, and hook DLSS in the wrong order next to the <a href="glass-cockpit-dlss-fix.html">Glass Cockpit DLSS Fix</a>.</p>
+<pre><code>git clone -b feat/model-scale https://github.com/brunofgmag/addon-dlssnr-linux
+cd addon-dlssnr-linux
+bash install-deps.sh
+bash build.sh</code></pre>
+<p><code>install-deps.sh</code> uses <code>sudo</code> for clang and LLD. It also puts the Windows SDK in <code>~/.xwin</code>, a shader compiler in <code>~/.local/dxc</code> and RenoDX in <code>~/projects/renodx</code>. The SDK comes through <code>xwin</code>, and the script accepts Microsoft's licence for you, so read it first if that matters to you. The SDK takes a few hundred MB.</p>
+<p><code>build.sh</code> writes <code>dlssnr-linux.addon64</code> and <code>nvngx.dll_nrfwd.dll</code> to <code>build/</code>.</p>
+
+<h2>Get the model</h2>
+<p>This is the build that runs on an RTX 40 card, from the release <a href="https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.0-RTX40">dlssnr-310.8.0-RTX40</a> of RankFTW/rhi-repo.</p>
+<pre><code>curl -fLO https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.0-RTX40/nvngx_dlssnr_310.8.0-RTX40.zip
+unzip nvngx_dlssnr_310.8.0-RTX40.zip
+sha256sum nvngx_dlssnr.dll</code></pre>
+<p>The sum must be <code>4b8d19bc3eff58a084f5eca7489c921501c203450169fb82ff4f649a4482ba05</code>. Don't guess with another model: the add-on's author saw a mismatched one report success on every frame and then crash the game minutes later. An RTX 50 card uses the unmodified model the add-on's README names, which wasn't tried here.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator first. Run this from the folder of the fork, with the model's folder in place of <code>/path/to/model</code>.</p>
+<pre><code>SIM=$(~/flightsim-on-linux/bin/flightsim-on-linux machine --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["sim_install"])')
+cp build/dlssnr-linux.addon64 build/nvngx.dll_nrfwd.dll /path/to/model/nvngx_dlssnr.dll "$SIM/"</code></pre>
+
+<h2>Use it</h2>
+<p>Start a flight with DLSS on and press Home to open ReShade. In the Add-ons tab the add-on is called <code>DLSSNR Linux</code>. F10 turns the effect on and off, and so does the "Enable Neural Rendering (F10)" box.</p>
+<p>"Model resolution" runs the network smaller, for more frame rate. It and the other model settings only take effect after the "Apply model settings" button.</p>
+<p>On the test machine, in 4K with DLSS Performance and no frame generation, at Copenhagen with the Orbx scenery:</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Model resolution</th><th>Frames per second</th></tr>
+  <tr><td>Effect off</td><td>53 to 54</td></tr>
+  <tr><td>0.50</td><td>33 to 40</td></tr>
+  <tr><td>0.35</td><td>44</td></tr>
+  <tr><td>0.25</td><td>45 to 46</td></tr>
+</table>
+</div>
+<p>At 0.50 the engine cowlings already look flat, and at 0.35 they get a bright halo on the edge. With frame generation and a limit of 33 frames per second, 66 on screen, 0.60 held the 66 while turning the camera, with short drops to 62, and 0.75 fell to 54.</p>
+
+<h2>Check it</h2>
+<p>Read <code>ReShade.log</code> in the simulator's folder after the flight has loaded.</p>
+<pre><code>grep -E 'nr-fwd: model|hooked 5 NGX exports' "$SIM/ReShade.log"</code></pre>
+<p>The first line to look for starts with <code>nr-fwd: model nvngx_dlssnr.dll</code> and gives the model's version and sha256. The second is <code>hooked 5 NGX exports on _nvngx.dll</code>, and with the Glass Cockpit DLSS Fix installed it ends in <code>, over the Glass Cockpit DLSS Fix</code>.</p>
+<p>The add-on warns that the RTX 40 model isn't the build it was tested with. That warning is expected. So is <code>WARNING DLSS evaluate hook was changed by another mod</code> in the Glass Cockpit DLSS Fix's log: the calls still reach it.</p>
+
+<h2>With the Glass Cockpit DLSS Fix</h2>
+<p>Both add-ons hook the same DLSS call, and this one has to run last. If the fix's <code>.addon64</code> is in the same folder, the add-on waits up to 60 seconds for the fix to hook, then hooks over it. In the other order the screens got cloud-like patches and shimmering grain. The wait looks for that file name, so the fix's standalone <code>dxgi.dll</code> version doesn't count.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>At 0.50 and below, raising the model's intensity settings doesn't bring back the shape lost on the engine cowlings.</li>
+  <li>A newer model, 310.9.16 from <a href="https://github.com/clshortfuse/openNR">openNR</a>, ran about 14% faster on the same card, but on a later build of the add-on that isn't published, so it isn't part of this guide.</li>
+</ul>
+
+<h2>Undo</h2>
+<p>With the simulator closed:</p>
+<pre><code>rm "$SIM/dlssnr-linux.addon64" "$SIM/nvngx.dll_nrfwd.dll" "$SIM/nvngx_dlssnr.dll"</code></pre>
+<p>ReShade and the Glass Cockpit DLSS Fix stay. <code>$SIM</code> is the folder from the install step.</p>

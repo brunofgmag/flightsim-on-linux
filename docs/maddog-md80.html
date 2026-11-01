@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maddog MD-80 · Flightsim on Linux</title>
+  <meta name="description" content="How to install, register and run the Leonardo Fly the Maddog MD-80 in MSFS 2024 under Proton: the installer, registration through the Load Manager, .NET Framework 4.8 for the MDClient program, a native Manager for liveries and options, and what is still unproven.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Maddog MD-80 (Leonardo)</h1>
+<p class="lead">Tested with Fly the Maddog 20th Anniversary Edition 2.1 b283 on 22 October 2026. It needs no Proton patch of its own, but it takes several steps: register with the simulator closed, add .NET Framework 4.8 for one program, and use a native Manager, because the vendor's Manager doesn't open on Wine. It was tested on <a href="proton-fs2024.html">Proton FS2024</a>. Stock Proton was not tried.</p>
+
+<p><span class="tag warn">touches add-on files</span> The native Manager writes the Maddog's own files: its liveries, <code>layout.json</code>, <code>manifest.json</code> and option files. <code>addon undo</code> doesn't put those back. Reinstall the Maddog for that.</p>
+
+<h2>Get it</h2>
+<p>The aircraft is a paid product of Leonardo, sold on <a href="https://www.flythemaddog.com">flythemaddog.com</a>. The test machine's copy was bought through the Contrail and simMarket route, and registration asks for the simMarket registration number. The installer is an Inno Setup program. Its name starts with <code>Leonardo-Fly-the-Maddog-20th-Anniversary-Edition-FS24</code> and carries the build number.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install maddog-md80 ~/Downloads/Leonardo-Fly-the-Maddog-20th-Anniversary-Edition-FS24-installer.exe</code></pre>
+<p>Use the name of the file you downloaded. Without a file name the command only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it runs the installer alone in the simulator's prefix. On the test machine the Contrail store downloaded the installer and it ran in that prefix. The runner used there was not recorded.</p>
+<p>At its end the installer opens the vendor's Maddog Manager. On the test machine that program exited with code 1. It is a WinUI 3 program, and WinUI 3 doesn't open on Wine (see "Known problems"). The install was complete: the Load Manager and MDClient were in the prefix, and the aircraft registered and flew afterwards.</p>
+
+<h3>Register it</h3>
+<p>The vendor's quick guide says to register in the Maddog Manager, which doesn't open. The Load Manager (<code>Load Manager\maddog_lm.exe</code>, a 32-bit Delphi program) has the same registration screen and does open. Close the simulator and every other program of the prefix, then:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch maddog-md80 register</code></pre>
+<p>It refuses to start while the simulator or another program holds the prefix, and names what to close. Otherwise it opens the Load Manager alone in the prefix and waits until you close it. The key icon at the foot of its sidebar opens "Registration". It asks for your e-mail and the "Product Registration Number" from simMarket, and shows the machine's serial number (SN) and a Register button. The Load Manager writes the answer from Leonardo's server into <code>registration.ini</code>. This project never prints that file's key.</p>
+<p>The SN comes from the serial of the <code>C:</code> volume that Wine reports, and the key carries that SN. By the vendor programs' code, a prefix recreated with another <code>C:</code> serial invalidates the key, and the reset on the same screen frees the activation so you can register again. Nobody has seen the serial change.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply maddog-md80</code></pre>
+<p>Close the simulator first. It makes one change in the prefix, only when .NET Framework 4.8 is there, and then runs the check: it sets <code>mscoree</code> to <code>native</code> under <code>HKCU\Software\Wine\AppDefaults\MDClient.exe\DllOverrides</code>, so that one program runs on Microsoft's .NET Framework 4.8 and not on wine-mono. Every other .NET program stays on wine-mono. If the key already holds another value, the command leaves it alone and says so.</p>
+<p>The reason is cost. MDClient is the .NET Framework program the aircraft talks to while it flies. A timer in it ticks every 10 milliseconds. With the setting that closes MDClient together with the simulator on, each tick asks Windows for the simulator's process by name. On wine-mono that call keeps the wineserver, which the simulator shares, busy. Measured on the test machine on 22 October 2026, with the MD-80 loaded:</p>
+<table>
+  <tr><th>MDClient runs on</th><th>Context switches a second</th><th>MDClient CPU</th><th>Wineserver CPU</th></tr>
+  <tr><td>wine-mono</td><td>113,000 to 169,000</td><td>41 to 47%</td><td>40 to 44%</td></tr>
+  <tr><td>.NET Framework 4.8</td><td>3,722 to 4,045</td><td>14 to 23%</td><td>10 to 19%</td></tr>
+</table>
+<p>With MDClient paused, the wineserver sat at 12%. With the simulator closed, MDClient on wine-mono cost 1% and the wineserver 2%, because the checks stop before the expensive call. The measurement shows which call costs, not why wine-mono makes it so slow.</p>
+
+<h3>How .NET Framework 4.8 reaches the prefix</h3>
+<p>The add-on doesn't carry its own copy of the .NET installer. The <a href="dotnet48.html">.NET Framework 4.8 add-on</a> does this job, and the Maddog needs it first:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply dotnet48</code></pre>
+<p>Close the simulator first. It downloads the .NET 4.8 and 4.0 installers from Microsoft, checks them against pinned hashes, installs 4.8 and Microsoft's <code>mscoree.dll</code>, and sets the registry values that go with them. Every other .NET program stays on wine-mono, which is told to ignore the Microsoft libraries now in the prefix. If you already ran <code>addon apply fenix-a320</code> or <code>addon apply dotnet48</code>, .NET 4.8 is there and you can skip this. Run <code>addon apply maddog-md80</code> afterwards.</p>
+<p>The originals of the files it replaces go in <code>compatdata/2537590/flightsim-on-linux-backup/dotnet48</code>. <code>addon undo dotnet48</code> puts them back. <code>addon undo maddog-md80</code> doesn't, because other add-ons may need them.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut maddog-md80</code></pre>
+<p>This writes two entries in your application menu, each with its program's icon when <code>7z</code> and <code>magick</code> are installed: "Maddog Manager", the native Manager, and "Maddog registration", the same as <code>addon launch maddog-md80 register</code> above.</p>
+
+<h3>The native Manager</h3>
+<p>The vendor's Maddog Manager is a WinUI 3 program and doesn't open on Wine. You don't need it to fly. The native Manager does the same jobs directly on Linux. It is a Python program with a Qt 6 window, so it needs <code>python-pyqt6</code> on Arch or <code>python3-pyqt6</code> on Debian and Ubuntu. It has three pages:</p>
+<ul>
+  <li><strong>Home.</strong> The installed version, whether Leonardo's site has a newer build, whether the aircraft is registered, the panel state that applies the next time the Maddog loads, and the Navigraph AIRAC cycle in the Maddog's work folder.</li>
+  <li><strong>Liveries.</strong> The official liveries from flythemaddog.com, the ones in a local folder of zips, and the ones installed that are in neither. It installs and removes liveries and downloads the paint kit, with pause and resume. With the simulator open it refuses to install or remove, because the simulator reads the Maddog's package only when it starts.</li>
+  <li><strong>Options.</strong> The same options as the vendor's Manager, from the simulator to the axis calibration. Each change is saved at once. Export and Import use the vendor's <code>.mdc</code> file.</li>
+</ul>
+<p>Registration stays in the Load Manager. The Manager leaves out the avatars, which the vendor's Manager also hides in MSFS 2024, and it doesn't cover MSFS 2020. It finds the prefix and the Community folder from this project, or you can name the prefix with <code>--prefix</code>. Where the Load Manager's <code>FSPath</code> points at a folder that exists, the Manager uses that folder, because that is the folder the vendor's own programs use.</p>
+<p>It writes the files the vendor's programs write: the livery folders and aircraft files in the Maddog package in Community, the package's <code>layout.json</code> and <code>manifest.json</code>, which it rebuilds after every install or removal the way the installer does, its <code>maddogx.ini</code> and <code>maddogx.mdx</code>, and the Maddog's own <code>manager.ini</code> and option files. What this page says about the vendor's Manager comes from its decompiled code. Nobody has seen it run here. By that code, the native Manager differs in four ways: it also rebuilds <code>layout.json</code> when you remove a livery, where the vendor's leaves the removed livery listed; Import writes the lights straight into <code>maddogx.ini</code>; it copies a panel state only when you choose one, where the vendor's copies it again every time it opens; and it reads a local zip's <code>livery.cfg</code> and thumbnail without unpacking the whole zip. On the test machine 17 liveries were installed with it.</p>
+
+<h3>MDClient</h3>
+<p>MDClient has to start with the simulator and run in the simulator's container. The plain way is <code>exe.xml</code>: the simulator starts MDClient itself. On 22 October 2026 MDClient ran that way on the test machine, on .NET Framework 4.8 once the override was set. If your <code>exe.xml</code> already starts MDClient, you have nothing more to do.</p>
+<p>An <code>exe.xml</code> entry starts MDClient whatever aircraft you fly, and MDClient costs CPU all the while. The alternative is a service that starts it only when the Maddog is loaded. It reads the loaded aircraft from the simulator over SimConnect on a TCP port, so it needs the <code>simconnect-tcp</code> add-on first (<code>addon apply simconnect-tcp</code>). Then:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher maddog-md80</code></pre>
+<p>This writes a user service called <code>flightsim-on-linux-maddog-md80.service</code> and switches it on. It looks at the simulator every 8 seconds. When the loaded aircraft's name contains "Maddog" (case ignored), it starts MDClient inside the simulator's container, and never a second copy. When another aircraft loads, it asks MDClient to end with a plain termination signal, and it never kills it. It does the same when the simulator closes, if it started that MDClient.</p>
+<p><strong>The watcher has not caught a real MD-80 yet.</strong> The journal of the test machine's own watcher, a script that predates this one, has no line for it opening MDClient, so this way has not been seen working with a real MD-80. <code>exe.xml</code> is the plain way. To start MDClient by hand with the simulator running:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch maddog-md80 launch-mdclient</code></pre>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check maddog-md80</code></pre>
+<p>It changes nothing, so you can run it with the simulator open. Each line starts with <code>ok</code> or <code>FAIL</code>:</p>
+<ul>
+  <li>the Maddog package is in Community;</li>
+  <li>the Load Manager's <code>FSPath</code> is the simulator's Community folder;</li>
+  <li><code>registration.ini</code> holds a key and a purchase code. The check reads the file and prints only whether they are there;</li>
+  <li>the prefix has .NET Framework 4.8 and Microsoft's <code>mscoree.dll</code>;</li>
+  <li><code>mscoree</code> is native for MDClient;</li>
+  <li>when the service file above exists, SimConnect listens on a TCP port above 1023.</li>
+</ul>
+<p>Each <code>FAIL</code> says what to run.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li><strong>The vendor's Manager doesn't open.</strong> It is a WinUI 3 program. Use the native Manager above.</li>
+  <li><strong>A new <code>C:</code> serial invalidates the key.</strong> See "Register it".</li>
+  <li><strong>The EFB starts switched off.</strong> Hold its home button.</li>
+  <li><strong>The Load Manager has a black background and white text.</strong> That is how the program looks. The screenshot in the vendor's Load Manager manual is the same.</li>
+  <li><strong>The watcher has not caught a real MD-80.</strong> See "MDClient".</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo maddog-md80</code></pre>
+<p>Close the simulator first. It deletes the <code>mscoree</code> override for MDClient, so MDClient runs on wine-mono again. .NET Framework 4.8 stays in the prefix. The registration and the Maddog package are not touched, so what the native Manager wrote stays. Take out the menu entries and the service with:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut maddog-md80 --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher maddog-md80 --off</code></pre>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

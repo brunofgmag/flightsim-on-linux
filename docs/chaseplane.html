@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChasePlane · Flightsim on Linux</title>
+  <meta name="description" content="How to install and run ChasePlane in MSFS 2024 under Proton: the installer that needs an empty prefix, the two stand-ins for Windows components, the Steam launch option, the bridge service, and the Proton FS2024 patches that keep the camera drag and the frame rate right.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>ChasePlane</h1>
+<p class="lead">Tested with ChasePlane 2026.39.1.16 on 17 October 2026. It runs after two small stand-ins for Windows components are in the prefix, one launch option is set in Steam, and the bridge is started with the host's Wine, attached to the simulator's Wine server. The camera drag and a stutter need <a href="proton-fs2024.html">Proton FS2024</a>.</p>
+
+<h2>Get it</h2>
+<p>ChasePlane is made by Parallel 42. Where to buy it and the price aren't recorded here. The installer on the test machine was <code>ChasePlane - Experimental.exe</code>, version 2026.39.1.16, a real .NET 8 installer (it doesn't run on wine-mono). It installs the package <code>p42-util-chaseplane</code> (26.39.1) into Community, together with the manager <code>ChasePlane for MSFS2024.exe</code> and the bridge <code>CP MSFS Bridge.exe</code>, and it writes the entries for them in <code>exe.xml</code>.</p>
+
+<h2>Install it</h2>
+<p>The prefix has to be empty: close the simulator and every other program, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. On 13 October 2026 the installer ended with "Installation failed" and an access denied message, error 5 from <code>EnumProcessModulesEx</code>, while PMDG Operations Center 3 was open in the same prefix. With nothing else open it installed on the first try. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install chaseplane ~/Downloads/"ChasePlane - Experimental.exe"</code></pre>
+<p>It refuses to start while the simulator runs or any program is open in the prefix, and names those programs. It runs the installer in the simulator's prefix with Proton's Wine. Nothing else is needed for the installer: no patch, no override.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply chaseplane</code></pre>
+<p>Close the simulator and the manager first. The command builds two small programs on your machine, copies them into the prefix, registers them, and prints the one step that is yours. Building needs the .NET SDK for the first one (<code>dotnet-sdk</code> on Arch, <code>dotnet-sdk-8.0</code> on Debian and Ubuntu); without it, the build falls back to the compiler in Proton's wine-mono, run through Wine in your prefix. The second one needs <code>x86_64-w64-mingw32-gcc</code> (<code>mingw-w64-gcc</code> on Arch, <code>gcc-mingw-w64-x86-64</code> on Debian and Ubuntu).</p>
+<ul>
+  <li><strong>A stand-in for the CAppResolver class.</strong> ChasePlane's libraries ask Windows, through the COM class <code>CAppResolver</code>, for the application id of their process. Wine doesn't have the class, and the program stops in the constructor of its window with "class not registered". <code>AppResolverShim.dll</code>, a small managed COM server, answers with the name of the process. It goes to <code>C:\appresolver</code> and is registered under that class. On 1 November 2026, in a disposable prefix on the test machine, a small client that asked the registered class for the id of its own process got the process name back, with the DLL built by the .NET SDK and with the one built by wine-mono's compiler. Without the registration the same client got "class not registered".</li>
+  <li><strong>A stand-in for the WinRT ToastNotificationManager.</strong> After the first one, the same libraries ask for the WinRT class <code>Windows.UI.Notifications.ToastNotificationManager</code> to create their notifier, and Wine doesn't implement that either. <code>toaststub.dll</code> answers with a notifier that does nothing. It goes to the same folder, with its own registry entry.</li>
+  <li><strong>httpapi off for the bridge.</strong> The bridge starts its web socket server on port 8652 through Wine's <code>http.sys</code>, and Wine has the HTTP server without the web socket part. The first connection of the panel dies with <code>The type initializer for 'System.Net.WebSockets.WebSocketProtocolComponent' threw an exception</code>. Turning <code>httpapi</code> off for <code>CP MSFS Bridge.exe</code> alone, in <code>HKCU\Software\Wine\AppDefaults\CP MSFS Bridge.exe\DllOverrides</code>, makes the server fail the way it used to and fall back to its own plain TCP one; the log then says <code>WS: Raw TCP fallback activated</code>, port 8651 answers 200 and 8652 completes the handshake. The registry entry covers the bridge however it starts, including when the simulator starts it. The launch script also turns it off.</li>
+  <li><strong>The Steam launch option.</strong> <code>apply</code> doesn't edit Steam's files. It prints the line to add, with the value worked out for your machine:
+<pre><code>STEAM_COMPAT_LIBRARY_PATHS=/path/to/your/steam/library</code></pre>
+  In Steam, open the properties of Microsoft Flight Simulator 2024 and put that before <code>%command%</code> in the launch options, keeping what is already there. The path is the Steam library that holds the simulator, the folder that has <code>steamapps</code> inside; <code>bin/flightsim-on-linux machine --json</code> prints it as <code>sim_library</code>. Without the option, Proton maps drive S: to the <code>steamapps</code> folder itself, the path of the simulator has no <code>steamapps\common</code> in it, and the bridge doesn't recognise the installation ("Unknown version") and quits. Start the simulator once afterwards so Proton maps drive S: again.</li>
+</ul>
+<p>Proton FS2024 carries six patches that ChasePlane needs. Each is in the check:</p>
+<ul>
+  <li><code>server-process-vm-eperm-per-call.patch</code>, the stutter. When the fast way of reading another process's memory fails once with EPERM, stock Wine switches it off for every process and from then on every read stops the target's main thread with ptrace. ChasePlane reads the simulator's camera all the time, and the simulator's main thread stood still for up to 300 ms of every second. The patch falls back to ptrace for that one call only.</li>
+  <li>The camera drag arrow. During a drag the simulator hides the cursor and clips it to one pixel for 29 ms, releases it for 1 ms, and repeats. Five patches to the Wayland driver make the arrow behave:
+    <ul>
+      <li><code>winewayland-hidden-cursor-window-clip-confines.patch</code>: when the cursor is hidden and the clip covers the whole window, the pointer is confined instead of locked. A locked pointer drops absolute motion, and the arrow froze until the window lost focus.</li>
+      <li><code>winewayland-commit-pointer-constraint-changes.patch</code>: the surface is committed after every lock or confinement the clip makes or releases. KWin 6.8 applies those changes only at the next commit, and the simulator's main surface almost never commits.</li>
+      <li><code>winewayland-small-clip-warps-pointer-inside.patch</code>: when the clip is smaller than the window, the pointer is first moved to the nearest point of the clip, as Windows does. A confinement only holds while the pointer is already inside it, and once it drifted one pixel in a released millisecond, the arrow wandered off the screen.</li>
+      <li><code>winewayland-clip-at-least-one-pixel.patch</code>: a confinement never gets an empty region. At 125% scale a one-pixel clip turned into an empty region, and one drag sent 849 of them.</li>
+      <li><code>winewayland-warp-before-confining.patch</code>: the warp comes before the confinement and a new confinement replaces the old one. KWin 6.7 decides whether a confinement holds only when it is created, and only if the pointer is inside at that moment. In an isolated KWin 6.7.5 only 2 of 97 one-pixel confinements held before this patch, and the arrow shook in place.</li>
+    </ul>
+  </li>
+</ul>
+<p>Under the Wayland driver only. What these patches do in the simulator in flight isn't recorded beyond the numbers above.</p>
+
+<h2>Start it</h2>
+<p>The installer writes entries for the manager and the bridge in <code>exe.xml</code>, so the simulator opens the manager by itself. The bridge entry doesn't leave a bridge standing: started from inside the simulator's container with <code>nsenter</code>, which is what <code>flightsim-on-linux run</code> does and what an <code>exe.xml</code> entry amounts to, it exited in 0.2 seconds with code 0 and no log, in more than 30 tries on 14 October 2026. The bridge does start when the simulator opens it itself through <code>chaseplanemsfs24://</code>, but that path doesn't pass <code>httpapi=d</code>, which is why the registry entry above exists.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher chaseplane
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut chaseplane</code></pre>
+<p>The first writes a user service, <code>flightsim-on-linux-chaseplane.service</code>, and switches it on. It looks every 8 seconds. About 20 seconds after a new simulator appears, and only when nothing listens on port 8651, it runs <code>launch-bridge</code>, which starts the bridge with Proton's own Wine on the host, in the simulator's prefix, with <code>httpapi=d</code> and <code>chaseplanemsfs24://</code> as its argument. It copies the prefix, the synchronisation mode (<code>WINEESYNC</code>, <code>WINEFSYNC</code>, <code>PROTON_NO_NTSYNC</code>), the display (<code>WAYLAND_DISPLAY</code>, <code>DISPLAY</code>, <code>XAUTHORITY</code>) and the DLL path and overrides from the running simulator's process with <code>bin/flightsim-on-linux sim-env</code>, so nothing about your session is written in the script. On 17 October 2026 the old service pinned <code>wayland-0</code> while the only socket was <code>wayland-1</code>, and the bridge died four times with a <code>Win32Exception</code> in the constructor of its window. The bridge gets the Wine display driver the simulator has, found from <code>PROTON_ENABLE_WAYLAND</code> in the same process: Wayland when it is 1, X11 otherwise. The old private service forced the same driver because a bridge on the other one failed in the constructor of its window; that was not measured again here. When the simulator closes it sends the bridge SIGTERM. That matters: a bridge left behind keeps Steam counting the game as running. <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a> has the rest.</p>
+<p>The second writes a menu entry called "ChasePlane" that opens the manager. With the simulator closed it runs <code>wine &lt;manager&gt;; wineserver -w</code> through <code>protontricks -c</code>, the way the <a href="flow.html">Flow</a> manager has to open: a Parallel 42 manager can hand over to a copy of itself in a temporary folder and exit, and a bare <code>protontricks-launch</code> would kill the copy when the first process returns. With the simulator open it starts the manager in the simulator's container.</p>
+<p>The bridge starts with the host's Wine and not with the container's. On 14 October 2026 the only bridge that stayed up was the one a service of the test machine started with the host's Wine, attached to the simulator's Wine server; on 17 October 2026 a bridge started that way again connected to SimConnect, opened ports 8651 and 8652 and stayed up. In the container the bridge ran five queries for the modules of its own process, which succeeded, loaded <code>System.Diagnostics.TraceSource</code> and left. With the host's Wine those queries fail with error 5. The reading is that the bridge decides to quit when it can read its own path; that was not confirmed, and a new bridge build can change it. <code>launch-bridge</code> follows the route that stayed up. It was tested here with a stand-in for Wine and a stand-in for the simulator's process folder, and has not been run against the simulator since it was written, so if the panel stays on "loading" and nothing listens on 8651, look at <code>~/.cache/flightsim-on-linux/logs/chaseplane-bridge.log</code> first.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check chaseplane</code></pre>
+<p>It prints eleven lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li><code>AppResolverShim.dll</code> is in <code>C:\appresolver</code> and registered for the CAppResolver class;</li>
+  <li><code>toaststub.dll</code> is there and registered for the ToastNotificationManager class;</li>
+  <li><code>httpapi</code> is off for <code>CP MSFS Bridge.exe</code>;</li>
+  <li>the launch options saved in Steam for the simulator hold <code>STEAM_COMPAT_LIBRARY_PATHS</code> with your library;</li>
+  <li>drive S: of the prefix is the library itself;</li>
+  <li>the six Proton patches above are in your Proton build, and its files are the ones the build recorded.</li>
+</ul>
+<p>When the Proton lines fail, rebuild with <code>bin/flightsim-on-linux proton build</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The <code>ChasePlane Bridge</code> entry that the installer puts in <code>exe.xml</code> leaves no bridge standing, as above.</li>
+  <li>The panel stays on "loading" for ever with no error when a bridge ran once without <code>httpapi</code> off: a leftover <code>winedevice.exe</code> hosting <code>http.sys</code> holds the connections the simulator had opened to port 8652. <code>ss -tnp state established '( sport = :8652 )'</code> shows who holds each connection. Ending that <code>winedevice.exe</code> frees them, and on 17 October 2026 the Overlay and the Toolbar reconnected within 20 seconds.</li>
+  <li>The first start after an install patches files of the simulator and asks you to restart it. It happens once for each ChasePlane build.</li>
+  <li><code>WS: Raw TCP fallback activated</code> in the bridge log is the intended state.</li>
+  <li>The two stand-ins date from July. They were not measured again with each ChasePlane build, and a new build can ask Windows for something else.</li>
+  <li>The installers don't need a virtual desktop: the October installers opened without one.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher chaseplane --off
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut chaseplane --remove
+~/flightsim-on-linux/bin/flightsim-on-linux addon undo chaseplane</code></pre>
+<p>The first two take out the service and the menu entry. <code>undo</code> removes the <code>httpapi</code> override of the bridge, and removes the two stand-ins and their registry entries unless <a href="flow.html">Flow</a> still uses them, in which case they stay until you undo that too. A stand-in that was already in <code>C:\appresolver</code> before the fix is put back. It doesn't touch your Steam launch options: remove <code>STEAM_COMPAT_LIBRARY_PATHS</code> there yourself if you want it gone.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

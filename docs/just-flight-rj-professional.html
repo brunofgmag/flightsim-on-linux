@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Just Flight RJ Professional · Flightsim on Linux</title>
+  <meta name="description" content="How to install the Just Flight RJ Professional for MSFS 2024 under Proton: the InstallShield installer and its activation, the environment variable that makes the purchase check fail, and what the check reads.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Just Flight RJ Professional</h1>
+<p class="lead">Tested with the RJ Professional 0.1.6 on 16 October 2026. The installer needs no patch and no setting in the prefix. It has one trap, an environment variable that some tools put in everything they start, and <code>addon install</code> clears it for you.</p>
+
+<h2>Get it</h2>
+<p>The RJ Professional is a paid add-on from Just Flight. You download it from your Just Flight account, and the activation checks your purchase. This guide doesn't have the download page, so look in your account. On the test machine the download was <code>Install_RJ_Professional_MSFS2024_0.1.6.zip</code>, a zip with an InstallShield <code>setup.exe</code> inside.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every other program of its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the zip to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install just-flight-rj-professional ~/Downloads/Install_RJ_Professional_MSFS2024_0.1.6.zip</code></pre>
+<p>Without the file name it only prints where to get the program. With it, the command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. Then it unpacks the zip into a temporary folder, runs <code>setup.exe</code> in the simulator's prefix, and deletes the temporary folder when the installer ends, whatever the installer returns. It needs <code>unzip</code> for that. You can also unpack the zip yourself and give the command the <code>setup.exe</code>. On the test machine the installer found the Community folder by itself and ran the activation through <code>WebView2.exe</code>.</p>
+<h3>The environment variable that breaks the activation</h3>
+<p>The installer's own library for the account check, <code>AccountX.dll</code>, starts <code>WebView2.exe</code> with a web address and no folder in front of its name. That program sits in the support folder that InstallShield unpacks, which is the current folder. Windows looks in the current folder for a program started without a path, unless the environment variable <code>NoDefaultCurrentDirectoryInExePath</code> is set. Wine does the same. If the variable is set, the installer shows "Error Creating process" and then "Unable to confirm a valid purchase of the product".</p>
+<p>Some tools set that variable for everything they start, and Wine inherits it. Claude Code, the AI coding tool, is one of them. On the test machine it was set in that tool's process and in what the tool started, and not in the desktop shell, the file manager or Steam, so the installer worked when opened from the desktop and failed when started from that tool. <code>addon install</code> removes the variable before it starts the installer, so you don't have to do anything. If you start the installer by hand from a terminal that has it, which <code>env | grep NoDefault</code> shows, put <code>env -u NoDefaultCurrentDirectoryInExePath</code> in front of the command. With the variable out of the way, the installer opened the Just Flight activation and installed.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply just-flight-rj-professional</code></pre>
+<p>This changes nothing, and then runs the check. Once it is installed, the RJ Professional needs nothing in the prefix. It was tested on Proton FS2024, and none of Proton FS2024's patches is known to matter for it. Stock Proton was not tried.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check just-flight-rj-professional</code></pre>
+<p>It prints one line, starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open. It wants <code>Community/justflight-aircraft-rj</code> to have a readable <code>manifest.json</code>, and the line gives the version. It fails if the folder is missing, if it is a link to a folder that is gone, or if the manifest can't be read. In that case run the install command again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>None are open. The aircraft installed and activated on the test machine.</li>
+  <li>If the installer shows "Error Creating process", check the variable above before anything else.</li>
+</ul>
+
+<h2>Undo</h2>
+<p><code>addon undo just-flight-rj-professional</code> has nothing to restore, because <code>apply</code> changed nothing. To remove the aircraft, use the RJ Professional's uninstaller as on Windows, with the simulator and the other programs of the prefix closed.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

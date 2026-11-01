@@ -1,0 +1,53 @@
+title: TriTriSim Hub
+description: How to run the TriTriSim Hub in MSFS 2024's prefix under Proton: why it crashes at start, the oletr.dll stand-in and the one import name changed in its executable, the menu entry that patches it again after each update, and how to undo it.
+---
+<h1>TriTriSim Hub</h1>
+<p class="lead">Tested with TriTriSim Hub 1.2.2 on 14 October 2026. It installs like any Windows program, but it crashed at start in 5 of 7 tries until a stand-in DLL sat next to it and its executable imported that DLL. So this fix changes a file of the add-on.</p>
+
+<p><span class="tag warn">touches add-on files</span> The fix changes one name inside <code>tritrisim-hub.exe</code>, from <code>ole32.dll</code> to <code>oletr.dll</code>, same length, and adds <code>oletr.dll</code> beside it. A copy of the original executable is kept in <code>compatdata/2537590/flightsim-on-linux-backup/tritrisim-hub/tritrisim-hub.exe.orig</code>, and this puts the name back and removes the stand-in:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo tritrisim-hub</code></pre>
+
+<h2>Get it</h2>
+<p>The TriTriSim Hub is a Tauri program whose window is a WebView2. Its Windows installer used here was <code>TriTriSim Hub_1.2.2_x64-setup.exe</code>, an NSIS setup of about 3.2 MB. Where it is downloaded from and what it costs aren't recorded here; get it from TriTriSim.</p>
+
+<h2>Install it</h2>
+<p>Close the simulator and every program in its prefix, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install tritrisim-hub ~/Downloads/"TriTriSim Hub_1.2.2_x64-setup.exe"</code></pre>
+<p>The command refuses to start while the simulator runs or any program is open in the prefix, and names those programs. It then runs the installer in the simulator's prefix. On the test machine the installer needed no setting of its own. A WebView2 area that stays grey or white under the Wayland driver is a different matter, covered in <a href="proton-fs2024.html">the Proton FS2024 guide</a>.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply tritrisim-hub</code></pre>
+<p>The crash was an invalid read inside <code>ole32</code>, 0x6d bytes into <code>RevokeDragDrop</code>, called from the Hub's window procedure. A trace of the OLE calls showed what happens. The WebView2 process, <code>msedgewebview2.exe</code>, registers drag and drop on the child window it draws, with a pointer from its own memory. The Hub calls <code>RevokeDragDrop</code> on that same window. Wine keeps the pointer in a window property and follows it in <code>RevokeDragDrop</code> without asking which process it came from. If the address doesn't exist in the Hub, the Hub crashes. If it does exist by chance, nothing happens, which is why the crash came and went. Wine already refuses the opposite call, <code>RegisterDragDrop</code> on another process's window.</p>
+<p>The fix has two parts:</p>
+<ul>
+  <li><code>oletr.dll</code>, a stand-in built on your machine with MinGW. It has the 8 <code>ole32</code> functions that the Hub imports. Seven go on to the system <code>ole32</code>, and its own <code>RevokeDragDrop</code> answers <code>DRAGDROP_E_NOTREGISTERED</code> when the window belongs to another process.</li>
+  <li>The import name in <code>tritrisim-hub.exe</code>, changed to <code>oletr.dll</code>. A stand-in named <code>ole32.dll</code> next to the program did not load. <code>ole32</code> is on the prefix's list of DLLs that always come from the system (<code>KnownDLLs</code> in <code>system.reg</code>), so the Hub has to ask for another name.</li>
+</ul>
+<p>With the stand-in the test machine had 0 crashes in 3 starts, and the <code>RevokeDragDrop</code> calls that reach Wine dropped from 3 or 4 to 2. <code>apply</code> refuses to touch an executable that doesn't hold exactly one <code>ole32.dll</code> import name (or exactly one <code>oletr.dll</code>, when it is already patched), and says so.</p>
+<p>A Hub update brings the original executable back. The launch script changes the name again on every start, when the Hub isn't running, so an update needs nothing from you. <code>apply</code> does the same by hand. The backup of the original is renewed each time, so it is always the version before the last change.</p>
+<p>The stand-in needs <code>x86_64-w64-mingw32-gcc</code>: install <code>mingw-w64-gcc</code> (Arch), <code>gcc-mingw-w64-x86-64</code> (Debian, Ubuntu) or <code>mingw64-gcc</code> (Fedora). <code>apply</code> builds the stand-in first, and changes the executable only if that worked: an executable pointing at an <code>oletr.dll</code> that isn't there would not start.</p>
+<p><code>apply</code> and <code>undo</code> refuse while the Hub is open, because they change its executable. Close it first; its menu entry has a Close action. The new executable is written to a temporary file in the same folder and then swapped in, so a run that stops half way leaves the original whole.</p>
+
+<h2>Start it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut tritrisim-hub</code></pre>
+<p>This writes an entry called "TriTriSim Hub" in your application menu, with the Hub's own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close TriTriSim Hub" action. The entry patches the executable if it needs it, then starts the Hub in the simulator's prefix. With the simulator running it starts the Hub inside the simulator's container, and with the Hub already open it says so and touches nothing. The action asks all of the Hub's processes to end, the way a polite <code>kill</code> does, and never uses <code>kill -9</code>. Close the Hub before you start the simulator or run an installer, since a program left open in the prefix holds it.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check tritrisim-hub</code></pre>
+<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<ul>
+  <li>the executable imports <code>oletr.dll</code> once and <code>ole32.dll</code> not at all;</li>
+  <li><code>oletr.dll</code> beside it is, byte for byte, the stand-in built from this repository.</li>
+</ul>
+<p>When the first one fails after an update, start the Hub from its menu entry or run <code>addon apply tritrisim-hub</code>.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The mouse arrow vanishes over the Hub's window. Resizing the window and bringing the arrow back over it shows it again. Wine's X11 driver didn't change it, since outside the simulator's container the Hub already uses it, and turning the Wayland driver off for the Hub (<code>winewayland.drv=d</code>) made no difference. Running the Hub inside gamescope was not tried. The Fenix installer had the same defect together with the keyboard, and gamescope solved it there.</li>
+  <li>An update brings the original executable back until the Hub is started from its menu entry or the fix is applied again.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo tritrisim-hub
+~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut tritrisim-hub --remove</code></pre>
+<p>The first changes the import name back and removes <code>oletr.dll</code>. If the Hub updated since the fix, it works on the new executable, so a new version isn't replaced by an old one. The copy of the original stays in the backup folder. Without the fix the Hub crashes at start again, as it did before. The second takes out the menu entry.</p>
