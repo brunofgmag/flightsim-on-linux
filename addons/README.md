@@ -64,6 +64,8 @@ The rules the loop keeps:
 
 The service uses `Restart=on-failure`, `WantedBy=default.target` and `KillMode=process`, so stopping the service leaves the program running whatever `stop` says. A `loop` service has no `KillMode=process`. A program dying from a signal can leave the simulator in a bad state: AutoFPS killed in flight leaves the terrain detail lowered.
 
+At login a service can start before the desktop has set `DISPLAY`, so the watcher reads `DISPLAY`, `WAYLAND_DISPLAY` and `XAUTHORITY` from `systemctl --user show-environment` before each script it runs. A `loop` script runs outside the watcher and gets only what its service started with, so a `loop` that opens a window has to read them itself.
+
 ## Menu entries
 
 `Exec` is the absolute path of the CLI, quoted, then `addon launch <id> <script>`, then `--` and the entry's `args`, then `%u` when it has `mime`. The entry has `Categories=Game;`, `Terminal=false`, an English `Comment`, and `Actions=close;` when `close` is set. The icon comes from `7z x <exe> '.rsrc/*/ICON/*' '.rsrc/ICON/*'`, the largest file, and `magick -resize '256x256>'`.
