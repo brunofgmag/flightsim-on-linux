@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-HERE="$(dirname "$(readlink -f "$0")")"
-exec python3 -I "$HERE/parts/radar.py" restore "${FSOL_COMMUNITY:-}" "${FSOL_COMPATDATA:?FSOL_COMPATDATA is not set}/flightsim-on-linux-backup/bbs-757-weather-radar"

@@ -78,9 +78,6 @@
 <pre><code>pkill -9 -f 'NEST\\bbs_nest\.ex[e]'</code></pre>
 <p>That is safe when you are only installing or updating, and no flight is running. The "Close BBS Nest" action does not run this for you.</p>
 
-<h3>The 757's weather</h3>
-<p>The stock 757 0.1.0 draws no weather on the navigation display. That is not a Linux fault. See <a href="bbs-757-weather-radar.html">the weather radar mod</a>.</p>
-
 <h2>Undo</h2>
 <p><code>addon undo bbs-nest</code> has nothing to restore, because <code>apply</code> changes nothing. Take out the menu entry with:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut bbs-nest --remove</code></pre>

@@ -63,7 +63,7 @@
 
 <h2>Known problems</h2>
 <ul>
-  <li><strong>The stock 0.1.0 draws no weather on the navigation display.</strong> That is not a Linux fault: the aircraft's gauge module has the functions for terrain, traffic and the other symbols, and none for weather. <a href="bbs-757-weather-radar.html">The weather radar mod</a> adds it.</li>
+  <li><strong>The build of 22 October 2026 draws no weather on the navigation display.</strong> That is not a Linux fault: that build's gauge module has the functions for terrain, traffic and the other symbols, and none for weather. The build Nest delivered on 1 November 2026 also reports 0.1.0. Its changelog doesn't mention radar on the navigation display and the test machine hasn't flown it, so this page can't say what it draws.</li>
   <li><strong>Nest can leak memory</strong> through an orphan SimConnect connection, and <strong>alone it won't close with the X button</strong>. Both are on the <a href="bbs-nest.html">Nest page</a>, with the workarounds.</li>
   <li><strong>The simulator's own memory grows on long flights.</strong> After a flight of 4 hours 30 minutes on 27 October 2026, with the 757, the simulator reached 34.2 GB of RAM and 29 GB of swap. At 00:39 on 28 October the system's out-of-memory service (systemd-oomd) ended the simulator's container, with 63.3 of 64.9 GB of RAM and 58.7 of 64.9 GB of compressed swap in use. Nest was part of that, and the simulator grew more than Nest did. The simulator's growth has not been investigated and needs a long measured flight.</li>
 </ul>

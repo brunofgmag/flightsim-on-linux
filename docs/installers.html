@@ -79,7 +79,6 @@
 <div class="table-wrap">
 <table>
   <tr><th>Add-on</th><th>Command</th></tr>
-  <tr><td>BBS 757 weather radar mod</td><td><code>addon install bbs-757-weather-radar /path/to/installer</code></td></tr>
   <tr><td>BBS Nest (BlueBird Simulations 757)</td><td><code>addon install bbs-nest /path/to/installer</code></td></tr>
   <tr><td>ChasePlane</td><td><code>addon install chaseplane /path/to/installer</code></td></tr>
   <tr><td>Contrail</td><td><code>addon install contrail /path/to/installer</code></td></tr>
@@ -128,7 +127,7 @@
 <p>The <code>powershell.exe</code> in a prefix is a stand-in from Wine. It accepts any command line, prints nothing and exits with 0. A program that uses PowerShell as a tool gets an empty answer that looks like success.</p>
 <p>On the test machine this broke the PMDG Operations Center 3 twice. Its updater checks the installer's signature by reading JSON from PowerShell, and ended with "Unexpected end of JSON input". Its installer asks PowerShell whether a process is running in the install folder, gets a 0, reads it as "yes", and says it can't close the PMDG OC3 when nothing runs. Running the installer with <code>WINEDLLOVERRIDES=powershell.exe=d</code> makes Wine stop offering the stand-in, so the installer falls back to <code>tasklist | find</code>, which Wine implements.</p>
 <p>Use that setting for installers built with electron-builder. The <code>install</code> scripts of PMDG Operations Center 3, Orbx Central and Volanta set it. This project ships no PowerShell that always answers "valid": it would switch off a real security check for good.</p>
-<p>A mod that is only a Windows PowerShell script and only rewrites files in one Community package can run from the native <code>pwsh</code> instead, without the prefix. The <code>install</code> script of the BBS 757 weather radar mod does that.</p>
+<p>A mod that is only a Windows PowerShell script and only rewrites files in one Community package can run from the native <code>pwsh</code> instead, without the prefix. Three things differ from Windows: backslashes in its paths have to become forward slashes, anything it compiles against the .NET Framework's <code>System.Web.Extensions</code> needs a stand-in, because modern .NET doesn't have it, and the Community folder has to be passed in directly, because <code>%LOCALAPPDATA%</code> doesn't exist.</p>
 
 <h2>WebView2</h2>
 <p>Several installers and managers draw their pages with WebView2, a Chromium that comes as a runtime. Two things can go wrong, and they are separate.</p>

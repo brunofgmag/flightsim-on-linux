@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo "already nothing to apply: the radar goes in with: flightsim-on-linux addon install bbs-757-weather-radar <the mod's zip>, or, for a folder you unpacked yourself, flightsim-on-linux addon launch bbs-757-weather-radar install -- <folder>"
