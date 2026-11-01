@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "already nothing to undo: apply changes nothing; addon shortcut vraas --remove and addon watcher vraas --off take out the menu entry and the service"
+exe="$(compgen -G "${FSOL_PREFIX:-}/drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe" | head -n 1 || true)"
+if [ -n "$exe" ] && [ -f "$(dirname "$exe")/SimConnect.cfg" ]; then
+  rm -f "$(dirname "$exe")/SimConnect.cfg"
+  echo "changed removed the SimConnect.cfg next to vRAAS.exe"
+else
+  echo "already no SimConnect.cfg next to vRAAS.exe"
+fi
+echo "the add-ons prefix stays; addon shortcut vraas --remove and addon watcher vraas --off take out the menu entry and the service"

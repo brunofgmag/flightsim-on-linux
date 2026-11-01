@@ -10,7 +10,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from fsol import addons, desktop, registry, watcher
+from fsol import addons, desktop, exe_xml, registry, watcher
 from tests.support import process_stubs, stand_in_name, start_stand_in
 from tests.test_addons import RecordingTools
 from tests.test_machine import FakeMachine, write
@@ -106,6 +106,7 @@ class ServiceCase(unittest.TestCase):
         self.config = self.root / "config"
         self.processes = []
         self.addon = ROOT / "addons" / self.ID
+        self.addons_prefix = self.data / "flightsim-on-linux" / "addons-prefix"
         self.token = str(self.root)
         process_stubs(self.root / "bin", self.token)
 
@@ -152,8 +153,12 @@ class ServiceCase(unittest.TestCase):
 
     def wait_for_record(self, lines=1, seconds=5):
         deadline = time.monotonic() + seconds
-        while len(self.recorded()) < lines and time.monotonic() < deadline:
+        while (len(self.recorded()) < lines or len(self.recorded_cwd()) < lines) and time.monotonic() < deadline:
             time.sleep(0.05)
+
+    def forget_records(self):
+        for path in (self.record, Path(f"{self.record}.env"), Path(f"{self.record}.cwd")):
+            path.unlink(missing_ok=True)
 
     def tree(self):
         return sorted(str(path) for path in self.root.rglob("*") if path != self.record and not path.name.startswith("record."))
@@ -179,15 +184,36 @@ class ServiceCase(unittest.TestCase):
             record.append(f"module {sha256(b'something else') if patch in tamper else sha256(data)} {module}")
         (self.proton / "fs2024-build.txt").write_text("\n".join(record) + "\n")
 
-    def user_reg(self, key, **values):
-        file = self.found.prefix / "user.reg"
+    def add_reg(self, file, key, values):
         old = file.read_text() if file.exists() else ""
         lines = ["", "[" + key.replace("\\", "\\\\") + "] 1", "#time=1"] + [f'"{name}"="{value}"' for name, value in values.items()]
         file.write_text(old + "\n".join(lines) + "\n")
 
+    def user_reg(self, key, **values):
+        self.add_reg(self.found.prefix / "user.reg", key, values)
+
+    def addons_prefix_reg(self, key, **values):
+        self.add_reg(self.addons_prefix / "user.reg", key, values)
+
     def reg_value(self, key, name):
         file = self.found.prefix / "user.reg"
         return registry.value(registry.load(file), key, name) if file.exists() else None
+
+    def addons_prefix_value(self, key, name):
+        file = self.addons_prefix / "user.reg"
+        return registry.value(registry.load(file), key, name) if file.exists() else None
+
+    def addons_prefix_ready(self):
+        (self.found.prefix / "drive_c").mkdir(parents=True, exist_ok=True)
+        for name in ("system.reg", "user.reg"):
+            write(self.addons_prefix / name, "")
+        write(self.addons_prefix / ".update-timestamp", "disable\n")
+        (self.addons_prefix / "drive_c").symlink_to(self.found.prefix / "drive_c")
+        write(self.found.base / "SimConnect.xml", sim_xml(5111))
+        write(self.addons_prefix / "SimConnect.cfg", "[SimConnect]\r\nProtocol=IPv4\r\nAddress=127.0.0.1\r\nPort=5111\r\n")
+
+    def wine_call(self, *args):
+        return " ".join([f"{self.proton}/files/bin/wine", *args])
 
     def wine_that_edits_the_registry(self):
         stub(self.proton / "files/bin/wine", WINE_REGISTRY_STUB % {"record": self.record})
@@ -244,7 +270,8 @@ class ShapeTest(unittest.TestCase):
         self.assertEqual(needs["active-sky"], ["proton-fs2024", "simulator-closed"])
         self.assertEqual(needs["rex-atmos-core"], ["proton-fs2024", "simulator-closed"])
         self.assertEqual(needs["volanta"], ["simulator-closed"])
-        for name in ("vraas", "beyondatc", "navigraph-simlink", "flightsim-dispatch"):
+        self.assertEqual(needs["vraas"], ["simulator-closed"])
+        for name in ("beyondatc", "navigraph-simlink", "flightsim-dispatch"):
             self.assertEqual(needs[name], [])
 
     def test_the_menu_entries_pass_the_desktop_validator(self):
@@ -269,7 +296,7 @@ class ShapeTest(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("systemd-analyze"), "needs systemd-analyze")
     def test_the_services_they_write_pass_systemd_verify(self):
-        for name in ("vraas", "volanta", "navigraph-simlink"):
+        for name in ("active-sky", "vraas", "volanta", "navigraph-simlink"):
             with tempfile.TemporaryDirectory() as folder:
                 path = Path(folder) / "unit.service"
                 path.write_text(watcher.unit_text(addons.load(ROOT / "addons" / name), ROOT / "bin" / "flightsim-on-linux"))
@@ -279,6 +306,7 @@ class ShapeTest(unittest.TestCase):
 
     def test_the_watchers_match_their_program_and_nothing_else(self):
         programs = {
+            "active-sky": "C:\\users\\steamuser\\AppData\\Roaming\\HiFi\\AS_FS\\AddonFolder\\ActiveSkyUtils.exe",
             "vraas": "C:\\users\\steamuser\\AppData\\Local\\LAND3.vRAAS\\current\\vRAAS.exe",
             "volanta": "C:\\users\\steamuser\\AppData\\Local\\Programs\\Volanta\\Volanta.exe --minimized",
             "navigraph-simlink": "C:\\Program Files\\Navigraph\\Simlink\\NavigraphSimlink.exe",
@@ -291,9 +319,14 @@ class ShapeTest(unittest.TestCase):
 
     def test_the_watcher_settings_of_vraas_and_volanta(self):
         vraas = addons.load(ROOT / "addons" / "vraas").watcher
-        self.assertEqual((vraas["grace"], vraas["args"], vraas["stop"], vraas.get("trigger", "simulator")), (20, ["-autostart"], "with_simulator", "simulator"))
+        self.assertEqual((vraas["grace"], vraas["args"], vraas["stop"], vraas.get("trigger", "simulator")), (20, ["-autostart"], "with_simulator_if_started", "simulator"))
         volanta = addons.load(ROOT / "addons" / "volanta").watcher
         self.assertEqual((volanta["args"], volanta["stop"], volanta.get("trigger", "simulator")), (["--minimized"], "never", "simulator"))
+
+    def test_the_active_sky_watcher_keeps_activesky_utils_up_while_the_sentinel_is_open_and_never_closes_it(self):
+        utils = addons.load(ROOT / "addons" / "active-sky").watcher
+        sentinel = addons.load(ROOT / "addons" / "sentinel").watcher
+        self.assertEqual((utils["script"], utils["trigger"], utils["stop"]), ("utils", {"process": sentinel["app"]}, "never"))
 
     def test_the_simlink_watcher_never_starts_it_and_restarts_it_after_sixty_seconds_without_a_connection(self):
         simlink = addons.load(ROOT / "addons" / "navigraph-simlink").watcher
@@ -318,16 +351,26 @@ class ActiveSkyCase(RegistryAddonCase):
     MODULE = "lib/wine/x86_64-windows/gdiplus.dll"
     PROGRAM = "C:\\Program Files\\HiFi\\AS_FS\\AS_FS.exe"
     EXE = "drive_c/Program Files/HiFi/AS_FS/AS_FS.exe"
+    UTILS = "C:\\users\\steamuser\\AppData\\Roaming\\HiFi\\AS_FS\\AddonFolder\\ActiveSkyUtils.exe"
+    UTILS_EXE = "drive_c/users/steamuser/AppData/Roaming/HiFi/AS_FS/AddonFolder/ActiveSkyUtils.exe"
 
     def setUp(self):
         super().setUp()
         self.write_build({self.PATCH: self.MODULE})
         stub(self.root / "bin" / "fc-list", '#!/bin/sh\n[ "$1" = Carlito ] && echo Carlito\nexit 0\n')
         (self.found.prefix / "user.reg").write_text("")
+        self.addons_prefix_ready()
 
     def fix_in_place(self):
-        (self.found.prefix / "user.reg").write_text("")
-        self.user_reg(REPLACEMENTS, **{"Calibri": "Carlito", "Calibri Medium": "Carlito"})
+        (self.addons_prefix / "user.reg").write_text("")
+        self.addons_prefix_reg(REPLACEMENTS, **{"Calibri": "Carlito", "Calibri Medium": "Carlito"})
+
+    def exe_xml(self, disabled="False"):
+        write(self.found.base / "exe.xml", '<?xml version="1.0" encoding="windows-1252"?>\n<SimBase.Document Type="Launch" version="1,0">\n    <Launch.Addon>\n        <Name>ActiveSky utils</Name>\n'
+              f'        <Disabled>{disabled}</Disabled>\n        <Path>{self.UTILS}</Path>\n    </Launch.Addon>\n</SimBase.Document>\n')
+
+    def utils_entry(self):
+        return exe_xml.state_ending(self.found.base / "exe.xml", "\\AddonFolder\\ActiveSkyUtils.exe")[0]
 
     def without_carlito(self):
         stub(self.root / "bin" / "fc-list", "#!/bin/sh\nexit 0\n")
@@ -337,6 +380,8 @@ class ActiveSkyCase(RegistryAddonCase):
 
 
 class ActiveSkyCheckTest(ActiveSkyCase):
+    LINES = 11
+
     def setUp(self):
         super().setUp()
         self.fix_in_place()
@@ -346,10 +391,29 @@ class ActiveSkyCheckTest(ActiveSkyCase):
         failures = [line for line in result.stdout.splitlines() if line.startswith("FAIL")]
         self.assertEqual((result.returncode, len(failures)), (1, 1), result.stdout)
         self.assertIn(word, failures[0])
-        self.assertEqual(len(result.stdout.splitlines()), 5)
+        self.assertEqual(len(result.stdout.splitlines()), self.LINES)
 
-    def test_a_machine_with_the_patch_carlito_and_both_values_passes_with_five_ok_lines(self):
-        self.assert_lines(self.script("check"), ["ok"] * 5, 0)
+    def test_a_machine_with_the_patch_carlito_and_both_values_passes_on_every_line(self):
+        self.assert_lines(self.script("check"), ["ok"] * self.LINES, 0)
+
+    def test_the_utils_entry_of_exe_xml_turned_back_on_by_an_update_fails(self):
+        self.exe_xml("False")
+        self.only_failure("exe.xml still starts ActiveSky Utils")
+
+    def test_a_disabled_utils_entry_passes(self):
+        self.exe_xml("True")
+        self.assert_lines(self.script("check"), ["ok"] * self.LINES, 0)
+
+    def test_a_missing_add_ons_prefix_fails_with_the_command(self):
+        shutil.rmtree(self.addons_prefix)
+        result = self.script("check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("run: flightsim-on-linux addon apply active-sky", result.stdout)
+
+    def test_the_fonts_are_read_from_the_add_ons_prefix_and_not_from_the_simulators(self):
+        (self.addons_prefix / "user.reg").write_text("")
+        self.user_reg(REPLACEMENTS, **{"Calibri": "Carlito", "Calibri Medium": "Carlito"})
+        self.assertEqual(self.script("check").returncode, 1)
 
     def test_a_proton_without_the_font_family_patch_in_its_build_record_fails(self):
         self.write_build({self.PATCH: self.MODULE}, drop=(self.PATCH,))
@@ -364,18 +428,18 @@ class ActiveSkyCheckTest(ActiveSkyCase):
         self.only_failure("Carlito font is not installed")
 
     def test_calibri_not_replaced_fails(self):
-        (self.found.prefix / "user.reg").write_text("")
-        self.user_reg(REPLACEMENTS, **{"Calibri Medium": "Carlito"})
+        (self.addons_prefix / "user.reg").write_text("")
+        self.addons_prefix_reg(REPLACEMENTS, **{"Calibri Medium": "Carlito"})
         self.only_failure("Calibri is not replaced")
 
     def test_calibri_medium_not_replaced_fails(self):
-        (self.found.prefix / "user.reg").write_text("")
-        self.user_reg(REPLACEMENTS, Calibri="Carlito")
+        (self.addons_prefix / "user.reg").write_text("")
+        self.addons_prefix_reg(REPLACEMENTS, Calibri="Carlito")
         self.only_failure("Calibri Medium is not replaced")
 
     def test_a_replacement_by_another_font_fails(self):
-        (self.found.prefix / "user.reg").write_text("")
-        self.user_reg(REPLACEMENTS, **{"Calibri": "Arial", "Calibri Medium": "Carlito"})
+        (self.addons_prefix / "user.reg").write_text("")
+        self.addons_prefix_reg(REPLACEMENTS, **{"Calibri": "Arial", "Calibri Medium": "Carlito"})
         self.only_failure("Calibri is not replaced")
 
     def test_check_changes_nothing(self):
@@ -437,8 +501,8 @@ class ActiveSkyApplyTest(ActiveSkyCase):
     def test_apply_replaces_both_fonts_with_carlito_and_the_check_then_passes(self):
         result = self.script("apply")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.reg_value(REPLACEMENTS, "Calibri"), "Carlito")
-        self.assertEqual(self.reg_value(REPLACEMENTS, "Calibri Medium"), "Carlito")
+        self.assertEqual(self.addons_prefix_value(REPLACEMENTS, "Calibri"), "Carlito")
+        self.assertEqual(self.addons_prefix_value(REPLACEMENTS, "Calibri Medium"), "Carlito")
         self.assertEqual(self.script("check").returncode, 0)
 
     def test_apply_twice_changes_nothing_the_second_time(self):
@@ -455,35 +519,63 @@ class ActiveSkyApplyTest(ActiveSkyCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("ttf-carlito", result.stdout)
         self.assertEqual(self.recorded(), [])
+        self.assertIsNone(self.addons_prefix_value(REPLACEMENTS, "Calibri"))
+
+    def test_the_registry_is_written_through_wine_in_the_add_ons_prefix_and_not_in_the_simulators(self):
+        self.script("apply")
+        self.assertEqual(self.recorded()[0], self.wine_call("reg", "add", f"HKCU\\{REPLACEMENTS}", "/v", "Calibri", "/t", "REG_SZ", "/d", "Carlito", "/f"))
         self.assertIsNone(self.reg_value(REPLACEMENTS, "Calibri"))
 
-    def test_the_registry_is_written_through_wine_in_the_simulators_prefix(self):
-        self.script("apply")
-        first = self.recorded()[0]
-        self.assertIn(f"{self.proton}/files/bin/wine reg add HKCU\\{REPLACEMENTS} /v Calibri /t REG_SZ /d Carlito /f", first)
+    def test_apply_makes_the_add_ons_prefix_when_it_is_not_there(self):
+        shutil.rmtree(self.addons_prefix)
+        write(self.found.prefix / "system.reg", "system\n")
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.addons_prefix / "system.reg").read_text(), "system\n")
+        self.assertIn("Port=5111", (self.addons_prefix / "SimConnect.cfg").read_text())
 
-    def test_undo_removes_the_values_it_added(self):
+    def test_apply_turns_off_the_utils_entry_of_exe_xml_and_undo_turns_it_back_on(self):
+        self.exe_xml("False")
+        self.assertIn("changed exe.xml", self.script("apply").stdout)
+        self.assertEqual(self.utils_entry(), "disabled")
+        self.assertEqual(self.script("check").returncode, 0)
+        self.assertIn("changed exe.xml", self.script("undo").stdout)
+        self.assertEqual(self.utils_entry(), "enabled")
+        self.assertFalse((self.found.compatdata / "flightsim-on-linux-backup" / "active-sky").exists())
+
+    def test_undo_leaves_an_entry_that_was_already_off_before_apply(self):
+        self.exe_xml("True")
+        self.script("apply")
+        self.assertIn("already the ActiveSky Utils entry in exe.xml was not changed", self.script("undo").stdout)
+        self.assertEqual(self.utils_entry(), "disabled")
+
+    def test_a_machine_with_no_utils_entry_applies_and_says_so(self):
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("exe.xml has no ActiveSky Utils entry", result.stdout)
+        self.assertFalse((self.found.base / "exe.xml").exists())
+
+    def test_undo_removes_the_values_from_the_add_ons_prefix(self):
         self.script("apply")
         result = self.script("undo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIsNone(self.reg_value(REPLACEMENTS, "Calibri"))
-        self.assertIsNone(self.reg_value(REPLACEMENTS, "Calibri Medium"))
+        self.assertIsNone(self.addons_prefix_value(REPLACEMENTS, "Calibri"))
+        self.assertIsNone(self.addons_prefix_value(REPLACEMENTS, "Calibri Medium"))
 
-    def test_undo_puts_back_a_value_the_reader_had_before(self):
-        self.user_reg(REPLACEMENTS, Calibri="Arial")
-        self.script("apply")
-        self.assertEqual(self.reg_value(REPLACEMENTS, "Calibri"), "Carlito")
+    def test_undo_restores_what_an_older_apply_changed_in_the_simulators_prefix(self):
+        self.user_reg(REPLACEMENTS, Calibri="Carlito")
+        backup = self.found.compatdata / "flightsim-on-linux-backup" / "active-sky"
+        write(backup / "Calibri", "Arial")
+        write(backup / "Calibri Medium.absent", "")
         self.script("undo")
         self.assertEqual(self.reg_value(REPLACEMENTS, "Calibri"), "Arial")
-        self.assertIsNone(self.reg_value(REPLACEMENTS, "Calibri Medium"))
-        self.assertFalse((self.found.compatdata / "flightsim-on-linux-backup" / "active-sky").exists())
+        self.assertFalse(backup.exists())
 
-    def test_undo_leaves_a_value_alone_that_was_already_carlito_before_apply(self):
+    def test_undo_leaves_the_simulators_own_values_alone(self):
         self.user_reg(REPLACEMENTS, Calibri="Carlito")
         self.script("apply")
         self.script("undo")
         self.assertEqual(self.reg_value(REPLACEMENTS, "Calibri"), "Carlito")
-        self.assertIsNone(self.reg_value(REPLACEMENTS, "Calibri Medium"))
 
     def test_undo_without_apply_says_nothing_was_changed(self):
         result = self.script("undo")
@@ -500,7 +592,7 @@ class ActiveSkyApplyTest(ActiveSkyCase):
         stub(self.proton / "files/bin/wine", recording(self.record) + "exit 0\n")
         result = self.script("apply")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("Wine has not written Calibri to user.reg yet", result.stderr)
+        self.assertIn("Wine has not written Calibri to user.reg of the add-ons prefix yet", result.stderr)
 
 
 class ActiveSkyLaunchTest(ActiveSkyCase):
@@ -509,18 +601,12 @@ class ActiveSkyLaunchTest(ActiveSkyCase):
         self.stubs()
         self.install_program(self.EXE)
 
-    def test_a_closed_simulator_stops_it_with_a_notice(self):
-        result = self.script("launch")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("start Microsoft Flight Simulator 2024 first", result.stderr)
-        self.assertFalse(any(line.startswith(f"{self.root}/cli run") for line in self.recorded()))
-
     def test_a_copy_already_running_is_left_alone(self):
         self.stand_in(self.PROGRAM)
         result = self.script("launch", FSOL_SIM_RUNNING="1")
         self.assertEqual(result.returncode, 0)
         self.assertTrue(any("already running" in line for line in self.recorded()))
-        self.assertFalse(any(line.startswith(f"{self.root}/cli run") for line in self.recorded()))
+        self.assertFalse(any(self.wine_call() in line for line in self.recorded()))
 
     def test_a_missing_program_points_at_the_page_because_there_is_no_install_script(self):
         (self.found.prefix / self.EXE).unlink()
@@ -529,11 +615,47 @@ class ActiveSkyLaunchTest(ActiveSkyCase):
         self.assertIn("flightsim-on-linux/active-sky.html", result.stderr)
         self.assertNotIn("addon install", result.stderr)
 
-    def test_it_starts_inside_the_simulators_container(self):
-        result = self.script("launch", FSOL_SIM_RUNNING="1")
+    def test_a_missing_add_ons_prefix_says_how_to_make_it(self):
+        shutil.rmtree(self.addons_prefix)
+        result = self.script("launch")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("addon apply active-sky", result.stderr)
+
+    def test_it_starts_in_the_add_ons_prefix_whether_or_not_the_simulator_runs(self):
+        for running in ("0", "1"):
+            self.forget_records()
+            result = self.script("launch", FSOL_SIM_RUNNING=running)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.wait_for_record()
+            self.assertEqual(self.recorded(), [self.wine_call(self.PROGRAM)])
+        self.assertEqual(self.recorded_env()["WINEPREFIX"], str(self.addons_prefix))
+        self.assertEqual(self.recorded_cwd()[-1], str(self.addons_prefix))
+
+
+class ActiveSkyUtilsTest(ActiveSkyCase):
+    def setUp(self):
+        super().setUp()
+        self.stubs()
+        self.install_program(self.UTILS_EXE)
+
+    def test_it_starts_activesky_utils_in_the_add_ons_prefix(self):
+        result = self.script("utils")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.wait_for_record()
-        self.assertEqual(self.recorded(), [f"{self.root}/cli run {self.PROGRAM}"])
+        self.assertEqual(self.recorded(), [self.wine_call(self.UTILS)])
+        self.assertEqual(self.recorded_env()["WINEPREFIX"], str(self.addons_prefix))
+        self.assertEqual(self.recorded_cwd()[-1], str(self.addons_prefix))
+
+    def test_a_copy_already_running_is_left_alone(self):
+        self.stand_in(self.UTILS)
+        self.assertEqual(self.script("utils").returncode, 0)
+        self.assertFalse(any(self.wine_call() in line for line in self.recorded()))
+
+    def test_a_missing_utils_says_where_it_comes_from(self):
+        (self.found.prefix / self.UTILS_EXE).unlink()
+        result = self.script("utils")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ActiveSky Utils is not installed", result.stderr)
 
 
 class ActiveSkyCloseTest(ActiveSkyCase):
@@ -543,12 +665,12 @@ class ActiveSkyCloseTest(ActiveSkyCase):
         self.assertEqual((result.returncode, result.stdout.strip()), (0, "Active Sky is not running"))
         self.assertEqual(self.recorded(), [])
 
-    def test_the_window_is_asked_to_close_inside_the_container_and_the_force_flag_is_never_used(self):
+    def test_the_window_is_asked_to_close_in_the_add_ons_prefix_and_the_force_flag_is_never_used(self):
         program = self.stand_in(self.PROGRAM)
         self.stubs(after=f"kill {program.pid}\n")
         result = self.script("close", FSOL_SIM_RUNNING="1")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.recorded(), [f"{self.root}/cli run taskkill /im AS_FS.exe"])
+        self.assertEqual(self.recorded(), [self.wine_call("taskkill", "/im", "AS_FS.exe")])
         self.assertNotIn("/f", " ".join(self.recorded()).split())
 
     def test_a_program_that_stays_is_reported_with_the_reason_and_never_killed(self):
@@ -718,21 +840,38 @@ class VraasCase(ServiceCase):
 
 
 class VraasTest(VraasCase):
-    def test_apply_and_undo_say_there_is_nothing_to_do_and_change_nothing(self):
-        before = self.tree()
-        for name in ("apply", "undo"):
-            result = self.script(name)
-            self.assertEqual(result.returncode, 0)
-            self.assertIn("already nothing to", result.stdout)
-        self.assertEqual(self.tree(), before)
+    def test_apply_makes_the_add_ons_prefix_and_its_cfg(self):
+        for name in ("system.reg", "user.reg"):
+            write(self.found.prefix / name, f"sim {name}\n")
+        (self.found.prefix / "drive_c").mkdir(parents=True, exist_ok=True)
+        write(self.found.base / "SimConnect.xml", sim_xml(5111))
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.addons_prefix / "system.reg").read_text(), "sim system.reg\n")
+        self.assertIn("Port=5111", (self.addons_prefix / "SimConnect.cfg").read_text())
 
-    def test_check_passes_where_the_program_is_and_fails_with_the_command_where_it_is_not(self):
+    def test_undo_removes_the_cfg_next_to_the_program_and_leaves_the_prefix(self):
+        self.install_program(self.EXE)
+        self.addons_prefix_ready()
+        cfg = (self.found.prefix / self.EXE).parent / "SimConnect.cfg"
+        write(cfg, "x")
+        result = self.script("undo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(cfg.exists())
+        self.assertTrue((self.addons_prefix / "SimConnect.cfg").exists())
+        self.assertIn("already no SimConnect.cfg", self.script("undo").stdout)
+
+    def test_check_passes_where_the_program_and_the_prefix_are_and_fails_with_the_command_where_they_are_not(self):
         failed = self.script("check")
         self.assertEqual(failed.returncode, 1)
         self.assertIn("addon install vraas", failed.stdout)
         self.install_program(self.EXE)
+        unapplied = self.script("check")
+        self.assertEqual(unapplied.returncode, 1)
+        self.assertIn("addon apply vraas", unapplied.stdout)
+        self.addons_prefix_ready()
         passed = self.script("check")
-        self.assertEqual((passed.returncode, passed.stdout.split()[0]), (0, "ok"))
+        self.assertEqual((passed.returncode, passed.stdout.split()[0]), (0, "ok"), passed.stdout)
 
     def test_it_counts_as_installed_where_the_program_is(self):
         addon = addons.load(self.addon)
@@ -793,28 +932,45 @@ class VraasLaunchTest(VraasCase):
         super().setUp()
         self.stubs()
         self.install_program(self.EXE)
-
-    def test_a_closed_simulator_stops_it_with_a_notice(self):
-        result = self.script("launch")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("start Microsoft Flight Simulator 2024 first", result.stderr)
+        self.addons_prefix_ready()
 
     def test_a_copy_already_running_is_left_alone(self):
         self.stand_in(self.PROGRAM)
         self.assertEqual(self.script("launch", FSOL_SIM_RUNNING="1").returncode, 0)
-        self.assertFalse(any(line.startswith(f"{self.root}/cli run") for line in self.recorded()))
+        self.assertFalse(any(self.wine_call() in line for line in self.recorded()))
 
-    def test_it_starts_inside_the_simulators_container_with_direct3d_9_off(self):
-        result = self.script("launch", FSOL_SIM_RUNNING="1")
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_it_starts_in_the_add_ons_prefix_with_direct3d_9_off_whether_or_not_the_simulator_runs(self):
+        for running in ("0", "1"):
+            self.forget_records()
+            result = self.script("launch", FSOL_SIM_RUNNING=running)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.wait_for_record()
+            self.assertEqual(self.recorded(), [self.wine_call(self.PROGRAM)])
+        env = self.recorded_env()
+        self.assertEqual(env["WINEPREFIX"], str(self.addons_prefix))
+        self.assertIn("d3d9=d", env["WINEDLLOVERRIDES"])
+
+    def test_the_cfg_is_copied_next_to_the_program_at_every_start_because_an_update_replaces_that_folder(self):
+        cfg = (self.found.prefix / self.EXE).parent / "SimConnect.cfg"
+        self.script("launch")
         self.wait_for_record()
-        self.assertEqual(self.recorded(), [f"{self.root}/cli run {self.PROGRAM}"])
-        self.assertEqual(self.recorded_env()["EXTRA_WINEDLLOVERRIDES"], "d3d9=d")
+        self.assertEqual(cfg.read_bytes(), (self.addons_prefix / "SimConnect.cfg").read_bytes())
+        cfg.unlink()
+        self.script("launch")
+        self.wait_for_record(2)
+        self.assertTrue(cfg.is_file())
+
+    def test_no_cfg_in_the_add_ons_prefix_says_how_to_write_it_and_starts_nothing(self):
+        (self.addons_prefix / "SimConnect.cfg").unlink()
+        result = self.script("launch")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("addon apply vraas", result.stderr)
+        self.assertFalse(any(self.wine_call() in line for line in self.recorded()))
 
     def test_the_watchers_autostart_option_reaches_the_program(self):
         self.script("launch", "-autostart", FSOL_SIM_RUNNING="1")
         self.wait_for_record()
-        self.assertEqual(self.recorded(), [f"{self.root}/cli run {self.PROGRAM} -autostart"])
+        self.assertEqual(self.recorded(), [self.wine_call(self.PROGRAM, "-autostart")])
 
     def test_a_missing_program_says_how_to_install_it(self):
         (self.found.prefix / self.EXE).unlink()
@@ -938,11 +1094,11 @@ class VolantaApplyTest(VolantaCase):
         self.assertIn("run: flightsim-on-linux addon apply simconnect-tcp", result.stdout)
         self.assertFalse((self.sibling / "SimConnect.cfg").exists())
 
-    def test_undo_removes_the_cfg_and_leaves_the_prefix(self):
+    def test_undo_leaves_the_prefix_and_its_cfg_because_other_add_ons_run_there(self):
         self.script("apply")
         result = self.script("undo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertFalse((self.sibling / "SimConnect.cfg").exists())
+        self.assertTrue((self.sibling / "SimConnect.cfg").exists())
         self.assertTrue((self.sibling / "system.reg").exists())
         self.assertIn("rm -r", result.stdout)
 

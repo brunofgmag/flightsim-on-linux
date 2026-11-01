@@ -1,0 +1,17 @@
+{
+  "name": "Add-ons prefix",
+  "tested_version": "Proton FS2024 of 30 October 2026",
+  "tested_on": "2026-11-01",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "data": ["addons-prefix/system.reg"]
+  },
+  "watcher": {
+    "app": "^[A-Za-z]:.*\\\\desktop-holder\\\\desktop-holder\\.exe",
+    "script": "launch",
+    "trigger": "always",
+    "poll": 8,
+    "stop": "never"
+  }
+}

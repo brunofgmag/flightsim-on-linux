@@ -4,17 +4,23 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=tools/addon-launch.sh
 . "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
 # shellcheck source=addons/active-sky/parts/program.sh
 . "$HERE/parts/program.sh"
 exe="$FSOL_PREFIX/$ACTIVE_SKY_EXE"
 
-addon_need_simulator
 addon_refuse_second "$ACTIVE_SKY_PATTERN"
 if [ ! -f "$exe" ]; then
   addon_say active-sky "Active Sky is not installed; its Install it section, at https://brunofgmag.github.io/flightsim-on-linux/active-sky.html, says how"
   exit 1
 fi
+if [ ! -f "$(addon_sibling_prefix)/system.reg" ]; then
+  addon_say active-sky "the add-ons prefix does not exist; run: flightsim-on-linux addon apply active-sky"
+  exit 1
+fi
 log="$(addon_log_file active-sky)"
 
-addon_beside_simulator "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+cd "$(addon_sibling_prefix)"
+addon_sibling_prefix_wine "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
 disown

@@ -64,7 +64,7 @@
 <p>The kind is one of four. <em>installer</em> is a Windows installer you download. <em>store</em> is a store app that downloads the installer for you. <em>native</em> is a Linux program. <em>manual</em> is a set of steps nobody has scripted. When the add-on has an <code>install</code> script and needs a file, the command ends with the line to run next.</p>
 <p>The helper app does the same in dialogs: <em>Install an add-on</em> shows where to get it, asks for the file you downloaded and runs the command.</p>
 <p>With a file, it runs the add-on's own <code>install</code> script on that file:</p>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps ~/Downloads/MSFS_AutoFPS-installer-v0.5.4.4.exe</code></pre>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps ~/Downloads/MSFS_AutoFPS-installer-v0.5.5.0.exe</code></pre>
 <ul>
   <li>It refuses while the simulator runs, or while any program is open in the prefix, and names those programs: <code>close the simulator and every program of its prefix first; installers run alone</code>. Nothing is started. An add-on with a prefix of its own, such as FlightSim Dispatch, skips this.</li>
   <li>It runs the installer in the simulator's prefix with the Proton the simulator last ran with. It does not use your system Wine.</li>

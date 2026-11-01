@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+
+if ! addon_sibling_prefix_running "$(addon_sibling_prefix)"; then
+  echo "the add-ons prefix is not running"
+  exit 0
+fi
+addon_sibling_prefix_kill
+echo "stopped the Wine server of the add-ons prefix, and every program in it; with the service on, it comes back in about 8 seconds"

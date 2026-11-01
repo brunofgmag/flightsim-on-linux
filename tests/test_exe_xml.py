@@ -72,6 +72,50 @@ class StateEndingTest(FileCase):
             exe_xml.state_ending(self.file, SUFFIX)
 
 
+class SwitchTest(FileCase):
+    def switch(self, command, suffix=SUFFIX):
+        result = subprocess.run([sys.executable, "-I", str(ROOT / "fsol" / "exe_xml.py"), command, str(self.file), suffix], capture_output=True, text=True)
+        return result.returncode, result.stdout.strip()
+
+    def test_disable_turns_the_entry_off_and_keeps_every_other_byte(self):
+        kept = entry("C:\\Other\\other.exe", name="Other")
+        self.put(document(kept, entry("C:\\Games\\data\\tool\\plugin.exe", "False")))
+        self.assertEqual(self.switch("disable"), (0, "disabled"))
+        self.assertEqual(self.file.read_text(), document(kept, entry("C:\\Games\\data\\tool\\plugin.exe", "True")))
+
+    def test_disable_twice_says_so(self):
+        self.put(document(entry("C:\\Games\\data\\tool\\plugin.exe", "True")))
+        self.assertEqual(self.switch("disable"), (0, "already"))
+
+    def test_enable_turns_the_entry_back_on(self):
+        self.put(document(entry("C:\\Games\\data\\tool\\plugin.exe", "True")))
+        self.assertEqual(self.switch("enable"), (0, "enabled"))
+        self.assertEqual(self.file.read_text(), document(entry("C:\\Games\\data\\tool\\plugin.exe", "False")))
+
+    def test_an_entry_with_no_disabled_tag_gets_one(self):
+        self.put(document("    <Launch.Addon>\n        <Name>Plugin</Name>\n        <Path>C:\\Games\\data\\tool\\plugin.exe</Path>\n    </Launch.Addon>\n"))
+        self.assertEqual(self.switch("disable"), (0, "disabled"))
+        self.assertEqual(exe_xml.state_ending(self.file, SUFFIX)[0], "disabled")
+
+    def test_an_entry_inside_a_comment_is_left_alone(self):
+        text = document("<!--\n" + entry("C:\\Games\\data\\tool\\plugin.exe") + "-->\n")
+        self.put(text)
+        self.assertEqual(self.switch("disable"), (0, "absent"))
+        self.assertEqual(self.file.read_text(), text)
+
+    def test_a_commented_out_copy_stays_as_it_is_when_the_real_entry_changes(self):
+        commented = "<!--\n" + entry("C:\\Games\\data\\tool\\plugin.exe", "False", "Old") + "-->\n"
+        self.put(document(commented, entry("C:\\Games\\data\\tool\\plugin.exe", "False")))
+        self.assertEqual(self.switch("disable"), (0, "disabled"))
+        self.assertEqual(self.file.read_text(), document(commented, entry("C:\\Games\\data\\tool\\plugin.exe", "True")))
+
+    def test_a_missing_file_and_a_missing_entry_change_nothing(self):
+        self.assertEqual(self.switch("disable"), (0, "no-file"))
+        self.assertFalse(self.file.exists())
+        self.put(document(entry("C:\\Other\\other.exe")))
+        self.assertEqual(self.switch("enable"), (0, "absent"))
+
+
 class LinuxPathTest(FileCase):
     def setUp(self):
         super().setUp()

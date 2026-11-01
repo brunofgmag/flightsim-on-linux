@@ -115,7 +115,7 @@ class AutoFpsCase(unittest.TestCase):
 class ShapeTest(AutoFpsCase):
     def test_the_manifest_is_complete(self):
         addon = addons.load(ADDON)
-        self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.tested_on), ("msfs-autofps", ["proton-fs2024"], "0.5.4.4", "2026-10-16"))
+        self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.tested_on), ("msfs-autofps", ["proton-fs2024"], "0.5.5.0", "2026-11-01"))
         self.assertEqual(addon.install, {"from": "https://github.com/ResetXPDR/MSFS_AutoFPS/releases", "paid": None, "kind": "installer"})
         self.assertEqual([shortcut["title"] for shortcut in addon.shortcuts], ["MSFS AutoFPS"])
         self.assertEqual((addon.watcher["stop"], addon.watcher["grace"], addon.watcher["script"]), ("with_simulator", 20, "launch"))

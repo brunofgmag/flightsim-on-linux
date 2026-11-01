@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+status=0
+
 exe="$(compgen -G "${FSOL_PREFIX:-}/drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe" | head -n 1 || true)"
 if [ -n "$exe" ]; then
   echo "ok vRAAS is installed at $exe"
-  exit 0
+else
+  echo "FAIL vRAAS.exe is not in the prefix; download the installer from the Contrail store, then run: flightsim-on-linux addon install vraas <installer>"
+  exit 1
 fi
-echo "FAIL vRAAS.exe is not in the prefix; download the installer from the Contrail store, then run: flightsim-on-linux addon install vraas <installer>"
-exit 1
+addon_sibling_prefix_check vraas || status=1
+[ ! -f "$(addon_sibling_prefix)/system.reg" ] || addon_sibling_cfg check vraas || status=1
+exit "$status"

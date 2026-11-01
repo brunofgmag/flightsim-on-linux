@@ -45,3 +45,6 @@ set_asm_override() {
 mono_copy_ensure axis-and-ohs
 patch_window_timer
 set_asm_override
+addon_sibling_prefix_create
+addon_sibling_cfg write axis-and-ohs
+addon_sibling_registry_set 'Software\Wine\Mono\AsmOverrides' '*' gac=n

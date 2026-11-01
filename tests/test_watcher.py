@@ -122,6 +122,49 @@ class StartWithTheSimulatorTest(unittest.TestCase):
         self.assertEqual(runs(drive(config(grace=0, trigger="none"), ticks(0, 80, sim=100))), [])
 
 
+class KeepItUpTest(unittest.TestCase):
+    def test_always_starts_with_no_simulator_and_comes_back_when_the_program_dies(self):
+        timeline = ticks(0, 8) + ticks(8, 24, app=True) + ticks(24, 32) + ticks(32, 48, app=True)
+        self.assertEqual(len(runs(drive(config(trigger="always"), timeline))), 2)
+
+    def test_always_ignores_the_simulator_coming_and_going(self):
+        timeline = ticks(0, 24, app=True) + ticks(24, 48, sim=100, app=True) + ticks(48, 72, app=True)
+        history = drive(config(trigger="always", stop="never"), timeline)
+        self.assertEqual((runs(history), stops(history)), ([], []))
+
+    def test_while_simulator_starts_on_the_first_look_with_no_grace(self):
+        history = drive(config(trigger="while_simulator", grace=20), ticks(0, 8, sim=100))
+        self.assertEqual(runs(history), [("run", "launch", ())])
+
+    def test_while_simulator_brings_the_program_back_for_the_same_simulator(self):
+        timeline = ticks(0, 8, sim=100) + ticks(8, 24, sim=100, app=True) + ticks(24, 32, sim=100)
+        self.assertEqual(len(runs(drive(config(trigger="while_simulator"), timeline))), 2)
+
+    def test_while_simulator_starts_nothing_without_the_simulator(self):
+        self.assertEqual(runs(drive(config(trigger="while_simulator"), ticks(0, 40))), [])
+
+    def test_while_simulator_closes_with_the_simulator(self):
+        timeline = ticks(0, 8, sim=100) + ticks(8, 24, sim=100, app=True) + ticks(24, 32, app=True) + ticks(32, 48)
+        history = drive(config(trigger="while_simulator", stop="with_simulator"), timeline)
+        self.assertEqual((len(runs(history)), len(stops(history))), (1, 1))
+
+    def test_a_process_trigger_starts_the_program_while_the_process_exists(self):
+        timeline = ticks(0, 16) + ticks(16, 24, present=True) + ticks(24, 48, present=True, app=True)
+        self.assertEqual(len(runs(drive(config(trigger={"process": "sentinel"}), timeline))), 1)
+
+    def test_a_process_trigger_reopens_a_program_that_stops_answering(self):
+        timeline = ticks(0, 8, present=True) + ticks(8, 24, present=True, app=True) + ticks(24, 32, present=True) + ticks(32, 40, present=True, app=True)
+        self.assertEqual(len(runs(drive(config(trigger={"process": "sentinel"}), timeline))), 2)
+
+    def test_a_process_trigger_leaves_a_program_that_outlives_the_process(self):
+        history = drive(config(trigger={"process": "sentinel"}), ticks(0, 24, app=True))
+        self.assertEqual((runs(history), stops(history)), ([], []))
+
+    def test_a_process_trigger_keeps_its_regex(self):
+        cfg = config(trigger={"process": "sentinel"})
+        self.assertEqual((cfg.trigger, cfg.process), ("process", "sentinel"))
+
+
 class WaitForTest(unittest.TestCase):
     CFG = {"grace": 0, "wait_for": {"process": "couatl64", "timeout": 300}, "stop": "with_simulator_if_started"}
 
@@ -354,6 +397,12 @@ class ObserveTest(unittest.TestCase):
         self.proc.process(11, "/usr/bin/python3 other.py")
         seen = self.observe(config())
         self.assertEqual((seen.sim, seen.app, seen.waited, seen.listening, seen.connected), (None, False, False, False, False))
+
+    def test_a_process_trigger_looks_for_its_process(self):
+        cfg = config(trigger={"process": "sentinel"})
+        self.assertFalse(self.observe(cfg).present)
+        self.proc.process(12, "Q:\\tools\\sentinel\\FlightSimulator2024.exe")
+        self.assertTrue(self.observe(cfg).present)
 
     def test_the_watcher_does_not_see_itself(self):
         self.proc.process(os.getpid(), APP_COMMAND)

@@ -36,9 +36,9 @@ description: Which Windows add-ons for MSFS 2024 work under Proton, what each on
   <tr><td>Flow (2026.44)</td><td>The same two stand-ins as ChasePlane.</td><td><a href="flow.html">guide</a></td></tr>
   <tr><td>SayIntentions.AI (5.6.5)</td><td>A launcher, a WebView2 policy, six fonts and a watcher that keeps its Community links from being emptied by Wine's <code>rmdir</code>.</td><td><a href="sayintentions.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
   <tr><td>BeyondATC (1.8.23 EA)</td><td>Needs nothing in the prefix. Starts inside the simulator's container.</td><td><a href="beyondatc.html">guide</a></td></tr>
-  <tr><td>Active Sky FS (1.0.9720.20096)</td><td>Proton FS2024, so GDI+ follows a font replacement, and Carlito in place of Calibri. Never force-kill it.</td><td><a href="active-sky.html">guide</a></td></tr>
+  <tr><td>Active Sky FS (1.0.9720.20096)</td><td>Proton FS2024, so GDI+ follows a font replacement, and Carlito in place of Calibri. Runs in the add-ons prefix, with the sentinel open. Never force-kill it.</td><td><a href="active-sky.html">guide</a></td></tr>
   <tr><td>REX Atmos Core (8.1)</td><td>A WebView2 policy, and two Proton FS2024 patches: one draws its window, the other lets its sliders reach the simulator.</td><td><a href="rex-atmos-core.html">guide</a></td></tr>
-  <tr><td>vRAAS (1.3.9)</td><td>Direct3D 9 off, started inside the simulator's container by a watcher.</td><td><a href="vraas.html">guide</a></td></tr>
+  <tr><td>vRAAS (1.3.9)</td><td>Direct3D 9 off, started in the add-ons prefix by a watcher, with the sentinel open.</td><td><a href="vraas.html">guide</a></td></tr>
   <tr><td>FSRealistic+ (1.1.9)</td><td>Starts from the simulator's <code>exe.xml</code> as on Windows.</td><td><a href="fsrealistic-plus.html">guide</a></td></tr>
 </table>
 </div>
@@ -47,11 +47,11 @@ description: Which Windows add-ons for MSFS 2024 work under Proton, what each on
 <div class="table-wrap">
 <table>
   <tr><th>Add-on</th><th>What it needs</th><th>Guide</th></tr>
-  <tr><td>MSFS AutoFPS (0.5.4)</td><td>Proton FS2024 for "Close to Tray", Direct3D 9 off, started inside the simulator's container. It won't start from <code>exe.xml</code>.</td><td><a href="msfs-autofps.html">guide</a></td></tr>
-  <tr><td>Volanta (1.19.2)</td><td>Runs in a second prefix that shares the simulator's <code>C:</code> drive, so it stays out of the simulator's wineserver. Needs SimConnect over TCP.</td><td><a href="volanta.html">guide</a></td></tr>
+  <tr><td>MSFS AutoFPS (0.5.5)</td><td>Proton FS2024 for "Close to Tray", Direct3D 9 off, started inside the simulator's container. It won't start from <code>exe.xml</code>.</td><td><a href="msfs-autofps.html">guide</a></td></tr>
+  <tr><td>Volanta (1.19.2)</td><td>Runs in the add-ons prefix, which shares the simulator's <code>C:</code> drive and has its own Wine server. Needs SimConnect over TCP.</td><td><a href="volanta.html">guide</a></td></tr>
   <tr><td>Navigraph Simlink (1.1.41)</td><td>Its own Wine prefix, SimConnect over TCP, and a sign-in link that Linux hands to the prefix. It never reconnects after a lost connection, so a watcher restarts it.</td><td><a href="navigraph-simlink.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
   <tr><td>FlightSim Dispatch (1.5.0)</td><td>Its own Wine prefix. It doesn't talk to the simulator.</td><td><a href="flightsim-dispatch.html">guide</a></td></tr>
-  <tr><td>Lorby Axis and Ohs (4.58.2)</td><td>A timer fix in wine-mono's WindowsBase, without which its scripts stop after a minute, a heap patch in Proton FS2024, and joystick IDs remapped from Windows.</td><td><a href="axis-and-ohs.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
+  <tr><td>Lorby Axis and Ohs (4.58.2)</td><td>A timer fix in wine-mono's WindowsBase, without which its scripts stop after a minute, a heap patch in Proton FS2024, joystick IDs remapped from Windows, and the add-ons prefix.</td><td><a href="axis-and-ohs.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
   <tr><td>OpenDeck for Stream Deck (2.14.2)</td><td>The native Linux app, a converter for Stream Deck profiles, and three optional source patches.</td><td><a href="opendeck.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
   <tr><td>ReShade (6.8)</td><td>Copied into the simulator folder as <code>dxgi.dll</code>; no launch option.</td><td><a href="reshade.html">guide</a></td></tr>
   <tr><td>Glass Cockpit DLSS Fix (1.0.2)</td><td>ReShade, and two vkd3d-proton patches in Proton FS2024.</td><td><a href="glass-cockpit-dlss-fix.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
@@ -80,7 +80,9 @@ description: Which Windows add-ons for MSFS 2024 work under Proton, what each on
 <table>
   <tr><th>Add-on</th><th>What it needs</th><th>Guide</th></tr>
   <tr><td>.NET Framework 4.8 (4.8)</td><td>Microsoft's framework and <code>mscoree.dll</code> in the prefix. The installer exits 0 and installs nothing in a Windows 11 prefix, so the command switches the prefix to Windows 7 while it runs. The Fenix, the Maddog and SayIntentions need it.</td><td><a href="dotnet48.html">guide</a></td></tr>
-  <tr><td>SimConnect over TCP (SimConnect 12.2.0.0)</td><td>Moves the simulator's SimConnect port above 1024. Volanta, Simlink and the aircraft watchers need it.</td><td><a href="simconnect-tcp.html">guide</a></td></tr>
+  <tr><td>SimConnect over TCP (SimConnect 12.2.0.0)</td><td>Moves the simulator's SimConnect port above 1024. The add-ons prefix, Simlink and the aircraft watchers need it.</td><td><a href="simconnect-tcp.html">guide</a></td></tr>
+  <tr><td>Add-ons prefix</td><td>A second Wine prefix for Active Sky, vRAAS, Axis and Ohs and Volanta, kept up from login so its desktop doesn't fail when the simulator opens.</td><td><a href="addons-prefix.html">guide</a></td></tr>
+  <tr><td>Simulator sentinel</td><td>A stand-in called <code>FlightSimulator2024.exe</code> for the programs in that prefix that look for the simulator by name.</td><td><a href="sentinel.html">guide</a></td></tr>
 </table>
 </div>
 

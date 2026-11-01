@@ -5,6 +5,8 @@ HERE="$(dirname "$(readlink -f "$0")")"
 ROOT="$(cd "$HERE/../.." && pwd)"
 # shellcheck source=tools/registry.sh
 . "$HERE/../../tools/registry.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
 # shellcheck source=addons/active-sky/parts/carlito.sh
 . "$HERE/parts/carlito.sh"
 # shellcheck source=addons/active-sky/parts/program.sh
@@ -31,6 +33,21 @@ weather_api_line() {
   return 1
 }
 
+utils_entry_line() {
+  case "$(python3 -I "$ROOT/tools/exe-entry.py" state "${ACTIVE_SKY_EXE_XML:-}" "$ACTIVE_SKY_UTILS_ENTRY")" in
+    enabled)
+      echo "FAIL exe.xml still starts ActiveSky Utils, so the simulator opens a second one on its own Wine server, out of Active Sky's reach; an Active Sky update can turn the entry back on; run: flightsim-on-linux addon apply active-sky"
+      return 1
+      ;;
+    disabled) echo "ok the ActiveSky Utils entry in exe.xml has Disabled true" ;;
+    *) echo "ok exe.xml has no ActiveSky Utils entry" ;;
+  esac
+}
+
+addon_sibling_prefix_check active-sky || status=1
+[ ! -f "$(addon_sibling_prefix)/system.reg" ] || addon_sibling_cfg check active-sky || status=1
+utils_entry_line || status=1
+
 python3 -I "$ROOT/fsol/proton_build.py" check "${FSOL_PROTON:-}" gdiplus-font-family-after-substitution.patch lib/wine/x86_64-windows/gdiplus.dll "Proton's gdiplus.dll finds a font family after Wine substitutes another for it, so Active Sky can draw with Calibri and Microsoft Sans Serif" || status=1
 
 if carlito_installed; then
@@ -41,10 +58,10 @@ else
 fi
 
 for name in Calibri "Calibri Medium"; do
-  if [ "$(registry_get "$ACTIVE_SKY_KEY" "$name" || true)" = Carlito ]; then
-    echo "ok $name is replaced by Carlito in the prefix registry"
+  if [ "$(addon_sibling_registry_get "$ACTIVE_SKY_KEY" "$name" || true)" = Carlito ]; then
+    echo "ok $name is replaced by Carlito in the registry of the add-ons prefix"
   else
-    echo "FAIL $name is not replaced by Carlito in the prefix registry; run: flightsim-on-linux addon apply active-sky"
+    echo "FAIL $name is not replaced by Carlito in the registry of the add-ons prefix; run: flightsim-on-linux addon apply active-sky"
     status=1
   fi
 done

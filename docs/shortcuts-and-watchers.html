@@ -88,12 +88,15 @@
 
 <h3>When it starts and what stops</h3>
 <p>By default the watcher starts the program once for each simulator process, about 20 seconds after the simulator appears, and never when the program is already running. A program you close by hand stays closed until the next simulator. Some add-ons wait for another process first, or start only when the simulator loads a matching aircraft.</p>
+<p>Three add-ons keep their program up instead, and look at the state every 8 seconds. <code>addons-prefix</code> keeps its program running whether or not the simulator is there. <code>sentinel</code> keeps it running while the simulator is. <code>active-sky</code> keeps ActiveSky Utils running while the sentinel is. A program of theirs that dies comes back at the next look.</p>
 <p>What happens when the simulator closes depends on the add-on's <code>stop</code> setting. With <code>never</code>, the watcher leaves the program alone. With <code>with_simulator</code>, it stops the program when the simulator closes. <code>with_simulator_if_started</code> does the same, but leaves a program you opened yourself. <code>on_other_aircraft</code> stops the program when a different aircraft loads, and when the simulator closes if the watcher started it.</p>
 <p>To stop a program, the watcher runs the add-on's <code>close</code> script if it has one. Otherwise it sends the program SIGTERM. It never sends SIGKILL, because killing some programs in flight leaves the simulator changed: AutoFPS killed in flight leaves the terrain level of detail lowered. The service itself uses <code>KillMode=process</code>, so stopping or switching off the service leaves the program running, whatever <code>stop</code> says.</p>
 
 <h3>Add-ons with a watcher</h3>
 <p>The list at the time of writing. <code>addon list</code> marks the same add-ons with <code>[watcher]</code> once the service file is there.</p>
 <ul>
+  <li>Active Sky FS: <code>addon watcher active-sky</code></li>
+  <li>Add-ons prefix: <code>addon watcher addons-prefix</code></li>
   <li>ChasePlane: <code>addon watcher chaseplane</code></li>
   <li>FSLabs A321 and Control Center: <code>addon watcher fslabs-a321</code></li>
   <li>Lorby Axis and Ohs: <code>addon watcher axis-and-ohs</code></li>
@@ -101,6 +104,7 @@
   <li>MSFS AutoFPS: <code>addon watcher msfs-autofps</code></li>
   <li>Navigraph Simlink: <code>addon watcher navigraph-simlink</code></li>
   <li>SayIntentions.AI: <code>addon watcher sayintentions</code></li>
+  <li>Simulator sentinel: <code>addon watcher sentinel</code></li>
   <li>Volanta: <code>addon watcher volanta</code></li>
   <li>vRAAS: <code>addon watcher vraas</code></li>
 </ul>
@@ -127,7 +131,7 @@ journalctl --user -u flightsim-on-linux-&lt;id&gt; -f</code></pre>
 
 <h2>Nothing restarts without a limit</h2>
 <ul>
-  <li>The program starts once for each simulator process. With an aircraft trigger it starts on each matching aircraft when it isn't already running.</li>
+  <li>The program starts once for each simulator process. With an aircraft trigger it starts on each matching aircraft when it isn't already running. The three add-ons that keep a program up are the exception: they start it again at every look, 8 seconds apart, for as long as it keeps dying.</li>
   <li>A health restart, for an add-on that restarts its program when the simulator is up and the program has had no connection to it for a set time, runs at most three times for each simulator process, that set time apart. After the third the log says <code>restarted 3 times without a connection; giving up until the simulator restarts</code>.</li>
   <li>The helper process that reads the aircraft is started again 8 seconds after it dies.</li>
   <li>A script that is still running after 120 seconds is killed, the log says so, and the loop moves on. A program the script already started keeps running.</li>

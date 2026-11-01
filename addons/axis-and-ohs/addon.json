@@ -16,7 +16,7 @@
     {
       "title": "Axis and Ohs",
       "script": "launch",
-      "comment": "Starts Lorby Axis and Ohs, inside the running simulator's container when the simulator is open",
+      "comment": "Starts Lorby Axis and Ohs in the add-ons prefix, which has its own Wine server next to the simulator's",
       "icon": {"place": "prefix", "glob": "drive_c/Program Files/LorbyAxisAndOhs_MSFS24/LorbyAxisAndOhs_MSFS2024.exe"}
     }
   ],

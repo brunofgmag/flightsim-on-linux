@@ -175,8 +175,11 @@ class AaoCase(unittest.TestCase):
         self.proton = self.fake.tool
         self.record = self.root / "record"
         self.processes = []
+        self.sibling = self.root / "home/.local/share/flightsim-on-linux/addons-prefix"
         write(self.prefix / EXE, "MZ")
         write(self.prefix / "user.reg", DEFAULT_USER_REG)
+        write(self.prefix / "system.reg", "system of the simulator\n")
+        write(self.found.base / "SimConnect.xml", "<SimConnect.Comm><Protocol>IPv4</Protocol><Port>5111</Port></SimConnect.Comm>")
         source = self.proton / "files/share/wine/mono/wine-mono-11.3.0"
         (source / WINDOWSBASE).parent.mkdir(parents=True)
         (source / WINDOWSBASE).write_bytes(windowsbase())
@@ -192,7 +195,7 @@ class AaoCase(unittest.TestCase):
         self.write_build()
         stub(self.root / "bin/notify-send", f'#!/bin/sh\nprintf "notice %s\\n" "$*" >> "{self.record}"\n')
         stub(self.root / "bin/dotnet", f'#!/bin/sh\nprintf "dotnet %s\\n" "$*" >> "{self.record}"\ncp "{self.patched}" "$4"\n')
-        stub(self.proton / "files/bin/wine", f'#!/bin/sh\nprintf "wine %s\\n" "$*" >> "{self.record}"\n')
+        stub(self.proton / "files/bin/wine", f'#!/bin/sh\nprintf "wine %s\\n" "$*" >> "{self.record}"\nprintf "%s\\n" "$WINEPREFIX" >> "{self.record}.prefix"\n[ "$2" != delete ] || sed -i \'/AsmOverrides/d;/gac=n/d\' "$WINEPREFIX/user.reg"\n[ "$2" != add ] || printf \'[Software\\\\\\\\Wine\\\\\\\\Mono\\\\\\\\AsmOverrides] 1\\n"*"="gac=n"\\n\' >> "$WINEPREFIX/user.reg"\n')
         stub(self.proton / "files/bin/wineserver", "#!/bin/sh\nexit 0\n")
         process_stubs(self.root / "bin", self.token)
 
@@ -238,6 +241,7 @@ class AaoCase(unittest.TestCase):
             "FSOL_SIM_RUNNING": "0",
             "FSOL_AAO_STEP": "1",
             "FSOL_AAO_WATCH": "10",
+            "FSOL_REGISTRY_WAIT": "1",
         }
         env.update(extra)
         return env
@@ -255,7 +259,7 @@ class AaoCase(unittest.TestCase):
         return self.found.compatdata / "flightsim-on-linux-backup/axis-and-ohs"
 
     def snapshot(self):
-        return {str(path.relative_to(self.root)): sha256(path.read_bytes()) for path in sorted(self.root.rglob("*")) if path.is_file() and not path.is_symlink() and path.name != "record" and "cache" not in path.parts}
+        return {str(path.relative_to(self.root)): sha256(path.read_bytes()) for path in sorted(self.root.rglob("*")) if path.is_file() and not path.is_symlink() and not path.name.startswith("record") and "cache" not in path.parts}
 
 
 class ShapeTest(AaoCase):
@@ -280,6 +284,21 @@ class ShapeTest(AaoCase):
 
 
 class ApplyTest(AaoCase):
+    def test_apply_makes_the_add_ons_prefix_with_the_settings_axis_and_ohs_needs(self):
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.sibling / "system.reg").read_text(), "system of the simulator\n")
+        self.assertIn("Port=5111", (self.sibling / "SimConnect.cfg").read_text())
+        self.assertIn('"*"="gac=n"', (self.sibling / "user.reg").read_text())
+
+    def test_an_add_ons_prefix_made_earlier_gets_the_gac_setting_too(self):
+        write(self.sibling / "system.reg", "made earlier\n")
+        write(self.sibling / "user.reg", DEFAULT_USER_REG)
+        self.assertEqual(self.script("apply").returncode, 0)
+        self.assertEqual((self.sibling / "system.reg").read_text(), "made earlier\n")
+        self.assertIn('"*"="gac=n"', (self.sibling / "user.reg").read_text())
+        self.assertEqual(Path(f"{self.record}.prefix").read_text().splitlines()[-1], str(self.sibling))
+
     def test_apply_says_first_that_it_changes_wine_mono_and_how_to_undo_it(self):
         result = self.script("apply")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -364,7 +383,7 @@ class UndoTest(AaoCase):
         self.script("apply")
         result = self.script("undo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.snapshot(), before)
+        self.assertEqual({path: digest for path, digest in self.snapshot().items() if "addons-prefix" not in path}, before)
         self.assertFalse((self.prefix / "drive_c/windows/mono").exists())
         self.assertFalse(self.backup().exists())
 
@@ -419,7 +438,7 @@ class UndoTest(AaoCase):
 class CheckTest(AaoCase):
     def fixed(self):
         self.script("apply")
-        write(self.prefix / "user.reg", DEFAULT_USER_REG + '[Software\\\\Wine\\\\Mono\\\\AsmOverrides] 1792018790\n"*"="gac=n"\n')
+        write(self.sibling / "user.reg", DEFAULT_USER_REG + '[Software\\\\Wine\\\\Mono\\\\AsmOverrides] 1792018790\n"*"="gac=n"\n')
 
     def lines(self, result):
         return [line for line in result.stdout.splitlines() if line.startswith(("ok ", "FAIL "))]
@@ -433,11 +452,16 @@ class CheckTest(AaoCase):
         self.assertEqual(len(failed), 1, result.stdout)
         self.assertIn(expected, failed[0])
 
-    def test_a_fixed_prefix_passes_the_three_lines(self):
+    def test_a_fixed_prefix_passes_the_eight_lines(self):
         self.fixed()
         result = self.script("check")
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(len(self.lines(result)), 3)
+        self.assertEqual(len(self.lines(result)), 8)
+
+    def test_a_simulators_prefix_with_the_setting_does_not_stand_in_for_the_add_ons_prefix(self):
+        self.fixed()
+        write(self.sibling / "user.reg", DEFAULT_USER_REG)
+        self.assertEqual(self.script("check").returncode, 1)
 
     def test_a_prefix_nothing_was_applied_to_fails_each_part(self):
         result = self.script("check")
@@ -459,7 +483,7 @@ class CheckTest(AaoCase):
         self.fails_with(lambda: shutil.rmtree(self.prefix / "drive_c/windows/mono"), "does not exist")
 
     def test_a_gac_override_that_is_gone_fails(self):
-        self.fails_with(lambda: write(self.prefix / "user.reg", DEFAULT_USER_REG), "not 'gac=n'")
+        self.fails_with(lambda: write(self.sibling / "user.reg", DEFAULT_USER_REG), "not 'gac=n'")
 
     def test_the_check_changes_nothing(self):
         self.fixed()
@@ -483,6 +507,10 @@ class InstallTest(AaoCase):
 
 
 class LaunchTest(AaoCase):
+    def setUp(self):
+        super().setUp()
+        write(self.sibling / "system.reg", "system\n")
+
     def stand_in(self, deadlocks=0, forever=True):
         counter = self.root / "attempts"
         lines = DEADLOCK_LINES.replace('"', '\\"')
@@ -515,7 +543,13 @@ class LaunchTest(AaoCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("addon install axis-and-ohs", result.stderr)
 
-    def test_it_opens_the_program_in_its_own_folder_with_direct3d_9_off(self):
+    def test_a_missing_add_ons_prefix_says_how_to_make_it(self):
+        (self.sibling / "system.reg").unlink()
+        result = self.script("launch")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("addon apply axis-and-ohs", result.stderr)
+
+    def test_it_opens_the_program_in_the_add_ons_prefix_with_direct3d_9_off(self):
         counter = self.stand_in()
         result = self.script("launch")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -524,7 +558,7 @@ class LaunchTest(AaoCase):
         debug, overrides, cwd = Path(f"{self.record}.env").read_text().splitlines()[0].split("|")
         self.assertEqual(debug, "err+all")
         self.assertIn("d3d9=d", overrides)
-        self.assertEqual(cwd, str(self.prefix / "drive_c/Program Files/LorbyAxisAndOhs_MSFS24"))
+        self.assertEqual(cwd, str(self.sibling))
         self.assertEqual([line for line in self.recorded() if line.startswith("wine ")], [f"wine {PROGRAM}"])
 
     def test_a_program_already_running_is_left_alone(self):
@@ -536,12 +570,12 @@ class LaunchTest(AaoCase):
         time.sleep(0.5)
         self.assertEqual([line for line in self.recorded() if line.startswith("wine ")], [])
 
-    def test_with_the_simulator_running_it_goes_through_the_cli_run_command(self):
-        stub(self.root / "cli", f'#!/bin/sh\nprintf "cli %s\\n" "$*" >> "{self.record}"\nprintf "%s\\n" "$WINEDEBUG|$EXTRA_WINEDLLOVERRIDES" >> "{self.record}.env"\n')
+    def test_with_the_simulator_running_it_stays_in_the_add_ons_prefix(self):
+        stub(self.root / "cli", f'#!/bin/sh\nprintf "cli %s\\n" "$*" >> "{self.record}"\n')
+        counter = self.stand_in()
         self.script("launch", FSOL_SIM_RUNNING="1")
-        self.assertTrue(self.wait_for(lambda: any(line.startswith("cli ") for line in self.recorded())))
-        self.assertIn(f"cli run {PROGRAM}", self.recorded())
-        self.assertEqual(Path(f"{self.record}.env").read_text().strip(), "err+all|d3d9=d")
+        self.assertTrue(self.wait_for(counter.exists))
+        self.assertEqual([line for line in self.recorded() if line.startswith(("wine ", "cli "))], [f"wine {PROGRAM}"])
 
     def test_a_startup_deadlock_closes_the_program_and_opens_it_again_once(self):
         counter = self.stand_in(deadlocks=1)

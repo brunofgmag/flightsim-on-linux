@@ -1,7 +1,7 @@
 {
   "name": "Active Sky FS",
   "tested_version": "1.0.9720.20096",
-  "tested_on": "2026-10-15",
+  "tested_on": "2026-11-01",
   "needs": ["proton-fs2024", "simulator-closed"],
   "touches_addon_files": false,
   "installed": {
@@ -17,8 +17,15 @@
       "title": "Active Sky",
       "script": "launch",
       "close": "close",
-      "comment": "Starts Active Sky inside the running simulator's container",
+      "comment": "Starts Active Sky in the add-ons prefix, which has its own Wine server next to the simulator's",
       "icon": {"place": "prefix", "glob": "drive_c/Program Files/HiFi/AS_FS/AS_FS.exe"}
     }
-  ]
+  ],
+  "watcher": {
+    "app": "^[A-Za-z]:.*\\\\AddonFolder\\\\ActiveSkyUtils\\.exe",
+    "script": "utils",
+    "trigger": {"process": "^[A-Za-z]:.*\\\\sentinel\\\\FlightSimulator2024\\.exe"},
+    "poll": 8,
+    "stop": "never"
+  }
 }

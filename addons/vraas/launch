@@ -4,16 +4,24 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=tools/addon-launch.sh
 . "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
 PATTERN='^[A-Za-z]:.*\\LAND3\.vRAAS\\current\\vRAAS\.exe'
 
-addon_need_simulator
 addon_refuse_second "$PATTERN"
 exe="$(compgen -G "$FSOL_PREFIX/drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe" | head -n 1 || true)"
 if [ -z "$exe" ]; then
   addon_say vraas "vRAAS is not installed; run: flightsim-on-linux addon install vraas <installer>"
   exit 1
 fi
+cfg="$(addon_sibling_prefix)/SimConnect.cfg"
+if [ ! -f "$cfg" ]; then
+  addon_say vraas "the add-ons prefix has no SimConnect.cfg; run: flightsim-on-linux addon apply vraas"
+  exit 1
+fi
+cp "$cfg" "$(dirname "$exe")/"
 log="$(addon_log_file vraas)"
 
-EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
+cd "$(addon_sibling_prefix)"
+EXTRA_WINEDLLOVERRIDES=d3d9=d addon_sibling_prefix_wine "$(addon_windows_path "$exe")" "$@" > "$log" 2>&1 &
 disown

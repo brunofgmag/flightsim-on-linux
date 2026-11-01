@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+ADDONS_PREFIX_TOOLS="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 PROTON_OVERRIDES='steam.exe=b;dotnetfx35.exe=b;dotnetfx35setup.exe=b;beclient.dll=b,n;beclient_x64.dll=b,n;winebth.sys=d;opencl=n,d'
 DXVK_OVERRIDES='d3d11=n;d3d10core=n;d3d9=n;dxgi=n;d3d12=n;d3d12core=n'
 DRIVER_OVERRIDES='winewayland.drv=d;winex11.drv=b'
@@ -44,7 +45,7 @@ addon_sibling_prefix_create() {
   fi
   mkdir -p "$sibling/dosdevices"
   if addon_sibling_prefix_running "$sibling"; then
-    echo "close the programs of the add-ons prefix before its registry is copied" >&2
+    echo "close the programs of the add-ons prefix before its registry is copied; if its service is on, first run: flightsim-on-linux addon watcher addons-prefix --off, then flightsim-on-linux addon launch addons-prefix close" >&2
     return 1
   fi
   for file in system.reg user.reg userdef.reg; do
@@ -71,4 +72,64 @@ addon_sibling_prefix_wine() {
     unset NoDefaultCurrentDirectoryInExePath
     exec "$FSOL_PROTON/files/bin/wine" "$@"
   )
+}
+
+addon_sibling_prefix_kill() {
+  WINEPREFIX="$(addon_sibling_prefix)" "${FSOL_PROTON:?FSOL_PROTON is not set}/files/bin/wineserver" -k
+}
+
+addon_sibling_cfg() {
+  python3 -I "$ADDONS_PREFIX_TOOLS/../fsol/simconnect.py" "$1" "$2" "${FSOL_BASE:-}" "$(addon_sibling_prefix)"
+}
+
+addon_sibling_prefix_check() {
+  local id="$1" sibling status=0
+  sibling="$(addon_sibling_prefix)"
+  if [ -f "$sibling/system.reg" ] && [ -f "$sibling/user.reg" ]; then
+    echo "ok the add-ons prefix $sibling has its own registry"
+  else
+    echo "FAIL the add-ons prefix $sibling does not exist; run: flightsim-on-linux addon apply $id"
+    return 1
+  fi
+  if [ -L "$sibling/drive_c" ] && [ "$(readlink -f "$sibling/drive_c")" = "$(readlink -f "${FSOL_PREFIX:-/nonexistent}/drive_c")" ]; then
+    echo "ok drive_c of the add-ons prefix is the simulator prefix's drive_c, so a program installed in one is found in both"
+  else
+    echo "FAIL drive_c of the add-ons prefix is not a link to the simulator prefix's drive_c; delete $sibling and run: flightsim-on-linux addon apply $id"
+    status=1
+  fi
+  if [ "$(cat "$sibling/.update-timestamp" 2> /dev/null || true)" = disable ]; then
+    echo "ok .update-timestamp holds disable, so Wine never rewrites the shared windows folder"
+  else
+    echo "FAIL .update-timestamp does not hold disable, so Wine could rewrite the windows folder it shares with the simulator; delete $sibling and run: flightsim-on-linux addon apply $id"
+    status=1
+  fi
+  return "$status"
+}
+
+addon_sibling_registry_get() {
+  FSOL_PREFIX="$(addon_sibling_prefix)" registry_get "$1" "$2"
+}
+
+addon_sibling_registry_set() {
+  local key="$1" name="$2" value="$3"
+  if [ "$(addon_sibling_registry_get "$key" "$name" || true)" = "$value" ]; then
+    echo "already $name is $value in the add-ons prefix"
+    return 0
+  fi
+  addon_sibling_prefix_wine reg add "HKCU\\$key" /v "$name" /t REG_SZ /d "$value" /f > /dev/null
+  if ! FSOL_PREFIX="$(addon_sibling_prefix)" registry_wait "$key" "$name" "$value"; then
+    echo "FAIL Wine has not written $name to user.reg of the add-ons prefix yet; run apply again" >&2
+    return 1
+  fi
+  echo "changed $name to $value in the add-ons prefix"
+}
+
+addon_sibling_registry_delete() {
+  local key="$1" name="$2"
+  if ! addon_sibling_registry_get "$key" "$name" > /dev/null; then
+    echo "already $name is not in the add-ons prefix"
+    return 0
+  fi
+  addon_sibling_prefix_wine reg delete "HKCU\\$key" /v "$name" /f > /dev/null
+  echo "changed $name is removed from the add-ons prefix"
 }

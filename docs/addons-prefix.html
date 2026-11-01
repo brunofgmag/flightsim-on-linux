@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add-ons prefix · Flightsim on Linux</title>
+  <meta name="description" content="The second Wine prefix that keeps Active Sky, vRAAS, Axis and Ohs and Volanta off the simulator&#x27;s Wine server: what leaving that server costs, which add-ons run there, and the service that keeps its desktop up.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>Add-ons prefix</h1>
+<p class="lead">Tested on 1 November 2026. A second Wine prefix for programs that only talk to the simulator over SimConnect. It has its own Wine server and shares the simulator's <code>C:</code> drive. One command makes it and one service keeps it up.</p>
+
+<h2>Why it exists</h2>
+<p>A Wine server serves one prefix, and a program started next to the simulator joins the simulator's server. Leaving that server costs three things: the SimConnect pipe, the list of processes, and access to the simulator's memory. <a href="simconnect-tcp.html">SimConnect over TCP</a> replaces the pipe. <a href="sentinel.html">The sentinel</a> covers the list of processes for a program that only asks for a name. Nothing replaces access to the memory, so that decides who can leave.</p>
+<ul>
+  <li>Volanta, Active Sky with ActiveSky Utils, vRAAS and Lorby Axis and Ohs run here.</li>
+  <li>MSFS AutoFPS, the ChasePlane bridge and REX Atmos Core read or write the simulator's memory, so they stay on its server.</li>
+  <li>BeyondATC and SayIntentions.AI also stay: they load code into the simulator to dock jetways for the AI traffic.</li>
+</ul>
+<p>On 1 November 2026 a flight on the test machine ran the four programs of the first line in this kind of prefix, started by the machine's own scripts. The scripts here are a port of those, and have run against a fake simulator only.</p>
+
+<h2>Make it run</h2>
+<p>Close the simulator and every program in its prefix. <code>addon apply</code> needs MinGW-w64 (<code>mingw-w64-gcc</code> on Arch, <code>gcc-mingw-w64-x86-64</code> on Debian and Ubuntu) to build a small program.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp
+~/flightsim-on-linux/bin/flightsim-on-linux addon apply addons-prefix
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher addons-prefix</code></pre>
+<p>The second command makes the prefix in <code>${XDG_DATA_HOME:-~/.local/share}/flightsim-on-linux/addons-prefix</code> if it isn't there, writes its <code>SimConnect.cfg</code> and builds <code>desktop-holder.exe</code>. <a href="volanta.html">The Volanta guide</a> says what the prefix holds. The third writes a user service called <code>flightsim-on-linux-addons-prefix.service</code> and switches it on. It starts with your login session and keeps <code>desktop-holder.exe</code> running, with or without the simulator.</p>
+<p>Install your programs in the simulator's prefix before you make this one. Its registry is a copy, and nothing keeps it in step.</p>
+
+<h2>Why the service</h2>
+<p>On 1 November 2026 the prefix came up broken twice, at 10:21 and 11:19, each time cold and at the moment the simulator opened. No program could open a window until the Wine server restarted. Volanta died with <code>FATAL:ui\gfx\win\hwnd_util.cc:65] 1400</code>, ActiveSky Utils with <code>Error creating window handle</code>, vRAAS in <code>HwndWrapper..ctor</code>, and the prefix had no <code>explorer.exe /desktop</code>.</p>
+<p>Wine starts that <code>explorer</code> for the first window in a prefix. If it dies, the Wine server keeps a desktop with no <code>explorer</code> behind it, and every later program fails on that desktop until the server stops. Why <code>explorer</code> dies in the first second of the simulator was not found, and the fix doesn't depend on it. <code>desktop-holder.exe</code> is a hidden window and a sleep. With a window always open, <code>explorer</code> never exits, and nothing has to start it while the simulator opens. The one opening measured with the service on, at 11:58 that day, brought everything up by itself.</p>
+<p>When the holder finds no desktop it exits with code 1, and its launch script restarts the Wine server of this prefix. The simulator has a server of its own, so that doesn't touch it.</p>
+
+<h2>Change Proton</h2>
+<p>The Wine server keeps the Proton it started with, and a newer Wine refuses to talk to it. After you rebuild or change Proton, close the programs of this prefix and run:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon launch addons-prefix close</code></pre>
+<p>This stops the Wine server of this prefix and every program in it. With the service on, the prefix comes back in about 8 seconds on the new Proton. Restarting the service isn't enough: it uses <code>KillMode=process</code>, so that it can't take the programs down with it.</p>
+
+<h2>Make it again</h2>
+<p>A program you install in the simulator's prefix later isn't in this prefix's registry. To copy the registry again, close the simulator and the programs of this prefix, then:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher addons-prefix --off
+~/flightsim-on-linux/bin/flightsim-on-linux addon launch addons-prefix close
+FSOL_ADDONS_PREFIX_RESET=1 ~/flightsim-on-linux/bin/flightsim-on-linux addon apply addons-prefix
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher addons-prefix</code></pre>
+<p>Whatever the add-ons wrote into the old registry is lost, so run <code>addon apply</code> again for each add-on that runs here. The copy refuses while a Wine server holds either prefix.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check addons-prefix</code></pre>
+<p>It prints seven lines and changes nothing: the prefix has its own registry, <code>drive_c</code> is the simulator's, <code>.update-timestamp</code> holds <code>disable</code>, <code>SimConnect.xml</code> declares a port above 1023, <code>SimConnect.cfg</code> points at it, <code>desktop-holder.exe</code> is built, and whether the desktop is being kept up. That last line never fails, because Volanta runs without the service. It says how to switch the service on.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The prefix stays on all the time: one Wine server and about ten idle processes.</li>
+  <li>Don't run one program in both prefixes at once. The two Wine servers share the folder but not the file locks or the mutexes.</li>
+  <li>The first second of the simulator can still take down a program that opens with it. Watchers here wait about 20 seconds for that reason.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher addons-prefix --off
+~/flightsim-on-linux/bin/flightsim-on-linux addon launch addons-prefix close
+~/flightsim-on-linux/bin/flightsim-on-linux addon undo addons-prefix</code></pre>
+<p>The first takes out the service, the second stops the prefix, and the third removes <code>SimConnect.cfg</code>. The prefix stays, because it holds the settings of the programs that run in it. <code>addon undo</code> prints the <code>rm -r</code> command that deletes it.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

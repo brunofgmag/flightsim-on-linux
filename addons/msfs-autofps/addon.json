@@ -1,7 +1,7 @@
 {
   "name": "MSFS AutoFPS",
-  "tested_version": "0.5.4.4",
-  "tested_on": "2026-10-16",
+  "tested_version": "0.5.5.0",
+  "tested_on": "2026-11-01",
   "needs": ["proton-fs2024"],
   "touches_addon_files": false,
   "installed": {

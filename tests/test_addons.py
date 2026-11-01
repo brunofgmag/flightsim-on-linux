@@ -366,6 +366,18 @@ class OptionalFieldsTest(OptionalCase):
         for trigger in ({"aircraft": "maddog"}, "none", "simulator"):
             addons.load(self.full(spec=dict(SPEC, watcher={"app": "x", "trigger": trigger})))
 
+    def test_the_triggers_that_keep_a_program_up_are_valid(self):
+        for trigger in ("always", "while_simulator", {"process": "sentinel"}):
+            addons.load(self.full(spec=dict(SPEC, watcher={"app": "x", "trigger": trigger})))
+
+    def test_a_process_trigger_regex_that_does_not_compile_is_refused(self):
+        with self.assertRaisesRegex(addons.AddonError, "watcher.trigger must be one of"):
+            addons.load(self.full(spec=dict(SPEC, watcher={"app": "x", "trigger": {"process": "("}})))
+
+    def test_on_other_aircraft_refuses_a_process_trigger(self):
+        with self.assertRaisesRegex(addons.AddonError, "on_other_aircraft needs an aircraft trigger"):
+            addons.load(self.full(spec=dict(SPEC, watcher={"app": "x", "stop": "on_other_aircraft", "trigger": {"process": "sentinel"}})))
+
     def test_a_trigger_regex_that_does_not_compile_is_refused(self):
         with self.assertRaisesRegex(addons.AddonError, "watcher.trigger must be one of"):
             addons.load(self.full(spec=dict(SPEC, watcher={"app": "x", "trigger": {"aircraft": "("}})))

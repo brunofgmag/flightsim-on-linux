@@ -10,4 +10,4 @@ HERE="$(dirname "$(readlink -f "$0")")"
 . "$HERE/parts/common.sh"
 
 addon_sibling_prefix_create
-volanta_cfg write
+addon_sibling_cfg write volanta

@@ -10,6 +10,7 @@ COMMENT = re.compile(r"<!--.*?-->", re.S)
 ENTRY = re.compile(r"<Launch\.Addon>.*?</Launch\.Addon>", re.S)
 PATH = re.compile(r"<Path>(.*?)</Path>", re.S | re.I)
 DISABLED = re.compile(r"<Disabled>\s*true\s*</Disabled>", re.I)
+DISABLED_TAG = re.compile(r"(<Disabled>\s*)\w*(\s*</Disabled>)", re.I)
 LINE_END = re.compile(r"[ \t]*(\r?\n)?")
 CLOSE = "</SimBase.Document>"
 UTF16_MARKS = (b"\xff\xfe", b"\xfe\xff")
@@ -167,6 +168,23 @@ def remove_entry(text, path):
     return text[:start] + text[end:]
 
 
+def with_disabled(block, value):
+    if DISABLED_TAG.search(block):
+        return DISABLED_TAG.sub(rf"\g<1>{value}\g<2>", block, count=1)
+    return PATH.sub(lambda found: f"<Disabled>{value}</Disabled>{found.group(0)}", block, count=1)
+
+
+def switch_entries(text, suffix, value):
+    ending = suffix.casefold()
+    pieces = []
+    last = 0
+    for match in ENTRY.finditer(visible(text)):
+        if (entry_path(match.group(0)) or "").endswith(ending):
+            pieces += [text[last:match.start()], with_disabled(text[match.start():match.end()], value)]
+            last = match.end()
+    return "".join(pieces) + text[last:]
+
+
 def has_entries(text):
     return bool(ENTRY.search(visible(text)))
 
@@ -197,6 +215,22 @@ def command_remove(args):
     return "removed"
 
 
+def command_disable(args):
+    state_now = state_ending(args.file, args.path)[0]
+    if state_now != "enabled":
+        return "already" if state_now == "disabled" else state_now
+    write_text(args.file, switch_entries(read_text(args.file), args.path, "True"))
+    return "disabled"
+
+
+def command_enable(args):
+    state_now = state_ending(args.file, args.path)[0]
+    if state_now != "disabled":
+        return "already" if state_now == "enabled" else state_now
+    write_text(args.file, switch_entries(read_text(args.file), args.path, "False"))
+    return "enabled"
+
+
 def parser():
     root = argparse.ArgumentParser(prog="exe_xml.py")
     commands = root.add_subparsers(dest="command", required=True)
@@ -208,7 +242,11 @@ def parser():
     remove = commands.add_parser("remove")
     remove.add_argument("--delete-if-empty", action="store_true")
     remove.set_defaults(run=command_remove)
-    for command in (status, add, remove):
+    disable = commands.add_parser("disable")
+    disable.set_defaults(run=command_disable)
+    enable = commands.add_parser("enable")
+    enable.set_defaults(run=command_enable)
+    for command in (status, add, remove, disable, enable):
         command.add_argument("file")
         command.add_argument("path")
     return root

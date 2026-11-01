@@ -1,0 +1,17 @@
+{
+  "name": "Simulator sentinel",
+  "tested_version": "1.0",
+  "tested_on": "2026-11-01",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "data": ["addons-prefix/system.reg"]
+  },
+  "watcher": {
+    "app": "^[A-Za-z]:.*\\\\sentinel\\\\FlightSimulator2024\\.exe",
+    "script": "launch",
+    "trigger": "while_simulator",
+    "poll": 8,
+    "stop": "with_simulator"
+  }
+}

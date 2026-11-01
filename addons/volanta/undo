@@ -4,8 +4,5 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=tools/addons-prefix.sh
 . "$HERE/../../tools/addons-prefix.sh"
-# shellcheck source=addons/volanta/parts/common.sh
-. "$HERE/parts/common.sh"
 
-volanta_cfg remove
-echo "the add-ons prefix $(addon_sibling_prefix) stays; it holds a copy of the simulator's registry and Volanta's settings. To delete it, close Volanta and run: rm -r '$(addon_sibling_prefix)' '$(addon_sibling_prefix)-gstreamer'"
+echo "the add-ons prefix $(addon_sibling_prefix) stays, with its SimConnect.cfg; it holds a copy of the simulator's registry and Volanta's settings, and other add-ons may run there. To delete it, close its programs and run: rm -r '$(addon_sibling_prefix)' '$(addon_sibling_prefix)-gstreamer'"

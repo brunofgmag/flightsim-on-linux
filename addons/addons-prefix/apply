@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=tools/shim.sh
+. "$HERE/../../tools/shim.sh"
+# shellcheck source=addons/addons-prefix/parts/common.sh
+. "$HERE/parts/common.sh"
+
+addon_sibling_prefix_create
+addon_sibling_cfg write addons-prefix
+shim_path desktop-holder "$HOLDER_FILE" > /dev/null
+echo "built the program that keeps the prefix's desktop up; to keep it running, run: flightsim-on-linux addon watcher addons-prefix"

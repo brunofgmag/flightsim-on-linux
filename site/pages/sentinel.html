@@ -1,0 +1,36 @@
+title: Simulator sentinel
+description: A small program called FlightSimulator2024.exe that opens in the add-ons prefix while the simulator runs, for Active Sky and vRAAS, which look for the simulator by its process name.
+---
+<h1>Simulator sentinel</h1>
+<p class="lead">Tested on 1 November 2026. A 17 KB program called <code>FlightSimulator2024.exe</code> that sleeps. A service keeps it open in the <a href="addons-prefix.html">add-ons prefix</a> while the simulator runs.</p>
+
+<h2>Why it exists</h2>
+<p>A program in the add-ons prefix sees the processes of that prefix only, and some programs look for the simulator there:</p>
+<ul>
+  <li><code>ActiveSkyUtils.exe</code> looks for <code>flightsimulator2024</code> in the process list every 2 seconds and closes when it isn't there. Without the sentinel it died within seconds. With it, it stayed past 30 seconds.</li>
+  <li>vRAAS starts SimConnect only after it sees that process. Without the sentinel it stopped at <code>Starting API completed</code>. Opening the sentinel moved it on in under 30 seconds.</li>
+</ul>
+<p>Axis and Ohs and Volanta don't need it.</p>
+
+<h2>Make it run</h2>
+<p>You need the add-ons prefix and MinGW-w64, as <a href="addons-prefix.html">its guide</a> says.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply sentinel
+~/flightsim-on-linux/bin/flightsim-on-linux addon watcher sentinel</code></pre>
+<p>The first builds the program. The second writes a user service called <code>flightsim-on-linux-sentinel.service</code> and switches it on.</p>
+
+<h2>Start it</h2>
+<p>There is nothing to start. The service looks every 8 seconds and opens the sentinel as soon as the simulator is there. If the sentinel dies with the simulator running, the next look brings it back. When the simulator closes, the service asks it to end with SIGTERM, and ActiveSky Utils then closes by itself.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check sentinel</code></pre>
+<p>It prints two lines and changes nothing: the program is built, and it is running. With the simulator closed the second line passes. With the simulator open and no sentinel it fails, and says to switch the service on.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The sentinel runs from your cache folder, and this project finds the simulator by its Steam path, so nothing here takes one for the other. A search of your own for <code>FlightSimulator2024</code> finds two processes while the simulator runs.</li>
+  <li>The name is enough for these two programs. A program that wants the simulator's memory gets nothing from it, as <a href="addons-prefix.html">the add-ons prefix guide</a> says.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher sentinel --off</code></pre>
+<p>This takes out the service. <code>addon undo sentinel</code> has nothing to restore: <code>apply</code> only builds a program in the cache.</p>

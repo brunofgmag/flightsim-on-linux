@@ -7,6 +7,10 @@ export AAO_PARTS FSOL_ROOT AAO_BACKUP AAO_ASM_OVERRIDE_ADDED
 
 # shellcheck source=tools/addon-launch.sh
 . "$FSOL_ROOT/tools/addon-launch.sh"
+# shellcheck source=tools/registry.sh
+. "$FSOL_ROOT/tools/registry.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$FSOL_ROOT/tools/addons-prefix.sh"
 # shellcheck source=tools/shim.sh
 . "$FSOL_ROOT/tools/shim.sh"
 # shellcheck source=addons/gsx-pro/parts/mono-copy.sh

@@ -24,6 +24,7 @@ SCRIPT_TIMEOUT = 120
 LISTEN = "0A"
 ESTABLISHED = "01"
 KILL_ON_STOP = signal.SIGTERM
+BY_STATE = ("always", "while_simulator", "process")
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class Config:
     wait_for: dict | None = None
     trigger: str = "simulator"
     aircraft: str | None = None
+    process: str | None = None
     stop: str = "never"
     health: dict | None = None
 
@@ -47,7 +49,8 @@ class Config:
 
 def config_of(data):
     trigger = data.get("trigger", "simulator")
-    aircraft = trigger["aircraft"] if isinstance(trigger, dict) else None
+    aircraft = trigger.get("aircraft") if isinstance(trigger, dict) else None
+    process = trigger.get("process") if isinstance(trigger, dict) else None
     return Config(
         app=data["app"],
         script=data.get("script", "launch"),
@@ -55,8 +58,9 @@ def config_of(data):
         grace=data.get("grace", DEFAULT_GRACE),
         poll=data.get("poll", DEFAULT_POLL),
         wait_for=data.get("wait_for"),
-        trigger="aircraft" if aircraft else trigger,
+        trigger="aircraft" if aircraft else "process" if process else trigger,
         aircraft=aircraft,
+        process=process,
         stop=data.get("stop", "never"),
         health=data.get("health"),
     )
@@ -68,6 +72,7 @@ class Seen:
     sim: int | None = None
     app: bool = False
     waited: bool = False
+    present: bool = False
     aircraft: tuple = ()
     listening: bool = False
     connected: bool = False
@@ -150,6 +155,18 @@ def start_with_aircraft(config, memory, seen):
     return replace(memory, started=started), actions
 
 
+def wanted_now(config, seen):
+    if config.trigger == "always":
+        return True
+    return seen.sim is not None if config.trigger == "while_simulator" else seen.present
+
+
+def keep_up(config, memory, seen):
+    if seen.app or not wanted_now(config, seen):
+        return memory, []
+    return replace(memory, started=True), [("log", "starting the program"), ("run", config.script, config.args)]
+
+
 def start_actions(config, memory, seen):
     if config.trigger == "aircraft":
         return start_with_aircraft(config, memory, seen)
@@ -182,6 +199,9 @@ def step(config, memory, seen):
     actions = []
     if seen.sim != memory.sim:
         memory, actions, seen = simulator_changed(config, memory, seen)
+    if config.trigger in BY_STATE:
+        memory, started = keep_up(config, memory, seen)
+        return memory, actions + started
     if seen.sim is None:
         return memory, actions
     memory, started = start_actions(config, memory, seen)
@@ -264,6 +284,7 @@ def observe(config, proc, now, aircraft=()):
         sim=machine.sim_pid(proc),
         app=bool(apps),
         waited=bool(config.wait_for and matching(config.wait_for["process"], processes)),
+        present=bool(config.process and matching(config.process, processes)),
         aircraft=tuple(aircraft),
         listening=listening,
         connected=connected,

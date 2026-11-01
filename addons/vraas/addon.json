@@ -1,8 +1,8 @@
 {
   "name": "vRAAS",
   "tested_version": "1.3.9",
-  "tested_on": "2026-10-15",
-  "needs": [],
+  "tested_on": "2026-11-01",
+  "needs": ["simulator-closed"],
   "touches_addon_files": false,
   "installed": {
     "prefix": ["drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe"]
@@ -16,7 +16,7 @@
     {
       "title": "vRAAS",
       "script": "launch",
-      "comment": "Starts vRAAS inside the running simulator's container",
+      "comment": "Starts vRAAS in the add-ons prefix, which has its own Wine server next to the simulator's",
       "icon": {"place": "prefix", "glob": "drive_c/users/*/AppData/Local/LAND3.vRAAS/current/vRAAS.exe"}
     }
   ],
@@ -26,6 +26,6 @@
     "args": ["-autostart"],
     "grace": 20,
     "poll": 8,
-    "stop": "with_simulator"
+    "stop": "with_simulator_if_started"
   }
 }

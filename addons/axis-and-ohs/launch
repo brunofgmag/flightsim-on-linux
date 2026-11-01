@@ -4,6 +4,8 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=tools/addon-launch.sh
 . "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
 PATTERN='^[A-Za-z]:.*\\LorbyAxisAndOhs_MSFS2024\.exe'
 APP_FOLDER="$FSOL_PREFIX/drive_c/Program Files/LorbyAxisAndOhs_MSFS24"
 ATTEMPTS=3
@@ -18,6 +20,10 @@ if [ ! -f "$APP_FOLDER/LorbyAxisAndOhs_MSFS2024.exe" ]; then
   exit 1
 fi
 addon_refuse_second "$PATTERN"
+if [ ! -f "$(addon_sibling_prefix)/system.reg" ]; then
+  addon_say axis-and-ohs "the add-ons prefix does not exist; run: flightsim-on-linux addon apply axis-and-ohs"
+  exit 1
+fi
 
 (umask 077 && mkdir -p "$LOGS")
 mapfile -t old_logs < <(find "$LOGS" -maxdepth 1 -name 'aao-*.log' -printf '%f\n' | sort)
@@ -29,10 +35,8 @@ fi
 stamp="$(date +%Y%m%d-%H%M%S)"
 
 run_aao() {
-  if [ "${FSOL_SIM_RUNNING:-0}" != 1 ]; then
-    cd "$APP_FOLDER"
-  fi
-  WINEDEBUG=err+all EXTRA_WINEDLLOVERRIDES=d3d9=d addon_beside_simulator "$(addon_windows_path "$APP_FOLDER/LorbyAxisAndOhs_MSFS2024.exe")"
+  cd "$(addon_sibling_prefix)"
+  WINEDEBUG=err+all EXTRA_WINEDLLOVERRIDES=d3d9=d addon_sibling_prefix_wine "$(addon_windows_path "$APP_FOLDER/LorbyAxisAndOhs_MSFS2024.exe")"
 }
 
 attempt_log() {

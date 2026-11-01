@@ -2,12 +2,27 @@
 set -euo pipefail
 
 HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$(cd "$HERE/../.." && pwd)"
 # shellcheck source=tools/addon-launch.sh
 . "$HERE/../../tools/addon-launch.sh"
 # shellcheck source=tools/registry.sh
 . "$HERE/../../tools/registry.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
 # shellcheck source=addons/active-sky/parts/program.sh
 . "$HERE/parts/program.sh"
 
 registry_restore "$ACTIVE_SKY_KEY" Calibri
 registry_restore "$ACTIVE_SKY_KEY" "Calibri Medium"
+if [ -f "$(addon_sibling_prefix)/system.reg" ]; then
+  addon_sibling_registry_delete "$ACTIVE_SKY_KEY" Calibri
+  addon_sibling_registry_delete "$ACTIVE_SKY_KEY" "Calibri Medium"
+fi
+if [ -f "$ACTIVE_SKY_UTILS_MARK" ]; then
+  python3 -I "$ROOT/fsol/exe_xml.py" enable "${ACTIVE_SKY_EXE_XML:?no base folder found; run: flightsim-on-linux machine}" "$ACTIVE_SKY_UTILS_ENTRY" > /dev/null
+  rm -f "$ACTIVE_SKY_UTILS_MARK"
+  rmdir "$REGISTRY_BACKUP" 2> /dev/null || true
+  echo "changed exe.xml: the ActiveSky Utils entry is on again"
+else
+  echo "already the ActiveSky Utils entry in exe.xml was not changed by this add-on"
+fi

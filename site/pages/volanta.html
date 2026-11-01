@@ -42,6 +42,7 @@ description: How to install and run Volanta for MSFS 2024 under Proton: where to
 <p>To have it start with the simulator:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher volanta</code></pre>
 <p>This writes a user service called <code>flightsim-on-linux-volanta.service</code> and switches it on. It looks for the simulator every 8 seconds. About 20 seconds after a new simulator appears, it opens Volanta with <code>--minimized</code>, once for that simulator and never when Volanta is already open. It never closes Volanta, which stays open after the simulator closes. Stopping the service doesn't close it either. A service is the way because <code>exe.xml</code> would start Volanta on the simulator's Wine server, which is what this add-on avoids.</p>
+<p>To keep the prefix from coming up broken when Volanta opens with the simulator, also run <code>addon watcher addons-prefix</code>. <a href="addons-prefix.html">Its guide</a> has the reason.</p>
 <p>On 30 October 2026, at 20:20, Volanta in a second prefix, set up by the test machine's own scripts, connected to the real simulator. Earlier, on 14 October 2026, in the simulator's container, its connector log had <code>Connected to Flight Simulator msfs24</code> and <code>Sending AIRCRAFT_UPDATE</code> for a 777F.</p>
 
 <h2>Check it</h2>
@@ -62,11 +63,11 @@ description: How to install and run Volanta for MSFS 2024 under Proton: where to
   <li>The window is white if the DXVK overrides are missing. Start Volanta through the menu entry or the service, which go through the prefix's Wine runner.</li>
   <li>Don't run one program in both prefixes at once. The two Wine servers share the folder but not the file locks or the mutexes.</li>
   <li>A flight saved to your Volanta account was never checked.</li>
-  <li>Programs in this prefix see another set of processes, so a program that looks for the simulator by its process name won't find it. Volanta finds the simulator through <code>UserCfg.opt</code> and SimConnect, so it isn't affected.</li>
+  <li>Programs in this prefix see another set of processes, so a program that looks for the simulator by its process name won't find it unless <a href="sentinel.html">the sentinel</a> is open. Volanta finds the simulator through <code>UserCfg.opt</code> and SimConnect, so it isn't affected.</li>
 </ul>
 
 <h2>Undo</h2>
 <p>Take out the menu entry and the service:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut volanta --remove
 ~/flightsim-on-linux/bin/flightsim-on-linux addon watcher volanta --off</code></pre>
-<p><code>addon undo volanta</code> removes <code>SimConnect.cfg</code> and leaves the add-ons prefix, because it holds Volanta's registry. It prints the <code>rm -r</code> command that deletes the prefix, to run with Volanta closed. Volanta itself stays in <code>drive_c</code>. Uninstall it from Windows' own list in the simulator's prefix if you want it gone.</p>
+<p><code>addon undo volanta</code> leaves the add-ons prefix and its <code>SimConnect.cfg</code>, because they hold Volanta's registry and other add-ons run there. It prints the <code>rm -r</code> command that deletes the prefix, to run with its programs closed. Volanta itself stays in <code>drive_c</code>. Uninstall it from Windows' own list in the simulator's prefix if you want it gone.</p>

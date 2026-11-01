@@ -1,8 +1,8 @@
 title: vRAAS
-description: How to install and run vRAAS in MSFS 2024 under Proton: the Contrail store download, the installer that fails with exit 82 when Contrail is open, the launch script, the service that starts it with the simulator, and the log lines that look like errors and are not.
+description: How to install and run vRAAS in MSFS 2024 under Proton: the Contrail store download, the installer that fails with exit 82 when Contrail is open, the add-ons prefix and the sentinel it runs with, the service that starts it with the simulator, and the log lines that look like errors and are not.
 ---
 <h1>vRAAS</h1>
-<p class="lead">Tested with vRAAS 1.3.9 on 15 October 2026. The prefix needs no fix. The trouble is the installer, which fails with exit 82 while Contrail is open, and the program, which has to start inside the simulator's container with Direct3D 9 off.</p>
+<p class="lead">Tested with vRAAS 1.3.9 on 15 October 2026, and in the <a href="addons-prefix.html">add-ons prefix</a> on 1 November 2026. The trouble is the installer, which fails with exit 82 while Contrail is open, and the program, which starts in the add-ons prefix with Direct3D 9 off, with <a href="sentinel.html">the sentinel</a> open.</p>
 
 <h2>Get it</h2>
 <p>vRAAS is made by LAND3 Simulations and sold through the Contrail store. Contrail is a store app: it downloads the installer for you and doesn't run it. The file on the test machine was <code>LAND3-Simulations-vRAAS-MSFS-FS24-139-1788548786.exe</code>, version 1.3.9, a Velopack installer. The price and the store's address weren't recorded.</p>
@@ -20,34 +20,38 @@ description: How to install and run vRAAS in MSFS 2024 under Proton: the Contrai
 <p>Contrail itself needs its own fixes to run on Linux. They are not part of this page.</p>
 
 <h2>Make it run</h2>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply vraas</code></pre>
-<p>This changes nothing in the prefix, and then runs the check. vRAAS needs no Proton patch. It needs two things, and neither is a setting in the prefix:</p>
+<p>Close the simulator, then:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp
+~/flightsim-on-linux/bin/flightsim-on-linux addon apply vraas</code></pre>
+<p>The second makes the add-ons prefix if it isn't there, writes its <code>SimConnect.cfg</code>, and then runs the check. vRAAS needs no Proton patch. It needs three things when it starts:</p>
 <ul>
   <li>Direct3D 9 off for vRAAS. It is a WPF program on .NET 8, and <a href="rules.html">the ground rules</a> say why WPF programs get that setting. The launch script turns it off for vRAAS alone, in the environment of the program.</li>
-  <li>The simulator's container. vRAAS follows the simulator through SimConnect. In the add-ons prefix on the test machine, without the simulator, it closed by itself right after reading <code>general.cfg</code>, with no error in its log. That test didn't prove vRAAS can't work there, but the add-on keeps it in the container.</li>
+  <li><code>SimConnect.cfg</code> next to the program. vRAAS looks for it in its own folder and in <code>Documents</code>, never in the folder it was started from. The launch script copies it to <code>AppData/Local/LAND3.vRAAS/current</code> at every start, because an update replaces that folder. In <code>Documents</code> the programs on the simulator's Wine server would read it too.</li>
+  <li><a href="sentinel.html">The sentinel</a>. vRAAS starts SimConnect only after it sees a process called <code>FlightSimulator2024</code>.</li>
 </ul>
 
 <h2>Start it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut vraas</code></pre>
-<p>This writes an entry called "vRAAS" in your application menu, with vRAAS's own icon when <code>7z</code> and <code>magick</code> are installed. The entry starts vRAAS inside the running simulator's container. With the simulator closed it tells you to start the simulator first, and with vRAAS already open it says so and does nothing.</p>
+<p>This writes an entry called "vRAAS" in your application menu, with vRAAS's own icon when <code>7z</code> and <code>magick</code> are installed. The entry starts vRAAS in the add-ons prefix, and with vRAAS already open it says so and does nothing.</p>
 <p>To have it start by itself:</p>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher vraas</code></pre>
-<p>This writes a user service called <code>flightsim-on-linux-vraas.service</code> and switches it on. It looks for the simulator every 8 seconds. About 20 seconds after a new simulator appears, it starts vRAAS with <code>-autostart</code>, once for that simulator and never when vRAAS is already open. When the simulator closes and vRAAS is still open, it asks the process to end with SIGTERM and never kills it. A service is the way because <code>exe.xml</code> starts its programs with the simulator's environment, and that environment turns Direct3D 9 on, which a WPF program can't have.</p>
-<p>On 15 October 2026, vRAAS started by the test machine's own earlier watcher connected to the simulator. Its log recorded <code>CurrentAircraft:FNX_32X</code>, the download of the aircraft's configuration, and "Starting vRAAS" at the moment the camera entered the cockpit. The voice warnings played.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher addons-prefix sentinel vraas</code></pre>
+<p>This switches on three user services. <code>addons-prefix</code> and <code>sentinel</code> have their own guides. <code>flightsim-on-linux-vraas.service</code> looks for the simulator every 8 seconds. About 20 seconds after a new simulator appears, it starts vRAAS with <code>-autostart</code>, once for that simulator and never when vRAAS is already open. When that simulator closes, it asks the vRAAS it started to end with SIGTERM and never kills it. A vRAAS you opened yourself stays open. A service is the way because <code>exe.xml</code> starts its programs with the simulator's environment, and that environment turns Direct3D 9 on, which a WPF program can't have.</p>
+<p>On 15 October 2026, vRAAS started by the test machine's own earlier watcher connected to the simulator. Its log recorded <code>CurrentAircraft:FNX_32X</code>, the download of the aircraft's configuration, and "Starting vRAAS" at the moment the camera entered the cockpit. The voice warnings played. On 1 November 2026 it flew in the add-ons prefix, started by the test machine's own scripts. The scripts of this add-on are a port of those, and have run against a fake simulator only.</p>
 
 <h2>Check it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check vraas</code></pre>
-<p>It prints one line, <code>ok</code> or <code>FAIL</code>, and changes nothing: <code>vRAAS.exe</code> is in the prefix, under <code>AppData/Local/LAND3.vRAAS/current</code>. When it fails, run the install command again.</p>
+<p>It prints six lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing: <code>vRAAS.exe</code> is in the prefix, under <code>AppData/Local/LAND3.vRAAS/current</code>, then three lines about the add-ons prefix and two about its <code>SimConnect.cfg</code>. When the first fails, run the install command again. When the others fail, run <code>addon apply vraas</code>.</p>
 
 <h2>Known problems</h2>
 <ul>
   <li>vRAAS's own log repeats <code>AudioSessionProbe.Query failed</code> every 5 seconds, with a <code>NotImplementedException</code> in <code>IAudioEndpointVolume.GetChannelCount</code>. Wine's <code>mmdevapi</code> doesn't implement that method. The line is written at debug level, it comes to about 6 MB of log for a day of flying, and the voice warnings play regardless, so you can ignore it.</li>
   <li>The installer fails with exit 82 while Contrail is open, as above.</li>
-  <li>vRAAS exits by itself outside the simulator's container, as above.</li>
+  <li>Without the sentinel, vRAAS stops at <code>Starting API completed</code> and never reaches <code>Initializing Simconnect</code>.</li>
+  <li>Closed with <code>taskkill</code> without <code>/f</code>, a vRAAS with a connection open didn't close in 5 seconds. The service sends SIGTERM for that reason.</li>
 </ul>
 
 <h2>Undo</h2>
 <p>Take out the menu entry and the service:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut vraas --remove
 ~/flightsim-on-linux/bin/flightsim-on-linux addon watcher vraas --off</code></pre>
-<p><code>addon undo vraas</code> has nothing to restore, because <code>apply</code> changed nothing. Stopping the service leaves a running vRAAS alone.</p>
+<p><code>addon undo vraas</code> removes the <code>SimConnect.cfg</code> next to the program and leaves the add-ons prefix. Stopping the service leaves a running vRAAS alone. Leave the <code>addons-prefix</code> and <code>sentinel</code> services on if another add-on uses them.</p>

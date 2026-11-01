@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=addons/active-sky/parts/program.sh
+. "$HERE/parts/program.sh"
+
+addon_refuse_second "$ACTIVE_SKY_UTILS_PATTERN"
+exe="$(compgen -G "$FSOL_PREFIX/$ACTIVE_SKY_UTILS_GLOB" | head -n 1 || true)"
+if [ -z "$exe" ]; then
+  addon_say active-sky "ActiveSky Utils is not installed; run Active Sky once and let it install its connector"
+  exit 1
+fi
+if [ ! -f "$(addon_sibling_prefix)/system.reg" ]; then
+  addon_say active-sky "the add-ons prefix does not exist; run: flightsim-on-linux addon apply active-sky"
+  exit 1
+fi
+log="$(addon_log_file active-sky-utils)"
+
+cd "$(addon_sibling_prefix)"
+addon_sibling_prefix_wine "$(addon_windows_path "$exe")" > "$log" 2>&1 &
+disown

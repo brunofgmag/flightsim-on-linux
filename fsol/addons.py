@@ -18,7 +18,8 @@ OPTIONAL_FIELDS = {"install": dict, "shortcuts": list, "watcher": dict}
 KINDS = ("installer", "store", "native", "manual")
 FILE_KINDS = ("installer", "store")
 STOPS = ("never", "with_simulator", "with_simulator_if_started", "on_other_aircraft")
-TRIGGERS = ("simulator", "none")
+TRIGGERS = ("simulator", "none", "always", "while_simulator")
+TRIGGER_REGEXES = ("aircraft", "process")
 OPTIONAL_SCRIPTS = ("install", "launch", "close")
 SCRIPT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 INSTALL_FIELDS = {"from", "paid", "kind", "own_prefix"}
@@ -167,9 +168,9 @@ def health_problems(folder, health):
 def trigger_problems(trigger):
     if trigger in TRIGGERS:
         return []
-    if isinstance(trigger, dict) and set(trigger) == {"aircraft"} and is_regex(trigger["aircraft"]):
+    if isinstance(trigger, dict) and len(trigger) == 1 and all(name in TRIGGER_REGEXES and is_regex(regex) for name, regex in trigger.items()):
         return []
-    return [f"watcher.trigger must be one of {', '.join(TRIGGERS)} or {{\"aircraft\": a regex}}"]
+    return [f"watcher.trigger must be one of {', '.join(TRIGGERS)}, {{\"aircraft\": a regex}} or {{\"process\": a regex}}"]
 
 
 def watcher_option_problems(watcher):
@@ -185,7 +186,7 @@ def watcher_option_problems(watcher):
         problems.append(f"watcher.stop must be one of {', '.join(STOPS)}")
     if "trigger" in watcher:
         problems.extend(trigger_problems(watcher["trigger"]))
-    if watcher.get("stop") == "on_other_aircraft" and not isinstance(watcher.get("trigger"), dict):
+    if watcher.get("stop") == "on_other_aircraft" and not (isinstance(watcher.get("trigger"), dict) and "aircraft" in watcher["trigger"]):
         problems.append("watcher.stop on_other_aircraft needs an aircraft trigger")
     return problems
 

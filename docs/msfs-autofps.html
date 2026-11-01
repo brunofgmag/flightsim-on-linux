@@ -26,14 +26,14 @@
   </header>
   <main class="wrap">
 <h1>MSFS AutoFPS</h1>
-<p class="lead">Tested with MSFS AutoFPS 0.5.4.4 on 16 October 2026. It takes a few steps rather than one command: the installer needs Direct3D 9 off and an empty prefix, and the program has to start inside the simulator's container, so it can't start from <code>exe.xml</code>.</p>
+<p class="lead">Tested with MSFS AutoFPS 0.5.5.0 on 1 November 2026. It takes a few steps rather than one command: the installer needs Direct3D 9 off and an empty prefix, and the program has to start inside the simulator's container, so it can't start from <code>exe.xml</code>.</p>
 
 <h2>Get it</h2>
 <p>The author publishes MSFS AutoFPS on <a href="https://github.com/ResetXPDR/MSFS_AutoFPS/releases">the project's releases page on GitHub</a>, where the downloads are public. Get <code>MSFS_AutoFPS-installer-v0.5.4.4.exe</code> or a newer one. It is a Windows installer with a WPF window.</p>
 
 <h2>Install it</h2>
 <p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>
-<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps ~/Downloads/MSFS_AutoFPS-installer-v0.5.4.4.exe</code></pre>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install msfs-autofps ~/Downloads/MSFS_AutoFPS-installer-v0.5.5.0.exe</code></pre>
 <p>Without the file name it only prints where to get the program. With it, the command does three things the installer can't do for itself:</p>
 <ul>
   <li>It refuses to start while the simulator runs or any program is open in the prefix, and names those programs.</li>
@@ -41,7 +41,7 @@
   <li>It runs the installer in the simulator's prefix with Direct3D 9 off for that one program, as the test machine installed it. The installer is a WPF program, and the reason is in "Make it run".</li>
 </ul>
 <p>In the installer, leave "Close to Tray" checked if you want the tray icon. In AutoFPS's own settings, keep Auto-Start on "Retain". Choosing "MSFS" writes AutoFPS into <code>exe.xml</code> and renames that file to <code>EXE.xml</code>, and AutoFPS can't start from there anyway.</p>
-<p>The in-app update doesn't work. On 14 October 2026 AutoFPS offered 0.5.4.4, logged "Auto update in progress." and quit, and the installed version stayed 0.5.4.3. To update, download the new installer and run the command above again.</p>
+<p>The in-app update has failed once and worked once. On 14 October 2026 AutoFPS offered 0.5.4.4, logged "Auto update in progress." and quit, and the installed version stayed 0.5.4.3. On 1 November 2026 it went from 0.5.4.4 to 0.5.5.0 by itself. If the version stays the same after an update, download the new installer and run the command above again.</p>
 
 <h2>Make it run</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply msfs-autofps</code></pre>

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=addons/sentinel/parts/common.sh
+. "$HERE/parts/common.sh"
+
+if [ ! -f "${FSOL_CACHE:-}/shims/$SENTINEL_FILE" ]; then
+  echo "FAIL the sentinel is not built; run: flightsim-on-linux addon apply sentinel"
+  exit 1
+fi
+echo "ok the sentinel is built"
+if pgrep -f -- "$SENTINEL_PATTERN" > /dev/null; then
+  echo "ok the sentinel is running"
+elif [ "${FSOL_SIM_RUNNING:-0}" = 1 ]; then
+  echo "FAIL the simulator is running and the sentinel is not; run: flightsim-on-linux addon watcher sentinel"
+  exit 1
+else
+  echo "ok the sentinel is not running, as the simulator is closed"
+fi

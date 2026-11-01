@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/shim.sh
+. "$HERE/../../tools/shim.sh"
+# shellcheck source=addons/sentinel/parts/common.sh
+. "$HERE/parts/common.sh"
+
+shim_path sentinel "$SENTINEL_FILE" > /dev/null
+echo "built the sentinel; to open it with the simulator, run: flightsim-on-linux addon watcher sentinel"

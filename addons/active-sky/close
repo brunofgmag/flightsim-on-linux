@@ -4,6 +4,8 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=tools/addon-launch.sh
 . "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
 # shellcheck source=addons/active-sky/parts/program.sh
 . "$HERE/parts/program.sh"
 
@@ -11,7 +13,7 @@ if ! pgrep -f -- "$ACTIVE_SKY_PATTERN" > /dev/null; then
   echo "Active Sky is not running"
   exit 0
 fi
-addon_beside_simulator taskkill /im AS_FS.exe > /dev/null 2>&1 || true
+addon_sibling_prefix_wine taskkill /im AS_FS.exe > /dev/null 2>&1 || true
 if ! addon_wait_gone "$ACTIVE_SKY_PATTERN"; then
   addon_say active-sky "Active Sky is still running after its window was asked to close; close it from its own window. It is never killed: a killed Active Sky leaves your account's session on HiFi's server and breaks the link between ActiveSky Utils and the simulator"
   exit 1

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=addons/addons-prefix/parts/common.sh
+. "$HERE/parts/common.sh"
+status=0
+
+addon_sibling_prefix_check addons-prefix || status=1
+[ ! -f "$(addon_sibling_prefix)/system.reg" ] || addon_sibling_cfg check addons-prefix || status=1
+
+if [ -f "${FSOL_CACHE:-}/shims/$HOLDER_FILE" ]; then
+  echo "ok the program that keeps the desktop up is built"
+else
+  echo "FAIL the program that keeps the desktop up is not built; run: flightsim-on-linux addon apply addons-prefix"
+  status=1
+fi
+
+if pgrep -f -- "$HOLDER_PATTERN" > /dev/null; then
+  echo "ok the desktop of the add-ons prefix is being kept up"
+else
+  echo "ok the desktop of the add-ons prefix is not being kept up, so a program that opens with the simulator can find no desktop; to keep it up, run: flightsim-on-linux addon watcher addons-prefix"
+fi
+exit "$status"

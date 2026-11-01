@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to undo: apply only builds a program in the cache; flightsim-on-linux addon watcher sentinel --off takes out the service"
