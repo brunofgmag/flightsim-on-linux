@@ -1,0 +1,57 @@
+title: MSFS 2024 LongWorker priority
+description: How to stop the simulator's LongWorker threads from filling every CPU core on Linux: the stutters they cause, the service that gives them only spare CPU time, and what a test flight measured.
+---
+<h1>MSFS 2024 LongWorker priority</h1>
+<p class="lead">Tested with simulator 1.9.21.0 on 1 November 2026, in one flight with the BlueBird 757. It cuts the large stutters that come a minute or so apart, and some smaller ones remain. It changes no files: a small service gives one group of the simulator's threads a lower scheduling policy while the simulator runs.</p>
+
+<h2>What it fixes</h2>
+<p>The simulator does part of its work in bursts on 26 threads called <code>ACE: LongWorker</code>. The <code>wmphoto.dll</code> image decoder shows up in those bursts, and in the test flight they came 38 to 88 seconds apart. Before this fix, a large burst looked like this on the test machine:</p>
+<ul>
+  <li>CPU use jumped.</li>
+  <li><code>MainThread</code> and <code>Manipulators</code> spiked in the simulator's developer FPS panel.</li>
+  <li>Frames that normally took 30 ms took between 40 and 280 ms.</li>
+  <li>During the longest stops the audio stuttered as well.</li>
+</ul>
+
+<h2>Why it happens</h2>
+<p>The simulator asks Windows for different priorities: +2 for its main and render threads, +1 for the workers of each frame and for the audio thread <code>AK::EventManager</code>, and -2 for the LongWorkers. <code>winedbg</code> lists them with <code>info threads</code>. Windows priorities are strict, so a waiting thread with a higher priority takes the CPU at once.</p>
+<p>Proton turns those priorities into nice values when your limits allow it, and nice only changes each thread's share of the CPU. On CachyOS, ananicy-cpp also gives all 235 threads the same nice value. A large burst can then fill every CPU the simulator has. In the worst stop on the test machine, the LongWorkers held 15.8 of 16 CPUs, the audio thread spent the whole time waiting for one, and the main thread slept for 190 ms in one wait inside the Wwise audio library. Which thread held it there wasn't observed.</p>
+<p>The fix puts the LongWorkers in the Linux <code>SCHED_IDLE</code> policy, the closest match to that Windows priority. They still do the same work, on whatever CPU the other threads leave free.</p>
+
+<h2>What the flight measured</h2>
+<p>A script switched the threads between the two policies every 20 to 30 seconds in the same flight, so both sides saw the same scenery and load.</p>
+<table>
+  <tr><th></th><th>Normal policy, 340 s</th><th><code>SCHED_IDLE</code>, 320 s</th></tr>
+  <tr><td>Frames over 45 ms</td><td>9</td><td>2</td></tr>
+  <tr><td>Frames over 37 ms</td><td>20</td><td>13</td></tr>
+  <tr><td>Longest frame</td><td>137 ms</td><td>49 ms</td></tr>
+</table>
+<p>The fix didn't starve the LongWorkers. In the two tests they used 21.8 and 27.8 CPU seconds a minute with it, against 20.8 and 23.3 without it. Taking ananicy-cpp out of the way doesn't do the same job: the nice values Proton would have set, tried by hand in the same flight, left the main thread waiting just as long in bursts of 4 to 10 CPUs.</p>
+<p>The test machine keeps the simulator on 16 logical CPUs, the V-Cache half of a Ryzen 9 9950X3D. With more CPUs free a burst may not fill them, and the gain may be smaller. That wasn't measured.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher simulator-longworker-priority
+~/flightsim-on-linux/bin/flightsim-on-linux addon apply simulator-longworker-priority</code></pre>
+<p>The first command writes a user service under <code>~/.config/systemd/user</code> and switches it on. The service looks for the simulator every 8 seconds and sets the threads when it finds them, so you don't need to run anything before a flight. The second command sets them now if the simulator is open, then runs the check. Neither needs root.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check simulator-longworker-priority</code></pre>
+<p>It changes nothing, so you can run it during a flight. Each line starts with <code>ok</code> or <code>FAIL</code>:</p>
+<ul>
+  <li>the service is running;</li>
+  <li>with the simulator open, every <code>ACE: LongWorker</code> thread is in <code>SCHED_IDLE</code>.</li>
+</ul>
+<p>The check fails right after the simulator opens, until the threads exist and the service has had 8 seconds to set them.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>CPU use still jumps. The LongWorkers still fill the CPUs nobody else wants, so a high reading without a stutter is the result you're after.</li>
+  <li>The time the simulator takes to load with this on wasn't measured.</li>
+  <li>It helps one cause of stutters. A steady rhythm of stutters has <a href="proton-fs2024.html">another cause</a>, and the frames over 37 ms that remain weren't explained.</li>
+  <li>If a simulator update renames the threads, the check fails and says so, and the fix does nothing until it's updated.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher simulator-longworker-priority --off
+~/flightsim-on-linux/bin/flightsim-on-linux addon undo simulator-longworker-priority</code></pre>
+<p>Switch the service off first, or it sets the threads again. <code>undo</code> puts the threads of a running simulator back on the normal policy. Linux may refuse that when your nice limit is low, and <code>undo</code> says so. Those threads go back to normal the next time the simulator opens.</p>
