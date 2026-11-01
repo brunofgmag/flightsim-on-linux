@@ -19,6 +19,13 @@ if [ ! -f "$(addon_sibling_prefix)/system.reg" ]; then
   addon_say active-sky "the add-ons prefix does not exist; run: flightsim-on-linux addon apply active-sky"
   exit 1
 fi
+cfg="$(addon_sibling_prefix)/SimConnect.cfg"
+if [ ! -f "$cfg" ]; then
+  addon_say active-sky "the add-ons prefix has no SimConnect.cfg; run: flightsim-on-linux addon apply active-sky"
+  exit 1
+fi
+utils_cfg="$(active_sky_utils_cfg)"
+[ -z "$utils_cfg" ] || cp "$cfg" "$utils_cfg"
 log="$(addon_log_file active-sky)"
 
 cd "$(addon_sibling_prefix)"

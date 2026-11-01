@@ -19,9 +19,10 @@ description: How to run Active Sky FS in MSFS 2024 under Proton: the installer a
 <p>Install the Carlito font first. On Arch that is the <code>ttf-carlito</code> package; other distributions package Carlito under their own name. Then close the simulator and run:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply simconnect-tcp
 ~/flightsim-on-linux/bin/flightsim-on-linux addon apply active-sky</code></pre>
-<p>The second refuses when no Carlito font is installed, and writes nothing then. Otherwise it does three things:</p>
+<p>The second refuses when no Carlito font is installed, and writes nothing then. Otherwise it does four things:</p>
 <ul>
   <li>It makes the add-ons prefix if it isn't there, and writes its <code>SimConnect.cfg</code>.</li>
+  <li>It copies that file next to <code>ActiveSkyUtils.exe</code>. If the connector hasn't put Utils in place yet, it says so. Run it again afterwards.</li>
   <li>It sets two values in <code>HKCU\Software\Wine\Fonts\Replacements</code> of the add-ons prefix: <code>Calibri</code> and <code>Calibri Medium</code>, both to <code>Carlito</code>.</li>
   <li>It sets <code>Disabled</code> to <code>True</code> on the ActiveSky Utils entry of <code>exe.xml</code>, and remembers that it did. If there is no such entry yet, it says so. Run it again after the connector writes one.</li>
 </ul>
@@ -32,7 +33,7 @@ description: How to run Active Sky FS in MSFS 2024 under Proton: the installer a
 <h2>Start it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon watcher addons-prefix sentinel active-sky
 ~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut active-sky</code></pre>
-<p>The first switches on three user services. <code>addons-prefix</code> keeps <a href="addons-prefix.html">the add-ons prefix</a> up from your login. <code>sentinel</code> keeps <a href="sentinel.html">a stand-in called <code>FlightSimulator2024.exe</code></a> open there while the simulator runs, because Utils closes when it can't find that process. <code>active-sky</code> keeps ActiveSky Utils open for as long as the sentinel is: if Utils dies, the next look, within 8 seconds, opens it again. When the simulator closes, the sentinel goes and Utils closes by itself.</p>
+<p>The first switches on three user services. <code>addons-prefix</code> keeps <a href="addons-prefix.html">the add-ons prefix</a> up from your login. <code>sentinel</code> keeps <a href="sentinel.html">a stand-in called <code>FlightSimulator2024.exe</code></a> open there while the simulator runs, because Utils closes when it can't find that process. <code>active-sky</code> keeps ActiveSky Utils open for as long as the sentinel is: if Utils dies, the next look, within 8 seconds, opens it again. With Active Sky open, Active Sky gets there first and runs Utils in <code>AddonFolder</code>, so <code>apply</code> and the menu entry copy <code>SimConnect.cfg</code> there. When the simulator closes, the sentinel goes and Utils closes by itself.</p>
 <p>The second writes an entry called "Active Sky" in your application menu, with Active Sky's own icon when <code>7z</code> and <code>magick</code> are installed, and a "Close Active Sky" action. The entry starts Active Sky in the add-ons prefix, with or without the simulator, and with Active Sky already open it says so and does nothing. You start Active Sky yourself, and it stays open when the simulator closes.</p>
 <p>The "Close Active Sky" action asks Active Sky's window to close, the way the close button does, and never kills the process. That matters on this machine:</p>
 <ul>
@@ -43,9 +44,10 @@ description: How to run Active Sky FS in MSFS 2024 under Proton: the installer a
 
 <h2>Check it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check active-sky</code></pre>
-<p>It prints eleven lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<p>It prints twelve lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
 <ul>
   <li>three about the add-ons prefix, and two about its <code>SimConnect.cfg</code>;</li>
+  <li>the <code>SimConnect.cfg</code> next to ActiveSky Utils matches that one, or Utils isn't installed yet;</li>
   <li>the ActiveSky Utils entry of <code>exe.xml</code> is off or absent;</li>
   <li>the Proton was built with <code>gdiplus-font-family-after-substitution.patch</code>, and its <code>gdiplus.dll</code> is the one the build recorded;</li>
   <li>a Carlito font is installed;</li>
@@ -53,7 +55,7 @@ description: How to run Active Sky FS in MSFS 2024 under Proton: the installer a
   <li>the weather API answers 200. This line looks only when Active Sky and the simulator both run. With Active Sky closed it says so and passes.</li>
 </ul>
 <p>The API is <code>http://127.0.0.1:19285/ActiveSky/API/GetWeatherInfoJson</code>, and you can ask it yourself with <code>curl -s</code>. It lists the weather layers when Active Sky is feeding the simulator, and answers 503 when it isn't. Read the API and not Active Sky's log: the log said "MSFS connection established!" in the three runs above that changed nothing.</p>
-<p>When the Proton line fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the font lines or the <code>exe.xml</code> line fail, run <code>addon apply</code> again.</p>
+<p>When the Proton line fails, rebuild Proton FS2024 with <code>bin/flightsim-on-linux proton build</code>. When the font lines, the <code>exe.xml</code> line or the line about the copy of <code>SimConnect.cfg</code> fail, run <code>addon apply</code> again.</p>
 
 <h2>Known problems</h2>
 <ul>
@@ -61,6 +63,7 @@ description: How to run Active Sky FS in MSFS 2024 under Proton: the installer a
   <li>A killed Active Sky leaves the weather API at 503 and the account on "Existing Session", as above. To get the weather back, close Active Sky and close ActiveSky Utils (<code>pkill -f 'ActiveSkyUtils[.]exe'</code>). With the sentinel open, the watcher opens Utils again within 8 seconds. On 15 October 2026, reopening only Utils took the API to 200 in 18 seconds.</li>
   <li>Not errors: the log says <code>Could not find file ...\Weather\tempsfc.bin</code> four times for every download, then "Download failed, retrying..." and "Download complete". Active Sky's own processing of the GFS data runs a <code>cmd</code> pipe through <code>wgrib2</code> and <code>findstr</code> that doesn't write that file, so it falls back to the download HiFi's servers already processed, and the weather arrives all the same. Why the pipe fails wasn't measured.</li>
   <li>Without the sentinel, <code>ActiveSkyUtils.exe</code> closes within seconds, because it looks for a process called <code>FlightSimulator2024</code> and can't see the simulator's from this Wine server.</li>
+  <li>Active Sky stays on "Connection: Waiting for Simulator" with the simulator running, and <code>AS_FS_SimConnectionLog.txt</code> in <code>AddonFolder</code> repeats <code>Failed to connect</code> every 10 seconds: that Utils has no <code>SimConnect.cfg</code>. It stays up, so nothing looks wrong from outside, and the watcher leaves it alone. On 1 November 2026, on the test machine, a Utils without the file never connected in the 48 seconds it ran. The next one, with the file, logged <code>Connected to the sim</code> within 15 seconds. <code>addon apply active-sky</code> copies the file, and closing Utils with <code>pkill -f 'ActiveSkyUtils[.]exe'</code> brings up one that reads it.</li>
   <li>An Active Sky update can turn the <code>exe.xml</code> entry back on. The simulator then opens a second Utils on its own Wine server, out of reach of Active Sky's pipe. <code>addon check</code> fails on that line, and <code>addon apply active-sky</code> turns it off again.</li>
 </ul>
 
@@ -68,4 +71,4 @@ description: How to run Active Sky FS in MSFS 2024 under Proton: the installer a
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo active-sky
 ~/flightsim-on-linux/bin/flightsim-on-linux addon shortcut active-sky --remove
 ~/flightsim-on-linux/bin/flightsim-on-linux addon watcher active-sky --off</code></pre>
-<p>The first removes the two <code>Replacements</code> values from the add-ons prefix, and turns the ActiveSky Utils entry of <code>exe.xml</code> back on if <code>apply</code> turned it off. It leaves the Carlito font installed. The second takes out the menu entry and the third the service. Leave the <code>addons-prefix</code> and <code>sentinel</code> services on if another add-on uses them.</p>
+<p>The first removes the two <code>Replacements</code> values from the add-ons prefix and the <code>SimConnect.cfg</code> next to ActiveSky Utils, and turns the ActiveSky Utils entry of <code>exe.xml</code> back on if <code>apply</code> turned it off. It leaves the Carlito font installed. The second takes out the menu entry and the third the service. Leave the <code>addons-prefix</code> and <code>sentinel</code> services on if another add-on uses them.</p>
