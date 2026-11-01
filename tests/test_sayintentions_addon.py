@@ -63,7 +63,7 @@ def fixed_system_reg():
 
 class RestoreLinksTest(unittest.TestCase):
     def test_a_link_that_cannot_be_given_back_stays_in_the_stash(self):
-        with tempfile.TemporaryDirectory() as temp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
             root = Path(temp)
             stub(root / "bin" / "setfattr", "exit 1\n")
             write(root / "backup/links/fss-link", "dmFsdWU=")
@@ -77,7 +77,7 @@ class RestoreLinksTest(unittest.TestCase):
 
 class RegistryPlanTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.temp.name)
         self.prefix = self.root / "pfx"
         write(self.prefix / "user.reg", BASE_USER_REG)
@@ -163,7 +163,7 @@ class RegistryPlanTest(unittest.TestCase):
 
 class SiCase(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.temp.name)
         self.token = str(self.root)
         self.fake = FakeMachine(self.root).build()

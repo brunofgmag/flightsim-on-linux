@@ -10,6 +10,8 @@
 
 #define NO_PACKAGE_HRESULT ((HRESULT)0x80073d54)
 
+static const WCHAR APPLICATION_DATA_CLASS[] = L"Windows.Storage.ApplicationData";
+
 int main(void)
 {
     IApplicationDataStatics *statics;
@@ -18,8 +20,7 @@ int main(void)
     HRESULT hr;
 
     RoInitialize(RO_INIT_MULTITHREADED);
-    if (FAILED(WindowsCreateString(RuntimeClass_Windows_Storage_ApplicationData,
-                    ARRAYSIZE(RuntimeClass_Windows_Storage_ApplicationData) - 1, &class_name))
+    if (FAILED(WindowsCreateString(APPLICATION_DATA_CLASS, ARRAYSIZE(APPLICATION_DATA_CLASS) - 1, &class_name))
             || FAILED(RoGetActivationFactory(class_name, &IID_IApplicationDataStatics, (void **)&statics)))
     {
         printf("could not get the Windows.Storage.ApplicationData statics\n");

@@ -74,7 +74,7 @@ class Recorder:
 
 class MachineCase(unittest.TestCase, Recorder):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.fake = FakeMachine(self.root).build()
@@ -450,7 +450,7 @@ class FakeNestProcess:
 
 class ConnectionsTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.temp.cleanup)
         self.nest = FakeNestProcess(self.temp.name)
 
@@ -498,13 +498,13 @@ class ConnectionsTest(unittest.TestCase):
         self.assertEqual(len([line for line in lines if line.startswith("connection")]), 16)
 
     def test_no_nest_process_says_so_and_exits_with_1(self):
-        folder = tempfile.TemporaryDirectory()
+        folder = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(folder.cleanup)
         self.nest = FakeNestProcess(folder.name, cmdline=r"C:\windows\system32\notepad.exe")
         self.assertEqual(self.run_main(), (1, ["BBS Nest is not open."]))
 
     def test_a_nest_that_has_not_loaded_the_library_yet_exits_with_1(self):
-        folder = tempfile.TemporaryDirectory()
+        folder = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(folder.cleanup)
         self.nest = FakeNestProcess(folder.name, maps=False)
         write(self.nest.pid_dir / "maps", "00400000-00410000 r-xp 00000000 08:01 1 /unrelated/other.dll\n")
@@ -529,7 +529,7 @@ class ConnectionsTest(unittest.TestCase):
         self.assertFalse(any("TimeDateStamp" in line for line in self.run_main()[1]))
 
     def test_the_script_hands_over_to_the_python_part_in_isolated_mode(self):
-        folder = tempfile.TemporaryDirectory()
+        folder = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(folder.cleanup)
         record = Path(folder.name) / "record"
         stub(Path(folder.name) / "bin" / "python3", recording(record))

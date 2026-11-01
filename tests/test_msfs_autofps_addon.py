@@ -37,7 +37,7 @@ def stub(path, text):
 
 class AutoFpsCase(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.root = Path(self.temp.name)
         self.fake = FakeMachine(self.root).build()
         self.found = self.fake.discover()

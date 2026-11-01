@@ -727,7 +727,7 @@ class InstallerSessionTest(unittest.TestCase):
         self.bin.mkdir()
         self.log = self.root / "calls.log"
         self.stub("wine", 'echo "wine $* in $PWD" >> "$LOG"; exit "${WINE_EXIT:-0}"')
-        self.stub("pgrep", 'echo "pgrep $*" >> "$LOG"; n=$(grep -c "^pgrep" "$LOG"); [ "$n" -le "${RUNNING_CHECKS:-0}" ]')
+        self.stub("pgrep", 'printf "pgrep %s\\n" "$*" >> "$LOG"; n=$(grep -c "^pgrep" "$LOG"); [ "$n" -le "${RUNNING_CHECKS:-0}" ]')
         self.stub("sleep", 'echo "sleep $*" >> "$LOG"')
 
     def stub(self, name, body):
@@ -755,7 +755,7 @@ class InstallerSessionTest(unittest.TestCase):
         self.assertEqual(self.log.read_text().splitlines()[0].split()[0], "wine")
 
     def test_a_gap_shorter_than_three_checks_does_not_end_the_wait(self):
-        self.stub("pgrep", 'echo "pgrep $*" >> "$LOG"; n=$(grep -c "^pgrep" "$LOG"); [ "$n" -eq 1 ] || [ "$n" -eq 4 ]')
+        self.stub("pgrep", 'printf "pgrep %s\\n" "$*" >> "$LOG"; n=$(grep -c "^pgrep" "$LOG"); [ "$n" -eq 1 ] || [ "$n" -eq 4 ]')
         code, output = self.run_session()
         self.assertEqual(code, 0, output)
         self.assertEqual(len(self.calls("pgrep")), 7)
