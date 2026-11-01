@@ -57,6 +57,9 @@ def read_connections(descriptor, base):
 def report(connections):
     for sequence, queued in connections:
         print(f"connection {sequence}: {queued} messages waiting")
+    if not connections:
+        print("No connection read: Nest has not connected yet, or the offsets don't fit this SubSystem.dll.")
+        return 1
     if len(connections) > 1:
         print("More than one connection: Nest is leaking. Close it and open it again with the 757 already loaded.")
         return 2
