@@ -691,6 +691,23 @@ class UnitTest(unittest.TestCase):
             self.assertEqual((result.returncode, result.stdout + result.stderr), (0, ""), name)
 
 
+class SessionDisplayTest(unittest.TestCase):
+    def session(self, stdout):
+        return mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=stdout))
+
+    def test_it_keeps_only_the_three_variables_a_window_needs(self):
+        with self.session("DISPLAY=:0\nHOME=/home/pilot\nWAYLAND_DISPLAY=wayland-0\nXAUTHORITY=/run/user/1000/xauth_ab\n"):
+            self.assertEqual(watcher.session_display(), {"DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-0", "XAUTHORITY": "/run/user/1000/xauth_ab"})
+
+    def test_a_desktop_that_has_not_started_yet_gives_nothing(self):
+        with self.session("HOME=/home/pilot\n"):
+            self.assertEqual(watcher.session_display(), {})
+
+    def test_a_machine_without_systemctl_gives_nothing(self):
+        with mock.patch.object(subprocess, "run", side_effect=FileNotFoundError):
+            self.assertEqual(watcher.session_display(), {})
+
+
 @unittest.skipUnless(shutil.which("sleep"), "needs sleep")
 class RealLoopTest(unittest.TestCase):
     APP_PATTERN = r"^Q:.*\\FsolDemo\.exe"
@@ -775,6 +792,18 @@ class RealLoopTest(unittest.TestCase):
         self.start_simulator()
         self.loop(self.marker.exists)
         self.assertEqual(self.marker.read_text().strip(), "[gone]")
+
+    def test_a_watcher_that_started_before_the_desktop_hands_its_script_the_display_of_the_session(self):
+        systemctl = self.root / "bin" / "systemctl"
+        write(systemctl, '#!/bin/sh\nprintf "DISPLAY=:7\\nWAYLAND_DISPLAY=wayland-7\\nXAUTHORITY=/run/cookie\\nSHELL=/nowhere\\n"\n')
+        systemctl.chmod(0o755)
+        self.launch(f'#!/bin/sh\necho "$DISPLAY $WAYLAND_DISPLAY $XAUTHORITY $SHELL" > {self.marker}\n')
+        self.start_simulator()
+        with mock.patch.dict(os.environ, {"PATH": f"{systemctl.parent}:{os.environ['PATH']}", "SHELL": "/bin/sh"}):
+            for name in ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"):
+                os.environ.pop(name, None)
+            self.loop(self.marker.exists)
+        self.assertEqual(self.marker.read_text().strip(), ":7 wayland-7 /run/cookie /bin/sh")
 
     def test_a_simulator_that_never_runs_starts_nothing(self):
         self.loop(lambda: False, seconds=1)

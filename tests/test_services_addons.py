@@ -378,9 +378,12 @@ class ActiveSkyCase(RegistryAddonCase):
     def stub_curl(self, code):
         stub(self.root / "bin" / "curl", recording(self.record, f'printf "{code}"\n'))
 
+    def utils_cfg(self):
+        return (self.found.prefix / self.UTILS_EXE).parent / "SimConnect.cfg"
+
 
 class ActiveSkyCheckTest(ActiveSkyCase):
-    LINES = 11
+    LINES = 12
 
     def setUp(self):
         super().setUp()
@@ -402,6 +405,20 @@ class ActiveSkyCheckTest(ActiveSkyCase):
 
     def test_a_disabled_utils_entry_passes(self):
         self.exe_xml("True")
+        self.assert_lines(self.script("check"), ["ok"] * self.LINES, 0)
+
+    def test_utils_without_a_cfg_beside_it_fails_because_active_sky_reopens_it_in_that_folder(self):
+        self.install_program(self.UTILS_EXE)
+        self.only_failure("SimConnect.cfg next to ActiveSky Utils")
+
+    def test_utils_with_a_cfg_for_another_port_fails(self):
+        self.install_program(self.UTILS_EXE)
+        write(self.utils_cfg(), "[SimConnect]\r\nProtocol=IPv4\r\nAddress=127.0.0.1\r\nPort=5999\r\n")
+        self.only_failure("SimConnect.cfg next to ActiveSky Utils")
+
+    def test_utils_with_a_copy_of_the_cfg_passes(self):
+        self.install_program(self.UTILS_EXE)
+        shutil.copy(self.addons_prefix / "SimConnect.cfg", self.utils_cfg())
         self.assert_lines(self.script("check"), ["ok"] * self.LINES, 0)
 
     def test_a_missing_add_ons_prefix_fails_with_the_command(self):
@@ -534,6 +551,27 @@ class ActiveSkyApplyTest(ActiveSkyCase):
         self.assertEqual((self.addons_prefix / "system.reg").read_text(), "system\n")
         self.assertIn("Port=5111", (self.addons_prefix / "SimConnect.cfg").read_text())
 
+    def test_apply_copies_the_cfg_next_to_utils_once_and_the_check_then_passes(self):
+        self.install_program(self.UTILS_EXE)
+        self.assertIn("changed copied SimConnect.cfg next to ActiveSky Utils", self.script("apply").stdout)
+        self.assertEqual(self.utils_cfg().read_bytes(), (self.addons_prefix / "SimConnect.cfg").read_bytes())
+        self.assertIn("already SimConnect.cfg is next to ActiveSky Utils", self.script("apply").stdout)
+        self.assertEqual(self.script("check").returncode, 0)
+
+    def test_apply_before_the_connector_has_no_folder_to_copy_the_cfg_to(self):
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("already ActiveSky Utils is not installed", result.stdout)
+
+    def test_undo_removes_the_cfg_next_to_utils_and_leaves_the_prefix(self):
+        self.install_program(self.UTILS_EXE)
+        self.script("apply")
+        result = self.script("undo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.utils_cfg().exists())
+        self.assertTrue((self.addons_prefix / "SimConnect.cfg").exists())
+        self.assertIn("already no SimConnect.cfg next to ActiveSky Utils", self.script("undo").stdout)
+
     def test_apply_turns_off_the_utils_entry_of_exe_xml_and_undo_turns_it_back_on(self):
         self.exe_xml("False")
         self.assertIn("changed exe.xml", self.script("apply").stdout)
@@ -630,6 +668,29 @@ class ActiveSkyLaunchTest(ActiveSkyCase):
             self.assertEqual(self.recorded(), [self.wine_call(self.PROGRAM)])
         self.assertEqual(self.recorded_env()["WINEPREFIX"], str(self.addons_prefix))
         self.assertEqual(self.recorded_cwd()[-1], str(self.addons_prefix))
+
+    def test_the_cfg_is_copied_next_to_utils_at_every_start_because_active_sky_reopens_it_in_that_folder(self):
+        self.install_program(self.UTILS_EXE)
+        self.script("launch")
+        self.wait_for_record()
+        self.assertEqual(self.utils_cfg().read_bytes(), (self.addons_prefix / "SimConnect.cfg").read_bytes())
+        self.utils_cfg().unlink()
+        self.script("launch")
+        self.wait_for_record(2)
+        self.assertTrue(self.utils_cfg().is_file())
+
+    def test_it_starts_before_the_connector_has_made_the_folder_of_utils(self):
+        result = self.script("launch")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.wait_for_record()
+        self.assertEqual(self.recorded(), [self.wine_call(self.PROGRAM)])
+
+    def test_no_cfg_in_the_add_ons_prefix_says_how_to_write_it_and_starts_nothing(self):
+        (self.addons_prefix / "SimConnect.cfg").unlink()
+        result = self.script("launch")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("addon apply active-sky", result.stderr)
+        self.assertFalse(any(self.wine_call() in line for line in self.recorded()))
 
 
 class ActiveSkyUtilsTest(ActiveSkyCase):

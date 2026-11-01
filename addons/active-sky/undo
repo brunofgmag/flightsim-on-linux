@@ -18,6 +18,13 @@ if [ -f "$(addon_sibling_prefix)/system.reg" ]; then
   addon_sibling_registry_delete "$ACTIVE_SKY_KEY" Calibri
   addon_sibling_registry_delete "$ACTIVE_SKY_KEY" "Calibri Medium"
 fi
+utils_cfg="$(active_sky_utils_cfg)"
+if [ -n "$utils_cfg" ] && [ -f "$utils_cfg" ]; then
+  rm -f "$utils_cfg"
+  echo "changed removed the SimConnect.cfg next to ActiveSky Utils"
+else
+  echo "already no SimConnect.cfg next to ActiveSky Utils"
+fi
 if [ -f "$ACTIVE_SKY_UTILS_MARK" ]; then
   python3 -I "$ROOT/fsol/exe_xml.py" enable "${ACTIVE_SKY_EXE_XML:?no base folder found; run: flightsim-on-linux machine}" "$ACTIVE_SKY_UTILS_ENTRY" > /dev/null
   rm -f "$ACTIVE_SKY_UTILS_MARK"

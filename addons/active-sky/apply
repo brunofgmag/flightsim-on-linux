@@ -21,6 +21,16 @@ fi
 : "${REGISTRY_BACKUP:?FSOL_COMPATDATA is not set}"
 addon_sibling_prefix_create
 addon_sibling_cfg write active-sky
+cfg="$(addon_sibling_prefix)/SimConnect.cfg"
+utils_cfg="$(active_sky_utils_cfg)"
+if [ -z "$utils_cfg" ]; then
+  echo "already ActiveSky Utils is not installed, so it needs no SimConnect.cfg yet; run apply again after the connector puts it in place"
+elif cmp -s "$cfg" "$utils_cfg"; then
+  echo "already SimConnect.cfg is next to ActiveSky Utils"
+else
+  cp "$cfg" "$utils_cfg"
+  echo "changed copied SimConnect.cfg next to ActiveSky Utils, because Active Sky reopens Utils in that folder"
+fi
 addon_sibling_registry_set "$ACTIVE_SKY_KEY" Calibri Carlito
 addon_sibling_registry_set "$ACTIVE_SKY_KEY" "Calibri Medium" Carlito
 

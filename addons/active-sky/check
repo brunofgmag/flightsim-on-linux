@@ -44,8 +44,22 @@ utils_entry_line() {
   esac
 }
 
+utils_cfg_line() {
+  local utils_cfg
+  utils_cfg="$(active_sky_utils_cfg)"
+  if [ -z "$utils_cfg" ]; then
+    echo "ok ActiveSky Utils is not installed, so it needs no SimConnect.cfg yet"
+  elif cmp -s "$(addon_sibling_prefix)/SimConnect.cfg" "$utils_cfg"; then
+    echo "ok the SimConnect.cfg next to ActiveSky Utils matches the add-ons prefix's"
+  else
+    echo "FAIL the SimConnect.cfg next to ActiveSky Utils is missing or differs from the add-ons prefix's, so the Utils that Active Sky reopens in that folder cannot find the simulator; run: flightsim-on-linux addon apply active-sky"
+    return 1
+  fi
+}
+
 addon_sibling_prefix_check active-sky || status=1
 [ ! -f "$(addon_sibling_prefix)/system.reg" ] || addon_sibling_cfg check active-sky || status=1
+[ ! -f "$(addon_sibling_prefix)/system.reg" ] || utils_cfg_line || status=1
 utils_entry_line || status=1
 
 python3 -I "$ROOT/fsol/proton_build.py" check "${FSOL_PROTON:-}" gdiplus-font-family-after-substitution.patch lib/wine/x86_64-windows/gdiplus.dll "Proton's gdiplus.dll finds a font family after Wine substitutes another for it, so Active Sky can draw with Calibri and Microsoft Sans Serif" || status=1

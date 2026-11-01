@@ -9,3 +9,9 @@ REGISTRY_BACKUP="${FSOL_COMPATDATA:+$FSOL_COMPATDATA/flightsim-on-linux-backup/a
 ACTIVE_SKY_EXE_XML="${FSOL_BASE:+$FSOL_BASE/exe.xml}"
 ACTIVE_SKY_UTILS_MARK="$REGISTRY_BACKUP/utils-entry-disabled"
 export ACTIVE_SKY_PATTERN ACTIVE_SKY_EXE ACTIVE_SKY_UTILS_PATTERN ACTIVE_SKY_UTILS_GLOB ACTIVE_SKY_UTILS_ENTRY ACTIVE_SKY_KEY REGISTRY_BACKUP ACTIVE_SKY_EXE_XML ACTIVE_SKY_UTILS_MARK
+
+active_sky_utils_cfg() {
+  local exe
+  exe="$(compgen -G "${FSOL_PREFIX:-}/$ACTIVE_SKY_UTILS_GLOB" | head -n 1 || true)"
+  [ -z "$exe" ] || echo "$(dirname "$exe")/SimConnect.cfg"
+}

@@ -25,6 +25,7 @@ LISTEN = "0A"
 ESTABLISHED = "01"
 KILL_ON_STOP = signal.SIGTERM
 BY_STATE = ("always", "while_simulator", "process")
+SESSION_DISPLAY = ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY")
 
 
 @dataclass(frozen=True)
@@ -381,6 +382,15 @@ def say_line(text):
     print(f"[{time.strftime('%H:%M:%S')}] {text}", flush=True)
 
 
+def session_display():
+    try:
+        manager = subprocess.run(["systemctl", "--user", "show-environment"], stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
+    except OSError:
+        return {}
+    pairs = (line.split("=", 1) for line in manager.stdout.splitlines() if "=" in line)
+    return {name: value for name, value in pairs if name in SESSION_DISPLAY}
+
+
 class Watcher:
     def __init__(self, addon, found, cli, discover, proc, say):
         self.addon = addon
@@ -397,7 +407,7 @@ class Watcher:
 
     def run_script(self, name, args):
         try:
-            code = addons.call_script(self.addon, name, self.machine_now(), self.cli, args, drop=addons.WINE_UNFRIENDLY, stdin=subprocess.DEVNULL, timeout=SCRIPT_TIMEOUT)
+            code = addons.call_script(self.addon, name, self.machine_now(), self.cli, args, extra=session_display(), drop=addons.WINE_UNFRIENDLY, stdin=subprocess.DEVNULL, timeout=SCRIPT_TIMEOUT)
         except subprocess.TimeoutExpired:
             return self.say(f"{name} was still running after {SCRIPT_TIMEOUT} s; moving on")
         if code:
