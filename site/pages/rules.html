@@ -1,5 +1,5 @@
 title: Ground rules
-description: Rules that apply to every Windows add-on in the MSFS 2024 Proton prefix: installers, running next to the simulator, your screen setup, freezes and ntsync, Community links, fonts and WPF.
+description: Rules that apply to every Windows add-on in the MSFS 2024 Proton prefix: installers, running next to the simulator, your screen setup, freezes and ntsync, stutters, Community links, fonts and WPF.
 ---
 <h1>Ground rules</h1>
 <p class="lead">These apply to every add-on. Each one took hours to find on the test machine, because from the outside it looks like a bug in the add-on.</p>
@@ -35,6 +35,12 @@ description: Rules that apply to every Windows add-on in the MSFS 2024 Proton pr
 <p>So ntsync can stay on. If the simulator freezes in the menu or during an aircraft load, turn it off first: in Steam, right-click Microsoft Flight Simulator 2024, choose Properties, and put this at the start of <em>Launch Options</em>:</p>
 <pre><code>PROTON_NO_NTSYNC=1 %command%</code></pre>
 <p>If you already have launch options, add <code>PROTON_NO_NTSYNC=1</code> before <code>%command%</code>. <code>PROTON_USE_NTSYNC=0</code> looks like it should do the same, but Proton ignores it. <code>bin/flightsim-on-linux doctor</code> says whether ntsync is on. With the simulator running, it counts the <code>/dev/ntsync</code> handles its wineserver holds, so it reports what the simulator really uses, not just what the launch options say.</p>
+
+<h2>If the simulator stutters a minute or so apart</h2>
+<p>Stutters that come 40 to 90 seconds apart, right after a jump in CPU use, can come from the simulator's <code>ACE: LongWorker</code> threads filling every CPU it has. In the developer FPS panel they show up on <code>MainThread</code> and <code>Manipulators</code>, and the longest ones stutter the audio too. A small service gives those threads only spare CPU time:</p>
+<pre><code>bin/flightsim-on-linux addon watcher simulator-longworker-priority
+bin/flightsim-on-linux addon apply simulator-longworker-priority</code></pre>
+<p><a href="simulator-longworker-priority.html">MSFS 2024 LongWorker priority</a> has the measurements and how to undo it. Stutters in a steady rhythm are a different problem: see <a href="proton-fs2024.html">Proton FS2024</a>.</p>
 
 <h2>Don't kill the simulator while it loads</h2>
 <p>On the test machine, a simulator force-quit during its loading screen came back with every Community package switched off. It gave no warning; the aircraft were gone from the list. It had marked each Community package <code>SystemDisabled</code> in <code>Content.xml</code>, in your profile folder inside the simulator's base folder. Force-quits after the main menu didn't do this.</p>

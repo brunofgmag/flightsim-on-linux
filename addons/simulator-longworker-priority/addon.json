@@ -1,0 +1,11 @@
+{
+  "name": "MSFS 2024 LongWorker priority",
+  "tested_version": "1.9.21.0",
+  "tested_on": "2026-11-01",
+  "needs": [],
+  "touches_addon_files": false,
+  "installed": {
+    "sim": ["FlightSimulator2024.exe"]
+  },
+  "watcher": {"loop": "priority-loop"}
+}

@@ -474,6 +474,12 @@ class ConnectionsTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(lines, ["connection 1: 0 messages waiting", "One connection: the orphan SimConnect connection is not there."])
 
+    def test_an_empty_list_is_not_reported_as_one_connection(self):
+        self.nest.publish()
+        code, lines = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertEqual(lines, ["No connection read: Nest has not connected yet, or the offsets don't fit this SubSystem.dll."])
+
     def test_two_connections_mean_the_leak_and_exit_with_2(self):
         self.chain(0, 399621)
         code, lines = self.run_main()
