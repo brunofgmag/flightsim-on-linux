@@ -32,6 +32,8 @@ ORBX_PATTERN = r"^[A-Za-z]:.*\\orbx-central\\Orbx Central\.exe"
 ORBX_CLOSE_PATTERN = r"^[A-Za-z]:.*\\orbx-central\\(Orbx Central\.exe|saturn-win\\)"
 TRITRISIM_FOLDER = f"{LOCAL}/TriTriSim Hub"
 TRITRISIM_PATTERN = r"^[A-Za-z]:.*\\TriTriSim Hub\\tritrisim-hub\.exe"
+GET_RECT_PATCH = "shell32-notifyicon-get-rect.patch"
+GET_RECT_MODULES = ("lib/wine/x86_64-windows/shell32.dll", "lib/wine/x86_64-windows/explorer.exe")
 SHIM_PROCGOV = b"MZ stand-in for the procgov shim, with navigraph-7z- inside"
 SHIM_WINHTTP = b"MZ stand-in for the winhttp proxy, forwarding to winhttp_wine.DllCanUnloadNow"
 SHIM_OLETR = b"MZ stand-in for the oletr proxy"
@@ -844,6 +846,19 @@ class TriTriSimHubTest(StoreCase):
         self.stage_shim("oletr.dll", SHIM_OLETR)
         self.orig = self.backup("tritrisim-hub", "tritrisim-hub.exe.orig")
         self.stubs()
+        self.write_build()
+
+    def write_build(self, listed=True, modules=GET_RECT_MODULES):
+        record = ["release test x86_64"]
+        if listed:
+            record.append(f"patch {hashlib.sha256((ROOT / 'patches' / 'wine' / GET_RECT_PATCH).read_bytes()).hexdigest()} {GET_RECT_PATCH}")
+        for module in GET_RECT_MODULES:
+            built = self.proton / "files" / module
+            built.parent.mkdir(parents=True, exist_ok=True)
+            built.write_bytes(f"built {module}".encode())
+            data = built.read_bytes() if module in modules else b"something else"
+            record.append(f"module {hashlib.sha256(data).hexdigest()} {module}")
+        (self.proton / "fs2024-build.txt").write_text("\n".join(record) + "\n")
 
     def test_apply_changes_one_import_name_and_puts_the_stand_in_beside_the_exe(self):
         result = self.script("apply")
@@ -897,29 +912,45 @@ class TriTriSimHubTest(StoreCase):
         self.assertEqual(self.exe.read_bytes(), self.PATCHED)
         self.assertTrue(self.oletr.exists())
 
-    def test_check_passes_after_apply_with_two_ok_lines(self):
+    def test_check_passes_after_apply_with_four_ok_lines(self):
         self.script("apply")
         result = self.script("check")
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok", "ok"])
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok"] * 4)
 
     def test_check_fails_without_the_fix(self):
         result = self.script("check")
         self.assertEqual(result.returncode, 1)
-        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["FAIL", "FAIL"])
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["FAIL", "FAIL", "ok", "ok"])
 
     def test_check_fails_after_an_update_brought_the_executable_back(self):
         self.script("apply")
         self.exe.write_bytes(self.ORIGINAL)
         result = self.script("check")
         self.assertEqual(result.returncode, 1)
-        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["FAIL", "ok"])
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["FAIL", "ok", "ok", "ok"])
 
     def test_check_fails_when_the_stand_in_is_missing(self):
         self.script("apply")
         self.oletr.unlink()
         result = self.script("check")
-        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok", "FAIL"])
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok", "FAIL", "ok", "ok"])
+
+    def test_check_fails_with_a_proton_built_without_the_tray_rectangle_patch(self):
+        self.script("apply")
+        self.write_build(listed=False)
+        result = self.script("check")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok", "ok", "FAIL", "FAIL"])
+        self.assertIn("run: flightsim-on-linux proton build", result.stdout)
+
+    def test_check_fails_when_explorer_is_not_the_built_one(self):
+        self.script("apply")
+        self.write_build(modules=GET_RECT_MODULES[:1])
+        result = self.script("check")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok", "ok", "ok", "FAIL"])
+        self.assertIn("explorer.exe", result.stdout.splitlines()[3])
 
     def test_check_changes_nothing(self):
         self.script("apply")

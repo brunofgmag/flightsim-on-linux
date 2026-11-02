@@ -167,6 +167,16 @@ Wine needs an X11 display for tray icons, and DISPLAY is '${DISPLAY:-unset}'. Ru
 Without this, Electron programs such as Volanta open no menu when you right-click their tray icon, except the first time." ;;
 esac
 
+status=0
+output="$(run_wine "$(windows_path "$WORK/notifyicon-get-rect-test.exe")")" || status=$?
+case "$status" in
+  0) report "shell32 tells a program where its tray icon is (TriTriSim Hub tray icon)" ok "$output" ;;
+  3) report "shell32 tells a program where its tray icon is (TriTriSim Hub tray icon)" skipped "$output
+Wine needs an X11 display for tray icons, and DISPLAY is '${DISPLAY:-unset}'. Run the check from your desktop session." ;;
+  *) report "shell32 tells a program where its tray icon is (TriTriSim Hub tray icon)" FAIL "$output
+Without this, Tauri programs such as the TriTriSim Hub ignore every click on their tray icon." ;;
+esac
+
 xembed_tray_items() {
   local name pid
   busctl --user call org.kde.StatusNotifierWatcher /StatusNotifierWatcher org.freedesktop.DBus.Properties Get ss \

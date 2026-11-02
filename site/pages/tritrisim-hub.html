@@ -34,10 +34,11 @@ description: How to run the TriTriSim Hub in MSFS 2024's prefix under Proton: wh
 
 <h2>Check it</h2>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check tritrisim-hub</code></pre>
-<p>It prints two lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
+<p>It prints four lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing, so you can run it with the simulator open:</p>
 <ul>
   <li>the executable imports <code>oletr.dll</code> once and <code>ole32.dll</code> not at all;</li>
-  <li><code>oletr.dll</code> beside it is, byte for byte, the stand-in built from this repository.</li>
+  <li><code>oletr.dll</code> beside it is, byte for byte, the stand-in built from this repository;</li>
+  <li>Proton's <code>shell32.dll</code> and <code>explorer.exe</code> are the ones Proton FS2024 built with the tray icon fix. The Hub asks Windows where its tray icon is on every click and drops the click when it gets no answer, and Wine had no answer, so the icon ignored both buttons. On 2 November 2026, with a build that has the fix, a right-click opened the menu with Show Installer and Quit.</li>
 </ul>
 <p>When the first one fails after an update, start the Hub from its menu entry or run <code>addon apply tritrisim-hub</code>.</p>
 

@@ -22,6 +22,7 @@ PATCHES=(
   "$ROOT/patches/wine/shell32-notifyicon-guid.patch"
   "$ROOT/patches/wine/explorer-tray-click-grants-foreground.patch"
   "$ROOT/patches/wine/winex11-embedded-window-clicks-use-root-position.patch"
+  "$ROOT/patches/wine/shell32-notifyicon-get-rect.patch"
   "$ROOT/patches/wine/win32u-cross-process-child-windows.patch"
   "$ROOT/patches/wine/winewayland-opaque-xrgb.patch"
   "$ROOT/patches/wine/gdiplus-font-family-after-substitution.patch"
