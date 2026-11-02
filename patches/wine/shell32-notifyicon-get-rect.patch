@@ -1,0 +1,53 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine shell32 and explorer: answer Shell_NotifyIconGetRect with the icon's window rectangle instead of E_NOTIMPL. Tauri programs built on the tray-icon crate, such as TriTriSim Hub, ask for that rectangle on every click and drop the click when the call fails, so their tray icon ignored both buttons. explorer.exe tags each icon window with its owner and id, and shell32 finds the window by them.
+Applies to wine-cachyos after shell32-notifyicon-guid.patch and explorer-tray-click-grants-foreground.patch with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/shell32/systray.c
++++ b/dlls/shell32/systray.c
+@@ -379,11 +379,33 @@
+     return ret;
+ }
+ 
++static HWND find_tray_icon_window( HWND parent, HWND owner, UINT id )
++{
++    HWND window = NULL;
++
++    while ((window = FindWindowExW( parent, window, L"__wine_tray_icon", NULL )))
++        if (GetPropW( window, L"__wine_tray_icon_owner" ) == owner &&
++            (UINT_PTR)GetPropW( window, L"__wine_tray_icon_id" ) == id)
++            return window;
++    return NULL;
++}
++
+ /*************************************************************************
+  * Shell_NotifyIconGetRect		[SHELL32.@]
+  */
+ HRESULT WINAPI Shell_NotifyIconGetRect(const NOTIFYICONIDENTIFIER* identifier, RECT* icon_location)
+ {
+-    FIXME("stub (%p) (%p)\n", identifier, icon_location);
+-    return E_NOTIMPL;
++    HWND owner, window;
++    UINT id;
++
++    TRACE("(%p) (%p)\n", identifier, icon_location);
++
++    if (!identifier || !icon_location || identifier->cbSize < sizeof(*identifier)) return E_INVALIDARG;
++    owner = identifier->hWnd;
++    id = identifier->uID;
++    if (!owner && !lookup_guid_icon( &identifier->guidItem, &owner, &id )) return E_FAIL;
++    if (!(window = find_tray_icon_window( NULL, owner, id )) &&
++        !(window = find_tray_icon_window( FindWindowW( L"Shell_TrayWnd", NULL ), owner, id )))
++        return E_FAIL;
++    return GetWindowRect( window, icon_location ) ? S_OK : E_FAIL;
+ }
+--- a/programs/explorer/systray.c
++++ b/programs/explorer/systray.c
+@@ -498,6 +498,8 @@
+         const CREATESTRUCTW *info = (const CREATESTRUCTW *)lparam;
+         icon = info->lpCreateParams;
+         SetWindowLongPtrW( hwnd, GWLP_USERDATA, (LONG_PTR)icon );
++        SetPropW( hwnd, L"__wine_tray_icon_owner", icon->owner );
++        SetPropW( hwnd, L"__wine_tray_icon_id", (HANDLE)(UINT_PTR)icon->id );
+         break;
+     }
+ 

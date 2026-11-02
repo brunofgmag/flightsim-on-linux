@@ -9,6 +9,7 @@ mkdir -p "$OUT"
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/notifyicon-guid-test.exe" "$HERE/src/notifyicon-guid-test.c" -lshell32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/tray-click-foreground-test.exe" "$HERE/src/tray-click-foreground-test.c" -lshell32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/tray-first-click-test.exe" "$HERE/src/tray-first-click-test.c" -lshell32 -luser32
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/notifyicon-get-rect-test.exe" "$HERE/src/notifyicon-get-rect-test.c" -lshell32 -luser32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/pathgradient-test.exe" "$HERE/src/pathgradient-test.c" -lgdiplus
 x86_64-w64-mingw32-gcc -O2 -municode -o "$OUT/centered-point-test.exe" "$HERE/src/centered-point-test.c" -lgdiplus -lgdi32
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/gdiplus-nested-containers-test.exe" "$HERE/src/gdiplus-nested-containers-test.c" -lgdiplus

@@ -73,6 +73,9 @@ tritrisim_check() {
     echo "FAIL oletr.dll is missing beside the executable, or is an older build of the stand-in"
     status=1
   fi
+  python3 -I "$TRITRISIM_PARTS/../../../fsol/proton_build.py" check "${FSOL_PROTON:-}" \
+    shell32-notifyicon-get-rect.patch lib/wine/x86_64-windows/shell32.dll "Proton's shell32.dll tells the Hub where its tray icon is, so the icon answers clicks" \
+    shell32-notifyicon-get-rect.patch lib/wine/x86_64-windows/explorer.exe "Proton's explorer.exe tags each tray icon with its owner, which shell32.dll looks for" || status=1
   return "$status"
 }
 
