@@ -574,6 +574,8 @@ ONE_PIXEL_WARP_CHECK="winewayland warps the pointer inside a small clip (simulat
 ONE_PIXEL_LOG="$WORK/one-pixel-clip.log"
 DRAG_CHECK="winewayland holds the pointer on a one-pixel clip while the mouse moves (simulator arrow shaking in a ChasePlane drag under KWin 6.7)"
 DRAG_LOG="$WORK/pointer-drag-clip.log"
+OVERLAY_INPUT_CHECK="win32u keeps mouse input away from the game while the Steam overlay is open under the Wayland driver (the simulator reacting to clicks meant for Shift+Tab)"
+OVERLAY_INPUT_LOG="$WORK/steam-overlay-input.log"
 
 report_one_pixel_checks() {
   report "$ONE_PIXEL_REGION_CHECK" "$1" "$2"
@@ -583,6 +585,16 @@ report_one_pixel_checks() {
 report_private_kwin_checks() {
   report_one_pixel_checks "$1" "$2"
   report "$DRAG_CHECK" "$1" "$2"
+  report "$OVERLAY_INPUT_CHECK" "$1" "$2"
+}
+
+overlay_input_result() {
+  cat "$WORK/steam-overlay-input.txt" 2> /dev/null || echo "the test window wrote no result"
+}
+
+run_overlay_input_test() {
+  export WINE_WAYLAND_STEAM_OVERLAY_LAYER=1
+  run_isolated_session steam-overlay-input-test.exe "$OVERLAY_INPUT_LOG" sweep
 }
 
 missing_for_private_kwin() {
@@ -830,7 +842,67 @@ The private KWin session could not run the test window to the end, so nothing co
 The private KWin session could not run the drag to the end, so nothing could be compared." ;;
     *) report "$DRAG_CHECK" FAIL "${output:-no output}" ;;
   esac
+  status=0
+  output="$(run_overlay_input_test)" || status=$?
+  case "$status" in
+    0) report "$OVERLAY_INPUT_CHECK" ok "$(overlay_input_result)" ;;
+    2) report "$OVERLAY_INPUT_CHECK" skipped "$(overlay_input_result)
+${output:-}
+No mouse motion reached the test window before or after the overlay, so nothing could be compared." ;;
+    *) report "$OVERLAY_INPUT_CHECK" FAIL "$(overlay_input_result)" ;;
+  esac
 fi
+
+OVERLAY_LAYER_CHECK="The Steam overlay layer for the Wayland driver loads in the runtime only when Proton turns it on (Shift+Tab and the FPS counter under PROTON_ENABLE_WAYLAND)"
+OVERLAY_LAYER_MANIFESTS="$TOOL/files/share/steam-overlay-wayland/implicit_layer.d"
+OVERLAY_EXPORTS_CHECK="win32u.so exports the cursor helpers the Steam overlay bridge calls (game cursor drawn over the overlay, or left hidden after it closes)"
+
+overlay_layer_loader_log() {
+  local inner="VK_IMPLICIT_LAYER_PATH=\"\${VK_IMPLICIT_LAYER_PATH:+\$VK_IMPLICIT_LAYER_PATH:}\$1\" WINE_WAYLAND_STEAM_OVERLAY_LAYER=\"\$2\" VK_LOADER_DEBUG=layer vulkaninfo --summary 2>&1"
+  timeout 120 "${RUNNER[@]}" sh -c "$inner" sh "$OVERLAY_LAYER_MANIFESTS" "$1" 2> /dev/null || true
+}
+
+overlay_layer_insertions() {
+  grep -c 'Insert instance layer "VK_LAYER_GE_wayland_steam_overlay"' <<< "$1" || true
+}
+
+check_overlay_layer() {
+  local on off
+  if [ ! -f "$OVERLAY_LAYER_MANIFESTS/VkLayer_GE_wayland_steam_overlay.json" ]; then
+    report "$OVERLAY_LAYER_CHECK" FAIL "$OVERLAY_LAYER_MANIFESTS has no VkLayer_GE_wayland_steam_overlay.json"
+    return
+  fi
+  if ! timeout 60 "${RUNNER[@]}" sh -c 'command -v vulkaninfo' > /dev/null 2>&1; then
+    report "$OVERLAY_LAYER_CHECK" skipped "The runner (${RUNNER[*]}) has no vulkaninfo, so the Vulkan loader could not be asked."
+    return
+  fi
+  on="$(overlay_layer_loader_log 1)"
+  off="$(overlay_layer_loader_log 0)"
+  if ! grep -q 'deviceName' <<< "$on"; then
+    report "$OVERLAY_LAYER_CHECK" skipped "vulkaninfo found no Vulkan device in the runner, so no instance was created."
+  elif [ "$(overlay_layer_insertions "$on")" -ge 1 ] && [ "$(overlay_layer_insertions "$off")" -eq 0 ]; then
+    report "$OVERLAY_LAYER_CHECK" ok "inserted with WINE_WAYLAND_STEAM_OVERLAY_LAYER=1, left out with 0"
+  else
+    report "$OVERLAY_LAYER_CHECK" FAIL "instance insertions with the switch on: $(overlay_layer_insertions "$on"), off: $(overlay_layer_insertions "$off")
+$(grep -iE 'GE_Wayland|GE_wayland' <<< "$on" | grep -iE 'error|fail|cannot|unable' | head -n 3)"
+  fi
+}
+
+check_overlay_exports() {
+  local library="$TOOL/files/lib/wine/x86_64-unix/win32u.so" symbols missing="" name
+  symbols="$(readelf --dyn-syms --wide "$library" 2> /dev/null | awk '$7 != "UND" { print $8 }')"
+  for name in __wine_suppress_driver_cursor __wine_reapply_driver_cursor; do
+    grep -qx "$name" <<< "$symbols" || missing="$missing $name"
+  done
+  if [ -z "$missing" ]; then
+    report "$OVERLAY_EXPORTS_CHECK" ok "__wine_suppress_driver_cursor and __wine_reapply_driver_cursor are exported"
+  else
+    report "$OVERLAY_EXPORTS_CHECK" FAIL "missing from win32u.so:$missing"
+  fi
+}
+
+check_overlay_layer
+check_overlay_exports
 
 echo
 if [ "$failures" -eq 0 ] && [ "$skipped" -eq 0 ]; then

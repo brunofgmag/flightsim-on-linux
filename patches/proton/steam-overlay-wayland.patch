@@ -1,0 +1,15 @@
+SPDX-License-Identifier: BSD-3-Clause
+Proton script: under the Wine Wayland driver, turn on the Steam overlay bridge from fs2024_steam_overlay.py when Steam injected its overlay, and let the Vulkan loader find the bridge's layer.
+Applies to the proton script of a Proton-CachyOS release with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/proton
++++ b/proton
+@@ -2272,6 +2272,8 @@
+             self.env["WINE_USE_EGL"] = "1"
+             # FSHack is not needed on winewayland
+             self.env["WINE_DISABLE_FULLSCREEN_HACK"] = "1"
++            import fs2024_steam_overlay
++            fs2024_steam_overlay.enable(self.env, g_proton.path("files/share/steam-overlay-wayland/implicit_layer.d"))
+             # Enable the move hack
+             self.env.setdefault("WINE_MOVE_HACK", "1")
+             # It is not possible for winewayland to support xalia since
