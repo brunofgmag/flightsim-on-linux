@@ -55,6 +55,7 @@ PATCHES=(
   "$ROOT/patches/wine/ntdll-fenix-gateway-loader-case.patch"
   "$ROOT/patches/wine/ntdll-heap-read-slack.patch"
   "$ROOT/patches/wine/ntdll-heap-bounded-free-list-scan.patch"
+  "$ROOT/patches/wine/win32u-steam-overlay-wayland-input.patch"
 )
 
 MODULES=(
@@ -95,6 +96,28 @@ DXVK_PATCHES=(
 )
 DXVK_TARGET="src/dxgi/dxgi.dll"
 DXVK_MODULE="lib/wine/dxvk/x86_64-windows/dxgi.dll"
+
+OVERLAY_BRIDGE_URL="https://github.com/GloriousEggroll/proton-ge-custom"
+OVERLAY_BRIDGE_RELEASE="GE-Proton11-9"
+OVERLAY_BRIDGE_COMMIT="01bfbf67b35418fdd705f2be09e0bfb43eece24b"
+OVERLAY_BRIDGE_PATHS=(vklayers/steam-overlay-wayland lsteamclient/overlay_bridge LICENSE.proton)
+VKROOTS_URL="https://github.com/misyltoad/vkroots"
+VKROOTS_COMMIT="ee76e620798612c52fb8dcc32a1058a0a3538930"
+VULKAN_HEADERS_URL="https://github.com/KhronosGroup/Vulkan-Headers"
+VULKAN_HEADERS_COMMIT="e3b1eec08173d6b825cd3ac88c885a63b621504a"
+OVERLAY_BRIDGE_PACKAGES=(wayland-client wayland-cursor xkbcommon x11 xfixes gl)
+OVERLAY_LAYER_LIBRARY="libVkLayer_GE_Wayland_SteamOverlay.so"
+OVERLAY_BRIDGE_LIBRARY="liblsteamclient_overlay_bridge.so.1"
+OVERLAY_LIBRARY_DIR="lib/x86_64-linux-gnu"
+OVERLAY_LAYER_MANIFEST="VkLayer_GE_wayland_steam_overlay.json"
+OVERLAY_LAYER_MANIFEST_DIR="share/steam-overlay-wayland/implicit_layer.d"
+
+PROTON_PATCHES=(
+  "$ROOT/patches/proton/steam-overlay-wayland.patch"
+)
+PROTON_FILES=(
+  "$ROOT/proton/fs2024_steam_overlay.py"
+)
 
 CONFIGURE=(--enable-win64 --disable-tests --enable-silent-rules --without-ffmpeg --without-unwind)
 
@@ -175,12 +198,16 @@ check_preconditions() {
   [[ "$RELEASE" == cachyos-11.* ]] || die "only cachyos-11 releases have an overlay variant; $RELEASE does not"
   [ "$RELEASE" = "$VERIFIED_RELEASE" ] || echo "note: $RELEASE is not $VERIFIED_RELEASE, the release this project verified; the patches may not apply"
   local tool
-  for tool in curl git patch python3 perl autoreconf make gcc flex bison x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-strip strip readelf sha512sum sha256sum tar meson ninja glslangValidator; do
+  for tool in curl git patch python3 perl autoreconf make gcc g++ flex bison x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-strip strip readelf sha512sum sha256sum tar meson ninja cmake pkg-config wayland-scanner glslangValidator; do
     command -v "$tool" > /dev/null || die "missing program: $tool"
   done
   has_idl_compiler || die "missing program: ${IDL_COMPILERS[*]} (any one of them), which vkd3d-proton needs"
+  local package
+  for package in "${OVERLAY_BRIDGE_PACKAGES[@]}"; do
+    pkg-config --exists "$package" || die "missing development files for $package, which the Steam overlay bridge needs"
+  done
   local patch
-  for patch in "${PATCHES[@]:1}" "${VKD3D_PATCHES[@]}" "${DXVK_PATCHES[@]}"; do
+  for patch in "${PATCHES[@]:1}" "${VKD3D_PATCHES[@]}" "${DXVK_PATCHES[@]}" "${PROTON_PATCHES[@]}" "${PROTON_FILES[@]}"; do
     [ -f "$patch" ] || die "missing patch $patch"
   done
   STEAM="$(find_steam)"
@@ -418,6 +445,95 @@ install_dxvk() {
   echo "$(sha256sum "$target" | cut -d' ' -f1)  $DXVK_MODULE"
 }
 
+fetch_pinned() {
+  local folder="$1" url="$2" commit="$3"
+  git init -q "$folder"
+  git -C "$folder" fetch -q --depth=1 "$url" "$commit"
+  git -C "$folder" -c advice.detachedHead=false checkout -q FETCH_HEAD
+}
+
+fetch_overlay_bridge_source() {
+  step "Fetching the Steam overlay bridge of $OVERLAY_BRIDGE_RELEASE ($OVERLAY_BRIDGE_COMMIT)"
+  OVERLAY_BRIDGE_SOURCE="$WORK/steam-overlay-bridge"
+  git init -q "$OVERLAY_BRIDGE_SOURCE"
+  git -C "$OVERLAY_BRIDGE_SOURCE" config core.sparseCheckout true
+  printf '/%s\n' "${OVERLAY_BRIDGE_PATHS[@]}" > "$OVERLAY_BRIDGE_SOURCE/.git/info/sparse-checkout"
+  git -C "$OVERLAY_BRIDGE_SOURCE" fetch -q --depth=1 --filter=blob:none "$OVERLAY_BRIDGE_URL" "$OVERLAY_BRIDGE_COMMIT"
+  git -C "$OVERLAY_BRIDGE_SOURCE" -c advice.detachedHead=false checkout -q FETCH_HEAD
+  local path
+  for path in "${OVERLAY_BRIDGE_PATHS[@]}"; do
+    [ -e "$OVERLAY_BRIDGE_SOURCE/$path" ] || die "$OVERLAY_BRIDGE_RELEASE has no $path"
+  done
+  VKROOTS_SOURCE="$WORK/vkroots"
+  fetch_pinned "$VKROOTS_SOURCE" "$VKROOTS_URL" "$VKROOTS_COMMIT"
+  VULKAN_HEADERS_SOURCE="$WORK/vulkan-headers"
+  fetch_pinned "$VULKAN_HEADERS_SOURCE" "$VULKAN_HEADERS_URL" "$VULKAN_HEADERS_COMMIT"
+}
+
+compile_overlay_bridge() {
+  step "Compiling the Steam overlay layer and bridge for Wine Wayland"
+  local flags="-O2 -ffile-prefix-map=$WORK=/usr/src/fenix-proton/build"
+  cmake -S "$OVERLAY_BRIDGE_SOURCE/vklayers/steam-overlay-wayland" -B "$WORK/overlay-objects" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="$flags" -DCMAKE_CXX_FLAGS="$flags" -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+    -DLSTEAMCLIENT_OVERLAY_BRIDGE_SOURCE_DIR="$OVERLAY_BRIDGE_SOURCE/lsteamclient/overlay_bridge" \
+    -DVKROOTS_INCLUDE_DIR="$VKROOTS_SOURCE" \
+    -DVULKAN_HEADERS_INCLUDE_DIR="$VULKAN_HEADERS_SOURCE/include" > "$WORK/overlay-cmake.log" 2>&1 || die "cmake failed; see $WORK/overlay-cmake.log"
+  ninja -C "$WORK/overlay-objects" -j"$JOBS" > "$WORK/overlay-ninja.log" 2>&1 || die "ninja failed; see $WORK/overlay-ninja.log"
+}
+
+write_overlay_manifest() {
+  python3 -I - "$1" "$2" "$3" <<'PY'
+import json
+import os
+import sys
+built, target, library = sys.argv[1:]
+manifest = json.load(open(built))
+manifest["layer"]["library_path"] = os.path.relpath(library, os.path.dirname(target))
+with open(target, "w") as out:
+    json.dump(manifest, out, indent=4)
+    out.write("\n")
+PY
+}
+
+install_overlay_bridge() {
+  step "Adding the Steam overlay layer and bridge to the release copy"
+  local objects="$WORK/overlay-objects" libraries="$STAGE/files/$OVERLAY_LIBRARY_DIR" manifests="$STAGE/files/$OVERLAY_LAYER_MANIFEST_DIR"
+  local layer="$objects/$OVERLAY_LAYER_LIBRARY" bridge="$objects/lsteamclient-overlay-bridge/$OVERLAY_BRIDGE_LIBRARY" built_manifest="$objects/$OVERLAY_LAYER_MANIFEST"
+  [ -f "$layer" ] || die "ninja did not produce $OVERLAY_LAYER_LIBRARY"
+  [ -e "$bridge" ] || die "ninja did not produce $OVERLAY_BRIDGE_LIBRARY"
+  [ -f "$built_manifest" ] || die "cmake did not write $OVERLAY_LAYER_MANIFEST"
+  [ ! -e "$libraries/$OVERLAY_LAYER_LIBRARY" ] && [ ! -e "$libraries/$OVERLAY_BRIDGE_LIBRARY" ] && [ ! -e "$manifests" ] \
+    || die "the release already ships a Steam overlay layer; this script would overwrite it"
+  install -D -m 0755 "$layer" "$libraries/$OVERLAY_LAYER_LIBRARY"
+  install -D -m 0755 "$(readlink -f "$bridge")" "$libraries/$OVERLAY_BRIDGE_LIBRARY"
+  strip --strip-debug "$libraries/$OVERLAY_LAYER_LIBRARY" "$libraries/$OVERLAY_BRIDGE_LIBRARY"
+  mkdir -p "$manifests"
+  write_overlay_manifest "$built_manifest" "$manifests/$OVERLAY_LAYER_MANIFEST" "$libraries/$OVERLAY_LAYER_LIBRARY"
+  install -m 0644 "$OVERLAY_BRIDGE_SOURCE/LICENSE.proton" "$STAGE/files/share/steam-overlay-wayland/LICENSE.proton"
+  local file
+  for file in "$OVERLAY_LIBRARY_DIR/$OVERLAY_LAYER_LIBRARY" "$OVERLAY_LIBRARY_DIR/$OVERLAY_BRIDGE_LIBRARY" "$OVERLAY_LAYER_MANIFEST_DIR/$OVERLAY_LAYER_MANIFEST"; do
+    echo "$(sha256sum "$STAGE/files/$file" | cut -d' ' -f1)  $file"
+  done
+}
+
+patch_proton_script() {
+  step "Patching the proton script"
+  cd "$STAGE"
+  local patch file installed=("$STAGE/proton")
+  for patch in "${PROTON_PATCHES[@]}"; do
+    echo "-- $(basename "$patch")"
+    patch --batch --forward --fuzz=0 -p1 --dry-run -i "$patch" > /dev/null || die "$(basename "$patch") does not apply to the proton script of $RELEASE"
+    patch --batch --forward --fuzz=0 --no-backup-if-mismatch -p1 -i "$patch"
+  done
+  for file in "${PROTON_FILES[@]}"; do
+    install -m 0644 "$file" "$STAGE/$(basename "$file")"
+    installed+=("$STAGE/$(basename "$file")")
+  done
+  python3 -I -c 'import ast, sys
+for path in sys.argv[1:]:
+    ast.parse(open(path).read(), path)' "${installed[@]}" || die "the patched proton script does not parse"
+}
+
 needed_libraries() {
   readelf -d "$1" | sed -n 's/.*(NEEDED).*Shared library: \[\(.*\)\]/\1/p' | sort -u
 }
@@ -531,6 +647,9 @@ write_record() {
     echo "overlay fenix-a320-linux-patch $OVERLAY_TAG $OVERLAY_VARIANT"
     echo "vkd3d-proton $VKD3D_COMMIT"
     echo "dxvk $DXVK_COMMIT"
+    echo "steam-overlay-bridge $OVERLAY_BRIDGE_RELEASE $OVERLAY_BRIDGE_COMMIT"
+    echo "vkroots $VKROOTS_COMMIT"
+    echo "vulkan-headers $VULKAN_HEADERS_COMMIT"
     for patch in "${PATCHES[@]}"; do
       echo "patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
     done
@@ -543,11 +662,20 @@ write_record() {
     for patch in "${DXVK_PATCHES[@]}"; do
       echo "dxvk-patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
     done
+    for patch in "${PROTON_PATCHES[@]}"; do
+      echo "proton-patch $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
+    done
+    for patch in "${PROTON_FILES[@]}"; do
+      echo "proton-file $(sha256sum "$patch" | cut -d' ' -f1) $(basename "$patch")"
+    done
     for module in "${MODULES[@]}"; do
       echo "module $(sha256sum "$STAGE/files/$(module_target "$module")" | cut -d' ' -f1) $(module_target "$module")"
     done
     echo "module $(sha256sum "$STAGE/files/$VKD3D_MODULE" | cut -d' ' -f1) $VKD3D_MODULE"
     echo "module $(sha256sum "$STAGE/files/$DXVK_MODULE" | cut -d' ' -f1) $DXVK_MODULE"
+    for module in "$OVERLAY_LIBRARY_DIR/$OVERLAY_LAYER_LIBRARY" "$OVERLAY_LIBRARY_DIR/$OVERLAY_BRIDGE_LIBRARY" "$OVERLAY_LAYER_MANIFEST_DIR/$OVERLAY_LAYER_MANIFEST"; do
+      echo "module $(sha256sum "$STAGE/files/$module" | cut -d' ' -f1) $module"
+    done
   } > "$record"
 }
 
@@ -609,6 +737,10 @@ check_libraries
 install_modules
 install_vkd3d
 install_dxvk
+fetch_overlay_bridge_source
+compile_overlay_bridge
+install_overlay_bridge
+patch_proton_script
 write_settings
 check_runtime
 write_record
