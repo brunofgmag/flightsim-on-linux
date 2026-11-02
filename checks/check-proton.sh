@@ -158,6 +158,61 @@ Wine needs an X11 display for tray icons, and DISPLAY is '${DISPLAY:-unset}'. Ru
 esac
 
 status=0
+output="$(run_wine "$(windows_path "$WORK/tray-click-foreground-test.exe")")" || status=$?
+case "$status" in
+  0) report "explorer hands the foreground to a clicked tray icon's owner (Volanta tray menu)" ok "$output" ;;
+  3) report "explorer hands the foreground to a clicked tray icon's owner (Volanta tray menu)" skipped "$output
+Wine needs an X11 display for tray icons, and DISPLAY is '${DISPLAY:-unset}'. Run the check from your desktop session." ;;
+  *) report "explorer hands the foreground to a clicked tray icon's owner (Volanta tray menu)" FAIL "$output
+Without this, Electron programs such as Volanta open no menu when you right-click their tray icon, except the first time." ;;
+esac
+
+xembed_tray_items() {
+  local name pid
+  busctl --user call org.kde.StatusNotifierWatcher /StatusNotifierWatcher org.freedesktop.DBus.Properties Get ss \
+    org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems 2> /dev/null | grep -o '":[0-9.]*/StatusNotifierItem"' | tr -d '"' |
+    while IFS=/ read -r name _; do
+      pid="$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetConnectionUnixProcessID s "$name" 2> /dev/null | cut -d' ' -f2)"
+      [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2> /dev/null)" = xembedsniproxy ] && echo "$name"
+    done
+}
+
+tray_first_click() {
+  local before item tester status=0 _
+  command -v busctl > /dev/null || { echo "cannot test: busctl is missing"; return 3; }
+  busctl --user status org.kde.xembedsniproxy > /dev/null 2>&1 || { echo "cannot test: KDE's xembedsniproxy is not running"; return 3; }
+  before="$(xembed_tray_items | sort)"
+  run_wine "$(windows_path "$WORK/tray-first-click-test.exe")" 20000 > "$WORK/tray-first-click.txt" &
+  tester=$!
+  for _ in $(seq 1 100); do
+    item="$(comm -13 <(echo "$before") <(xembed_tray_items | sort) | head -n 1)"
+    [ -n "$item" ] && break
+    sleep 0.1
+  done
+  if [ -z "$item" ]; then
+    wait "$tester" || true
+    cat "$WORK/tray-first-click.txt"
+    echo "cannot test: xembedsniproxy listed no item for the test icon within 10 seconds"
+    return 3
+  fi
+  sleep 1
+  busctl --user call "$item" /StatusNotifierItem org.kde.StatusNotifierItem ContextMenu ii 200 200 > /dev/null || true
+  wait "$tester" || status=$?
+  cat "$WORK/tray-first-click.txt"
+  return "$status"
+}
+
+status=0
+output="$(tray_first_click)" || status=$?
+case "$status" in
+  0) report "winex11 delivers the first click on a tray icon KDE docked (Volanta tray menu)" ok "$output" ;;
+  3) report "winex11 delivers the first click on a tray icon KDE docked (Volanta tray menu)" skipped "$output
+This check needs a KDE session with an X11 display, where xembedsniproxy docks Wine's tray icons." ;;
+  *) report "winex11 delivers the first click on a tray icon KDE docked (Volanta tray menu)" FAIL "$output
+Without this, the first right-click on a docked Wine tray icon does nothing, and the menu opens only on the second." ;;
+esac
+
+status=0
 output="$(run_wine "$(windows_path "$WORK/pathgradient-test.exe")")" || status=$?
 [ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
 report "gdiplus path gradient (FSLabs display glow)" "$verdict" "$output"

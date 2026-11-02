@@ -1,0 +1,14 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine explorer: hand the foreground to a tray icon's owner when the icon is clicked, as the Windows shell does with AllowSetForegroundWindow. Electron apps such as Volanta give up their tray menu when SetForegroundWindow fails, and it failed on every right-click after the first.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/programs/explorer/systray.c
++++ b/programs/explorer/systray.c
+@@ -553,6 +553,7 @@
+     {
+         MSG message = {.hwnd = hwnd, .message = msg, .wParam = wparam, .lParam = lparam};
+         SendMessageW( icon->tooltip, TTM_RELAYEVENT, 0, (LPARAM)&message );
++        if (msg != WM_MOUSEMOVE) SetForegroundWindow( icon->owner );
+         if (!notify_owner( icon, msg, lparam )) break;
+         if (icon->version > 0)
+         {

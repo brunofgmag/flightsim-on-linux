@@ -4,7 +4,12 @@ set -uo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=tools/addons-prefix.sh
 . "$HERE/../../tools/addons-prefix.sh"
+ROOT="$(cd "$HERE/../.." && pwd)"
 status=0
+
+python3 -I "$ROOT/fsol/proton_build.py" check "${FSOL_PROTON:-}" \
+  explorer-tray-click-grants-foreground.patch lib/wine/x86_64-windows/explorer.exe "Proton's explorer.exe hands the foreground to a clicked tray icon's owner, so Volanta's tray menu opens" \
+  winex11-embedded-window-clicks-use-root-position.patch lib/wine/x86_64-unix/winex11.so "Proton's winex11.so delivers the first click on a docked tray icon, so the menu opens on the first right-click" || status=1
 
 if ! addon_sibling_prefix_check volanta; then
   status=1

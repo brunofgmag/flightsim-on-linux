@@ -20,6 +20,8 @@ PATCHES=(
   "$DOWNLOADS/fenix-a320-linux-patch-$OVERLAY_TAG-$OVERLAY_VARIANT.patch"
   "$ROOT/patches/wine/gdiplus-path-gradient-and-centered-text.patch"
   "$ROOT/patches/wine/shell32-notifyicon-guid.patch"
+  "$ROOT/patches/wine/explorer-tray-click-grants-foreground.patch"
+  "$ROOT/patches/wine/winex11-embedded-window-clicks-use-root-position.patch"
   "$ROOT/patches/wine/win32u-cross-process-child-windows.patch"
   "$ROOT/patches/wine/winewayland-opaque-xrgb.patch"
   "$ROOT/patches/wine/gdiplus-font-family-after-substitution.patch"
@@ -79,6 +81,7 @@ MODULES=(
   "dlls/ncrypt/x86_64-windows/ncrypt.dll:lib/wine/x86_64-windows/ncrypt.dll"
   "dlls/setupapi/x86_64-windows/setupapi.dll:lib/wine/x86_64-windows/setupapi.dll"
   "programs/expand/x86_64-windows/expand.exe:lib/wine/x86_64-windows/expand.exe"
+  "programs/explorer/x86_64-windows/explorer.exe:lib/wine/x86_64-windows/explorer.exe"
 )
 
 VKD3D_URL="https://github.com/HansKristian-Work/vkd3d-proton"
