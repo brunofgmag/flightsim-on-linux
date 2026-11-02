@@ -1170,9 +1170,15 @@ class VolantaApplyTest(VolantaCase):
 
 
 class VolantaCheckTest(VolantaCase):
+    TRAY = {
+        "explorer-tray-click-grants-foreground.patch": "lib/wine/x86_64-windows/explorer.exe",
+        "winex11-embedded-window-clicks-use-root-position.patch": "lib/wine/x86_64-unix/winex11.so",
+    }
+
     def setUp(self):
         super().setUp()
         self.assertEqual(self.script("apply").returncode, 0)
+        self.write_build(self.TRAY)
 
     def only_failure(self, word):
         result = self.script("check")
@@ -1180,10 +1186,24 @@ class VolantaCheckTest(VolantaCase):
         self.assertEqual((result.returncode, len(failures)), (1, 1), result.stdout)
         self.assertIn(word, failures[0])
 
-    def test_an_applied_machine_passes_with_five_ok_lines(self):
+    def test_an_applied_machine_passes_with_seven_ok_lines(self):
         result = self.script("check")
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok"] * 5)
+        self.assertEqual([line.split()[0] for line in result.stdout.splitlines()], ["ok"] *7)
+
+    def test_a_proton_without_the_explorer_patch_fails_with_the_build_command(self):
+        self.write_build(self.TRAY, drop=("explorer-tray-click-grants-foreground.patch",))
+        self.only_failure("explorer-tray-click-grants-foreground.patch")
+        self.assertIn("run: flightsim-on-linux proton build", self.script("check").stdout)
+
+    def test_an_explorer_that_is_not_the_built_one_fails(self):
+        self.write_build(self.TRAY, tamper=("explorer-tray-click-grants-foreground.patch",))
+        self.only_failure("explorer.exe")
+
+    def test_a_proton_without_the_winex11_patch_fails_with_the_build_command(self):
+        self.write_build(self.TRAY, drop=("winex11-embedded-window-clicks-use-root-position.patch",))
+        self.only_failure("winex11-embedded-window-clicks-use-root-position.patch")
+        self.assertIn("run: flightsim-on-linux proton build", self.script("check").stdout)
 
     def test_no_sibling_prefix_fails_with_the_command(self):
         shutil.rmtree(self.sibling)

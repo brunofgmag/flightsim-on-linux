@@ -1,0 +1,17 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine winex11: place a mouse event on an embedded window, such as a docked tray icon, where the X server says it happened. When the tray moves the icon's container just before a click, as KDE's xembedsniproxy does for every click, winex11 learns the new position only after the click, so the first click landed at the icon's old place and the icon never saw it.
+Applies to wine-cachyos with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/winex11.drv/mouse.c
++++ b/dlls/winex11.drv/mouse.c
+@@ -602,7 +602,9 @@
+     }
+     else if ((data = get_win_data( hwnd )))
+     {
+-        if (window == data->client_window)
++        if (data->embedded && event_root == root_window)
++            pt = root_to_virtual_screen( x_root, y_root );
++        else if (window == data->client_window)
+         {
+             pt.x += data->rects.client.left;
+             pt.y += data->rects.client.top;
