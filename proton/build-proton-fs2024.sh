@@ -86,6 +86,7 @@ MODULES=(
 )
 
 VKD3D_URL="https://github.com/HansKristian-Work/vkd3d-proton"
+VKD3D_PINNED_COMMIT="8293130ebe370b1deb761898ae0d397d680837de"
 VKD3D_PATCHES=(
   "$ROOT/patches/vkd3d-proton/root-signature-reuse-identical-blob.patch"
   "$ROOT/patches/vkd3d-proton/descriptor-heap-covers-its-cpu-handles.patch"
@@ -155,7 +156,7 @@ step() {
 
 usage() {
   echo "usage: $(basename "$0") [proton-cachyos release, default $VERIFIED_RELEASE]" >&2
-  echo "Environment: STEAM_DIR, DEST, DISPLAY_NAME, PREVIOUS, WORK, JOBS, FSOL_CACHE." >&2
+  echo "Environment: STEAM_DIR, DEST, DISPLAY_NAME, PREVIOUS, WORK, JOBS, FSOL_CACHE, VKD3D_COMMIT." >&2
   exit 2
 }
 
@@ -201,6 +202,7 @@ check_preconditions() {
   step "Checking the starting point"
   [[ "$RELEASE" == cachyos-11.* ]] || die "only cachyos-11 releases have an overlay variant; $RELEASE does not"
   [ "$RELEASE" = "$VERIFIED_RELEASE" ] || echo "note: $RELEASE is not $VERIFIED_RELEASE, the release this project verified; the patches may not apply"
+  check_vkd3d_choice
   local tool
   for tool in curl git patch python3 perl autoreconf make gcc g++ flex bison x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-strip strip readelf sha512sum sha256sum tar meson ninja cmake pkg-config wayland-scanner glslangValidator; do
     command -v "$tool" > /dev/null || die "missing program: $tool"
@@ -330,13 +332,24 @@ extract_release() {
   [ -f "$STAGE/proton" ] && [ -f "$STAGE/toolmanifest.vdf" ] || die "the tarball has no proton-$RELEASE-$ARCH/proton"
 }
 
+check_vkd3d_choice() {
+  [ -z "${VKD3D_COMMIT:-}" ] || [[ "$VKD3D_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "VKD3D_COMMIT must be a full 40-character commit, not $VKD3D_COMMIT"
+}
+
 find_vkd3d_commit() {
-  step "Finding the vkd3d-proton commit of the release"
-  local version="$STAGE/files/lib/wine/vkd3d-proton/version" rest
+  step "Choosing the vkd3d-proton commit"
+  local version="$STAGE/files/lib/wine/vkd3d-proton/version" shipped rest
   [ -f "$version" ] || die "the release has no lib/wine/vkd3d-proton/version"
-  read -r VKD3D_COMMIT rest < "$version" || true
-  [[ "$VKD3D_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "lib/wine/vkd3d-proton/version of the release does not start with a commit: $VKD3D_COMMIT"
-  echo "vkd3d-proton $VKD3D_COMMIT"
+  read -r shipped rest < "$version" || true
+  [[ "$shipped" =~ ^[0-9a-f]{40}$ ]] || die "lib/wine/vkd3d-proton/version of the release does not start with a commit: $shipped"
+  if [ -z "${VKD3D_COMMIT:-}" ]; then
+    VKD3D_COMMIT="$VKD3D_PINNED_COMMIT"
+    echo "vkd3d-proton $VKD3D_COMMIT, pinned by this project; the release ships $shipped"
+  elif [ "$VKD3D_COMMIT" = "$shipped" ]; then
+    echo "vkd3d-proton $VKD3D_COMMIT, from VKD3D_COMMIT, the one the release ships"
+  else
+    echo "vkd3d-proton $VKD3D_COMMIT, from VKD3D_COMMIT; the release ships $shipped"
+  fi
 }
 
 fetch_vkd3d_source() {
