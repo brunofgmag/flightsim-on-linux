@@ -115,6 +115,24 @@ def check_graphics_driver(machine):
     return Check("graphics-driver", "info", "The simulator will start with Wine's X11 driver, through XWayland in a Wayland session", SCREEN_RULES)
 
 
+FOCUS_LOSS_REMEDY = ("If frame generation turns off when the simulator window loses focus, put WAYLANDDRV_FOCUS_LOSS=0 before "
+                     "%command% under Launch Options in the simulator's Properties in Steam. See \"Frame generation in the "
+                     "background\" in site/pages/proton-fs2024.html.")
+
+
+def focus_loss_off_by_options(machine):
+    return bool(machine.launch_options) and all(re.search(r"\bWAYLANDDRV_FOCUS_LOSS=0+\b", options) for options in machine.launch_options.values())
+
+
+def check_focus_loss(machine):
+    wayland = machine.sim_display_drivers == ["winewayland"] if machine.sim_running else wayland_in_options(machine)
+    if not wayland:
+        return None
+    if focus_loss_off_by_options(machine):
+        return Check("focus-loss", "info", "The simulator stays the foreground window when another window takes the focus: the launch options set WAYLANDDRV_FOCUS_LOSS=0")
+    return Check("focus-loss", "info", "Under the Wayland driver the simulator stops being the foreground window when it loses focus, and its frame generation turns off", FOCUS_LOSS_REMEDY)
+
+
 def check_monitors(machine):
     if machine.monitors is None:
         return None
@@ -248,7 +266,7 @@ def check_community_disabled(machine):
                  f"It does this when it is killed while loading. {SIMULATOR_CLOSED}", f"sed -i -E {shlex.quote(REACTIVATE)} {paths}")
 
 
-CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_wayland, check_graphics_driver, check_monitors, check_library_paths, check_community, check_community_disabled, check_wpf, check_fonts, check_running, check_build_tools)
+CHECKS = (check_steam, check_sim, check_prefix, check_proton, check_ntsync, check_wayland, check_graphics_driver, check_focus_loss, check_monitors, check_library_paths, check_community, check_community_disabled, check_wpf, check_fonts, check_running, check_build_tools)
 
 
 def run(machine):
