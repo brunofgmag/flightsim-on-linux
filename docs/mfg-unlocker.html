@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MFG Unlocker · Flightsim on Linux</title>
+  <meta name="description" content="How to run dashdogy&#x27;s MFG Unlocker 1.7.0 in MSFS 2024 under Proton FS2024 on an RTX 40 card: the pinned download, the seven byte patches Wine needs, the four launch options and the fixed mode.">
+  <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
+  <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="index.html">Flightsim on Linux</a>
+      <nav aria-label="Site">
+        <a href="index.html">Home</a>
+        <a href="start.html">Start here</a>
+        <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="rules.html">Ground rules</a>
+        <a href="addons.html">Add-ons</a>
+        <a href="installers.html">Installing add-ons</a>
+        <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a>
+        <a href="ai.html">With an AI</a>
+      </nav>
+    </div>
+  </header>
+  <main class="wrap">
+<h1>MFG Unlocker</h1>
+<p class="lead">Tested with MFG Unlocker 1.7.0 on 5 November 2026, on an RTX 4080 with Proton FS2024 and ReShade 6.8.0 as <code>dxgi.dll</code>. It adds multi frame generation, 3x to 6x, to the simulator's DLSS frame generation on an RTX 40 card, with a menu that opens on Backspace. Under Wine the official file needs seven small patches before the menu works, and the simulator needs the mod in fixed mode before it generates a single frame. This add-on does both.</p>
+
+<p><span class="tag warn">touches add-on files</span> The install patches a copy of the mod's own DLL, 123 bytes of it, and writes the copy as <code>version.dll</code> in the simulator's folder. <code>apply</code> edits the mod's own config file, <code>RTXMFG-Universal.json</code>, in the same folder. The first time, it keeps the original in <code>compatdata/2537590/flightsim-on-linux-backup/mfg-unlocker</code>, and this puts it back and removes the DLL:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo mfg-unlocker</code></pre>
+
+<h2>Get it</h2>
+<p>MFG Unlocker is free and MIT-licensed (copyright 2026 Michael Robles), from <a href="https://github.com/dashdogy/MFG-Unlocker/releases">dashdogy's releases page on GitHub</a>. The file is <code>MFGUnlocker-v1.7.0.zip</code> of release 1.7.0. You don't need to download it yourself: the install command does.</p>
+<p>This repository ships no DLL. It holds the list of bytes to change, in <code>addons/mfg-unlocker/parts/patches.json</code>, and the install applies that list to the official file.</p>
+<ul>
+  <li>The zip has sha256 <code>5bd19d03288e1ece1d0bb2030ac072b36758045028da192044dcaad73fd901dd</code>.</li>
+  <li><code>MFGUnlocker.dll</code> inside it has sha256 <code>e6b6e6b70a6ed3af839c9647a32fc22660ae6b2d655062c5c072246c91fc10c7</code>.</li>
+  <li>The patched file has sha256 <code>a610fc756ce93e04be6719a9077e85eca3c3121fdad8a4cf9a9a7cf3d3dce5cf</code>.</li>
+</ul>
+
+<h2>Install it</h2>
+<p>Install <a href="reshade.html">ReShade</a> first: every patch below was measured with it, and this guide has not been tried without it. The simulator has to be closed.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install mfg-unlocker</code></pre>
+<p>The command downloads <code>https://github.com/dashdogy/MFG-Unlocker/releases/download/v1.7.0/MFGUnlocker-v1.7.0.zip</code> with <code>curl</code> (the release is tagged <code>v1.7.0</code>), checks the zip's sha256 and keeps it in <code>~/.cache/flightsim-on-linux/downloads</code>. Then it reads <code>MFGUnlocker.dll</code> from the zip and checks its sha256. It checks that every byte it is about to change is the one the list expects, changes them, checks the sha256 of the result and only then writes it as <code>version.dll</code> beside <code>FlightSimulator2024.exe</code>. Any other file stops it before anything is written. The hashes are pinned because this is the release the patches were measured with. A newer release needs its patch sites found again.</p>
+<p>If you already downloaded the zip, give it to the command: <code>addon install mfg-unlocker /path/to/MFGUnlocker-v1.7.0.zip</code>. It must be the same release.</p>
+<p>If the simulator's folder already has a <code>version.dll</code> that is not the patched one, the command names it and stops. Another mod uses that name, and nothing here overwrites it.</p>
+
+<h2>Make it run</h2>
+<p>The order matters, because the mod writes its config file the first time it runs and <code>apply</code> edits that file:</p>
+<ol>
+  <li>Install the add-on, as above.</li>
+  <li>Add the launch options below in Steam.</li>
+  <li>Start the simulator once and close it. The first start compiles shaders and stutters.</li>
+  <li>Run <code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply mfg-unlocker</code>.</li>
+</ol>
+
+<h3>The seven patches</h3>
+<p>The official file is built for Windows, and under Wine seven things in it go wrong. The install changes 123 bytes in 18 places, and every change removes a jump, swaps a byte or rewrites text of the same length. The other checks in each function stay.</p>
+<ul>
+  <li>Menu import. The mod asks <code>ntdll</code> for <code>RtlIsThreadWithinLoaderCallout</code>. Wine doesn't have it, so the mod believes it is always inside the loader. Frame generation still works, but the menu and the swap chain hooks never install: the log has <code>MFG_PROXY_UI factory gateway first call</code> lines and never <code>state=active</code>. The patch renames the import to <code>RtlDllShutdownInProgress</code>, which Wine exports with the same signature.</li>
+  <li>Shaders. The mod compiles its DLSS 5 shaders when it runs, with Wine's compiler, which has no <code>isfinite</code> for shader model 4 and 5. The log has <code>E5017: Aborting due to not yet implemented feature: SM4 isfinite expression</code>, then <code>DLSS 5 setup refused: step=compute pipeline</code>, and the DLSS 5 tab says "Waiting for DLSS". The patch rewrites the six <code>isfinite</code> calls in the two embedded shaders as <code>abs(x)&lt;3e38</code> comparisons of the same length.</li>
+  <li>Provider protection. The mod makes a memory page writable and then checks that it says <code>PAGE_READWRITE</code>. Wine says <code>PAGE_WRITECOPY</code> for the pages of a loaded DLL. The log has <code>DLSS 5 direct provider open failed: result=0xBAD00002</code>, and the tab says "GPU or provider unsupported". The patch changes one byte, from 4 to 8, so the check accepts <code>PAGE_WRITECOPY</code>.</li>
+  <li>The factory's module path. The simulator imports <code>CreateDXGIFactory</code> from <code>dxgi.dll</code>, and the mod only hooks that import when the module is <code>C:\windows\system32\dxgi.dll</code>. Here it is ReShade's. The log has <code>application graphics import publication unavailable</code> and <code>mainGraphicsImports=0</code>. The patch removes the jump after the path comparison.</li>
+  <li>The adapter-parent route. The simulator builds its swap chain on the factory it gets from <code>adapter->GetParent</code>, and ReShade's adapter proxy answers with ReShade's own factory, so the mod never sees the swap chain: the log has <code>factory gateway first call</code> and never <code>swapchain creation</code>. The mod has a route for exactly this, but it gives up without a log line unless the adapter belongs to the system <code>dxgi.dll</code>. The patch removes the seven jumps of those owner checks.</li>
+  <li>The module handle. That route also asks <code>GetModuleHandleW(L"dxgi.dll")</code> for the system copy. Under Wine the call returns ReShade's after any other module lookup. The patch removes the jump after that comparison. With it and the one before, the log has <code>adapter-parent entry armed</code>, then <code>swapchain creation 1</code> and <code>renderer registered</code>.</li>
+  <li>Textures with mips. For the DLSS 5 tab's Before and After upscaling, the mod takes only textures with one mip, and the simulator hands DLSS its output and depth with the whole mip chain. The tab stays at "DLSS inputs unavailable" and the log has <code>DLSS 5 inputs refused</code> lines that end in <code>mips=12</code> for the output and <code>mips=11</code> for the depth. The patch removes the jump after the mip count check.</li>
+</ul>
+
+<h3>The launch options</h3>
+<p>Steam keeps the launch options of the simulator in <code>localconfig.vdf</code> and rewrites that file, so nothing here edits it. <code>apply</code> and <code>check</code> read the options and say which parts are missing. Add them in Steam, in the simulator's properties, before <code>%command%</code>:</p>
+<pre><code>WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_fg_override=on %command%</code></pre>
+<ul>
+  <li><code>WINEDLLOVERRIDES="version=n,b"</code>: Wine would load its own <code>version.dll</code> and never the file in the simulator's folder. If the line already has <code>WINEDLLOVERRIDES</code>, add <code>version</code> to it: names with the same mode go together, as in <code>dxgi,version=n,b</code>, and entries with different modes are separated by a semicolon.</li>
+  <li><code>PROTON_NVIDIA_NVCUDA=1</code>: the mod takes the RTX 40 route only when CUDA answers with compute capability 8.9, and Proton leaves CUDA off without this. Proton FS2024 honours it. Without it the log has <code>capability=0.0 verified=0</code> and <code>route=pending ready=0</code>.</li>
+  <li><code>PROTON_DLSS_UPGRADE=1</code>: Proton then puts the newest DLSS frame generation in the prefix, and that is the copy the mod patches. The simulator's own <code>nvngx_dlssg.dll</code> stays as it is.</li>
+  <li><code>ngx_dlss_fg_override=on</code> inside <code>DXVK_NVAPI_DRS_SETTINGS</code>, which takes a comma-separated list. If the line has that variable already, add this to its list.</li>
+</ul>
+<p>Your other options can stay. The line the test ran with also had options for Wayland and HDR, and they are not part of this.</p>
+
+<h3>Fixed mode</h3>
+<p>The simulator asks DLSS frame generation for its dynamic mode. In the mod's default mode, "follow game", the mod passes that on without a target frame rate, and nothing is generated: the simulator's frame generation is on and the log still says <code>presented=1</code>, with <code>Live-reapplied follow-game options: dynamic=1</code> in it. The mod only generates frames here in fixed mode.</p>
+<p>The mod writes <code>RTXMFG-Universal.json</code> in the simulator's folder when it first runs. <code>apply</code> sets <code>"followGame"</code> to <code>false</code> and <code>"mode"</code> to <code>"fixed"</code> in it, changes no other byte, and when a key is missing it adds it. The multiplier is yours: change <code>"multiplier"</code> in the file, or pick it in the mod's menu. The mod reads the file again while the simulator runs. 3x is the multiplier measured here.</p>
+<p>If the file doesn't exist yet, <code>apply</code> says to start the simulator once and run it again.</p>
+
+<h2>Start it</h2>
+<p>Turn DLSS frame generation on in the simulator's graphics settings. The mod's menu appeared by itself in the simulator's main menu on the test machine, and Backspace opens and closes it. The menu is where the mode and the multiplier change, and where the mod's other settings are.</p>
+<p>The mod generates frames in flight and not in the menus. While the menu is up, the log stays at <code>route=pending ready=0</code>.</p>
+<p>The DLSS 5 tab of the menu appears when <code>nvngx_dlssnr.dll</code> sits beside the simulator's executable. <a href="dlss5-nr.html">The DLSS 5 Neural Rendering guide</a> says where that file comes from. The tab starts off. With the seventh patch it ran in Before and After upscaling on the test machine.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check mfg-unlocker</code></pre>
+<p>It prints ten lines, each starting with <code>ok</code> or <code>FAIL</code>, and changes nothing. Before the mod has run once and written its log, it prints eight:</p>
+<ul>
+  <li>the GPU the simulator uses is an RTX 40 series card, chosen the way the other tools of this repository choose it, through <code>vulkaninfo</code>;</li>
+  <li><code>version.dll</code> in the simulator's folder is the patched file, by its sha256;</li>
+  <li>the launch options in Steam hold each of the four parts, one line for each;</li>
+  <li><code>"followGame"</code> is <code>false</code> and <code>"mode"</code> is <code>"fixed"</code> in the config file, with the multiplier on the second line;</li>
+  <li>the mod's newest log, <code>RTXMFG-flightsimulator2024-&lt;hash&gt;.log</code>, has <code>capability=8.9 verified=1</code>, so the mod found the card through CUDA, and <code>MFG_PROXY_UI state=active</code>, so its menu installed. The earlier logs, named <code>.previous.log</code>, are not read.</li>
+</ul>
+<p>The check can't see frame generation itself. For that, fly with it on and read the log:</p>
+<pre><code>SIM=$(~/flightsim-on-linux/bin/flightsim-on-linux machine --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["sim_install"])')
+grep 'State heartbeat' "$(ls -t "$SIM"/RTXMFG-*.log | head -1)" | tail -3</code></pre>
+<p>Working looks like <code>route=local ready=1 ... control=fixed 3x gameFG=1 appliedFG=1 ... presented=3</code>. With <code>presented=1</code> nothing is generated yet.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The first start after an install compiles shaders and stutters. Close the simulator and open it again before you judge.</li>
+  <li>Only ReShade 6.8.0 as <code>dxgi.dll</code> was tested, with <a href="atmospheremod.html">AtmosphereMod</a>, the <a href="glass-cockpit-dlss-fix.html">Glass Cockpit DLSS Fix</a> and <a href="renodx-hdr.html">RenoDX HDR</a> loaded in it. Three of the seven patches (the factory's module path, the adapter-parent route and the module handle) exist because ReShade is the simulator's <code>dxgi.dll</code>. Without ReShade the install prints a note and goes on, and the result is untried.</li>
+  <li>The DLSS 5 tab and the add-on of <a href="dlss5-nr.html">the DLSS 5 Neural Rendering guide</a> do the same job and must not run together. The tab starts off, so with <code>dlssnr-linux.addon64</code> in the folder, leave the tab off. The test ran with that add-on removed.</li>
+  <li>The patch list is for release 1.7.0 only. A different file is refused.</li>
+  <li>A <code>version.dll</code> that another mod put in the simulator's folder blocks the install, and the check names its sha256.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo mfg-unlocker</code></pre>
+<p>With the simulator closed, this deletes <code>version.dll</code> when it is the patched file and leaves any other. It puts <code>RTXMFG-Universal.json</code> back as it was before the first <code>apply</code>. It then lists the files the mod made in the simulator's folder, <code>RTXMFG-*</code> (the config, the status file, the logs and the interval tables) and <code>RTX40MFG-UI*.ini</code>, and deletes none of them. Delete them yourself if you want them gone.</p>
+<p>The launch options stay as they are. Take <code>version</code> out of <code>WINEDLLOVERRIDES</code> and the other parts out of the line yourself, unless something else uses them.</p>
+  </main>
+  <footer class="wrap">
+    <p>MSFS 2024 add-ons under Proton, written from one machine's measured fixes. Text under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>, code under MIT, Wine patches under LGPL-2.1-or-later. <a href="https://github.com/brunofgmag/flightsim-on-linux">Source and issues</a>.</p>
+    <p>Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "RenoDX HDR for MSFS 2024",
+  "tested_version": "1",
+  "tested_on": "2026-11-05",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "sim": ["renodx-msfs2024.addon64"]
+  },
+  "install": {
+    "from": "https://www.nexusmods.com/microsoftflightsimulator2024/mods/26",
+    "paid": false,
+    "kind": "installer"
+  }
+}

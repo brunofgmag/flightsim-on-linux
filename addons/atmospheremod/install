@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=addons/atmospheremod/parts/atmospheremod.sh
+. "$HERE/parts/atmospheremod.sh"
+
+atmospheremod_refuse_running "install"
+atmospheremod_refuse_without_reshade
+atmospheremod_zip
+atmospheremod_run install "$ATMOSPHEREMOD_ZIP"
+echo "AtmosphereMod $ATMOSPHEREMOD_VERSION is installed; run this install again after every simulator update, because the patched shaders come from the simulator's own shader pack"

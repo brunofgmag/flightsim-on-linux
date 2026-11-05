@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+BACKUP="${FSOL_COMPATDATA:-/nonexistent}/flightsim-on-linux-backup/mfg-unlocker"
+
+exec python3 -I "$HERE/parts/mfg.py" apply "${FSOL_SIM_INSTALL:-}" "${FSOL_STEAM:-}" "$BACKUP"

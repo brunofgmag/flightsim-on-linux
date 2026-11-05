@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "already nothing to apply: the AtmosphereMod installer put its add-on file, its patched shaders and its [ATMOSPHEREMOD] settings in place; run the install again after every simulator update"

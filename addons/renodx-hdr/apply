@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+BACKUP="${FSOL_COMPATDATA:-/nonexistent}/flightsim-on-linux-backup/renodx-hdr"
+
+exec python3 -I "$HERE/parts/renodx.py" apply "${FSOL_SIM_INSTALL:-}" "${FSOL_PREFIX:-}" "$BACKUP"

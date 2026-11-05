@@ -1,0 +1,16 @@
+{
+  "name": "AtmosphereMod",
+  "tested_version": "0.5.1",
+  "tested_on": "2026-11-01",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": false,
+  "installed": {
+    "sim": ["AtmosphereMod.addon64"]
+  },
+  "install": {
+    "from": "https://github.com/tomwhoca/AtmosphereMod/releases",
+    "paid": false,
+    "kind": "native",
+    "own_prefix": true
+  }
+}

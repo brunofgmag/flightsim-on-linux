@@ -1,0 +1,66 @@
+title: AtmosphereMod
+description: How to run AtmosphereMod 0.5.1, a ReShade add-on that replaces the haze, sky colours and cloud lighting of MSFS 2024, under Proton FS2024: the mod's own installer run in the add-ons prefix, the three things Wine changes in how it is called, and what to do after a simulator update.
+---
+<h1>AtmosphereMod</h1>
+<p class="lead">Tested with AtmosphereMod 0.5.1 on 1 November 2026. It is a ReShade add-on that replaces the simulator's haze, sky colours and cloud lighting, and takes its weather from METARs. It needs <a href="reshade.html">ReShade</a> 6.8 or newer. The mod's own installer does the work, run under Wine in the <a href="addons-prefix.html">add-ons prefix</a>. Nothing of the mod is changed or kept in this repository.</p>
+
+<h2>Get it</h2>
+<p>AtmosphereMod is free, from <a href="https://github.com/tomwhoca/AtmosphereMod/releases">the project's releases page on GitHub</a>. The file is <code>AtmosphereMod-0.5.1.zip</code> of release 0.5.1. You don't need to download it yourself: the install command does.</p>
+<p>The licence is the AtmosphereMod Freeware Licence, in the zip as <code>LICENSE</code>. It lets you download, install and use the mod for yourself, and change its <code>tunables.ini</code>. It does not let anyone redistribute it in any form (section 2a) or share the shaders its installer makes from your simulator's files (2f and 3). So this repository ships no file of the mod, and no modified copy of one. The command downloads the official asset, checks its hash and runs it.</p>
+<p>The author says it is experimental and was tested on one PC, and that you use it at your own risk. The installer prints that disclaimer and asks for a yes. The command answers yes for you, so read the README in the zip first if you haven't.</p>
+
+<h2>Install it</h2>
+<p>Install <a href="reshade.html">ReShade</a> first. The simulator has to be closed. The command doesn't need the rest of the simulator's prefix to be free, because the installer runs in the add-ons prefix.</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install atmospheremod</code></pre>
+<p>The command downloads <code>https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.5.1/AtmosphereMod-0.5.1.zip</code> with <code>curl</code>, checks that its sha256 is <code>0d46acf43a8b363c1eb31f6054b443c8176f8c6053614c183478ba44b42bd7ac</code>, and keeps it in <code>~/.cache/flightsim-on-linux/downloads</code>. A file with another hash is thrown away and nothing runs. The hash is pinned because this is the release that was tested. A newer release needs a newer test.</p>
+<p>If you already have the zip, give it to the command: <code>addon install atmospheremod /path/to/AtmosphereMod-0.5.1.zip</code>. It must be the same release.</p>
+<p>It refuses while the simulator runs, and when the simulator's folder has no ReShade <code>dxgi.dll</code>. If the add-ons prefix doesn't exist yet, it makes it first, and that needs the simulator and every program of its prefix closed. Then it unpacks the zip into a temporary folder, runs the zip's own Python, <code>installer\python\python.exe</code>, on <code>installer\install.py</code> with Proton's Wine in the add-ons prefix, and deletes the folder. The arguments are the mod's own:</p>
+<ul>
+  <li><code>--data C:\users\steamuser\AppData\Local\AtmosphereMod</code>, which is <code>drive_c/users/steamuser/AppData/Local/AtmosphereMod</code> in the simulator's prefix;</li>
+  <li><code>--yes</code>;</li>
+  <li><code>--sim</code> and <code>--community</code>, the simulator's folder and the Community folder, as <code>Z:</code> paths;</li>
+  <li><code>--dxc</code>, the folder with the DirectX Shader Compiler that comes in the zip.</li>
+</ul>
+<p>The installer then does what it does on Windows. It extracts the simulator's shaders from the shader pack in the simulator's own <code>Shaders</code> folder, <code>SHADERSPAK.&lt;hash&gt;.SM6.PC.PAK</code>, and patches them in the data folder. On the test machine it patched 258 shaders and refused none. It copies <code>AtmosphereMod.addon64</code> into the simulator's folder, puts the EFB app <code>atmospheremod-weather</code> in Community, and writes an <code>[ATMOSPHEREMOD]</code> section into <code>ReShade.ini</code> with <code>DataPath</code>, <code>TunablesPath</code>, <code>InjectRootSignature=1</code> and <code>InjectGraphicsRootSignature=1</code>. The first time, it keeps the original <code>ReShade.ini</code> beside it as <code>ReShade.ini.atmospheremod.bak</code>. Running it again keeps your <code>tunables.ini</code> and adds the settings that are new.</p>
+<p>The simulator's shader pack is not changed: the add-on swaps the shaders in memory.</p>
+
+<h2>Make it run</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply atmospheremod</code></pre>
+<p>This changes nothing, and then runs the check. The installer already did everything, and there is no launch option: ReShade loads the add-on from the simulator's folder.</p>
+<p>Three things differ from Windows in how the installer is called. Each one is a trap that was hit on 1 November 2026, and the command avoids all three.</p>
+<ul>
+  <li>The signature check. The installer checks that <code>dxc.exe</code>, <code>dxcompiler.dll</code> and <code>dxil.dll</code> carry Microsoft's signature by calling PowerShell. Wine's PowerShell is a stub that exits 0 and prints nothing, so the check fails, the installer drops the compiler that came in the zip and tries to download another, which would fail the same way. Passing <code>--dxc</code> makes it use the zip's copy. The check was done outside Wine on that day: the Authenticode digest of each of the three files was inside its signature, issued to Microsoft Corporation. The certificate chain was not validated.</li>
+  <li>The simulator check. The installer asks <code>tasklist</code> whether the simulator runs. In the add-ons prefix, <code>tasklist</code> sees only the <code>FlightSimulator2024.exe</code> of the <a href="sentinel.html">sentinel</a>, so it can't tell. The command looks at the simulator itself and refuses to go on while it runs.</li>
+  <li>The EFB app and a link in Community. The installer replaces the folder <code>Community/atmospheremod-weather</code> with <code>shutil.rmtree</code> and a copy. Under Wine a Linux link looks like a plain folder: the mod's Python 3.14.9 answered <code>is_symlink()</code> false for a link, and <code>rmtree</code> deleted the folder the link pointed to and left the link dangling. If <code>atmospheremod-weather</code> in Community is a link, the command passes the folder that holds the real app as <code>--community</code>, so the installer replaces the real folder and the link keeps working. If it is a real folder, which is how the installer puts it, the command passes Community itself.</li>
+</ul>
+<p>The proof on the test machine: ReShade 6.8.0.2155 registered the add-on in <code>ReShade.log</code> at the first start after the install, and the log counted 254 shader replacements and no error.</p>
+
+<h2>Start it</h2>
+<p>There is nothing to start. The add-on loads with the simulator. Per the mod's README, Ctrl+Shift+F9 switches between the mod and the stock shaders, Ctrl+Shift+F10 reloads <code>tunables.ini</code>, and the settings are also in the AtmosphereMod app on the EFB tablet.</p>
+<p>The weather comes from the EFB app, which passes the METARs to the add-on. On the test machine the first METAR arrived at SBFZ, where the flight started, and 14 minutes later the add-on had anchored SBFZ and SBMS. The add-on talks to SimConnect by the pipe, so it needs no <a href="simconnect-tcp.html">SimConnect over TCP</a>: <code>ss -tnp</code> showed no socket of the simulator on port 5111, the port in <code>SimConnect.xml</code>.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check atmospheremod</code></pre>
+<p>It prints six lines, each starting with <code>ok</code> or <code>FAIL</code>, and a seventh once there is a log to read, and it changes nothing. The six are:</p>
+<ul>
+  <li>ReShade's <code>dxgi.dll</code> and <code>AtmosphereMod.addon64</code> are in the simulator's folder (two lines);</li>
+  <li><code>[ATMOSPHEREMOD]</code> in <code>ReShade.ini</code> has <code>DataPath</code> and <code>TunablesPath</code>;</li>
+  <li><code>install.json</code> in the data folder says no shader failed to patch, and the number it says were patched is the number of <code>.cso</code> files in the <code>shaders</code> folder (two lines);</li>
+  <li>the <code>pak</code> in <code>install.json</code> is the shader pack in the simulator's <code>Shaders</code> folder now. If it isn't, the simulator was updated, and the line says to run the install again;</li>
+  <li>when <code>ReShade.log</code> is newer than the install, it says ReShade registered AtmosphereMod. A log from before the install says nothing either way, and a newer one without the registration fails.</li>
+</ul>
+
+<h2>Known problems</h2>
+<ul>
+  <li>Run the install again after every simulator update. The patched shaders come from the shader pack that was there at the install, and a new pack makes the patches stale. The check catches it: the line about the shader pack fails and says the simulator was updated. Nothing runs the install for you.</li>
+  <li>The <a href="renodx-hdr.html">RenoDX HDR mod</a> and AtmosphereMod clash when both are installed as they come. RenoDX then fails to replace its shaders and the image doesn't change. That guide has the cause and the one setting that fixes it.</li>
+  <li>The Proton on the test machine carries the two vkd3d-proton patches of the <a href="glass-cockpit-dlss-fix.html">Glass Cockpit DLSS Fix</a>. AtmosphereMod was not tried without them.</li>
+  <li>The cost in frame rate was not measured, and Ctrl+Shift+F9 was not tried on the test machine.</li>
+  <li>If the picture looks wrong, Ctrl+Shift+F9 puts the stock shaders back at once.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo atmospheremod</code></pre>
+<p>The simulator has to be closed. The command runs the installer's own <code>--uninstall</code> the same way, with the same Community folder, and answers yes to "Uninstall AtmosphereMod?" and no to deleting the data folder. It removes <code>AtmosphereMod.addon64</code>, the <code>[ATMOSPHEREMOD]</code> section of <code>ReShade.ini</code> and the EFB app. It uses the zip in the cache, or downloads it again with the same hash check. When none of those three is there, it says AtmosphereMod isn't installed and stops.</p>
+<p>These stay: <code>ReShade.ini.atmospheremod.bak</code> in the simulator's folder, and the data folder with the patched shaders, the logs and your <code>tunables.ini</code>. Delete the data folder yourself to remove them. A later install picks up your <code>tunables.ini</code>.</p>
+<p><code>undo</code> was not run on the test machine's own simulator folder. It ran against a fake simulator folder in a throwaway add-ons prefix on 5 November 2026, with the zip's own installer, and removed the three things above and kept the data folder.</p>

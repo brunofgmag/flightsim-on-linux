@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=tools/addon-launch.sh
+. "$HERE/../../tools/addon-launch.sh"
+# shellcheck source=tools/addons-prefix.sh
+. "$HERE/../../tools/addons-prefix.sh"
+# shellcheck source=addons/atmospheremod/parts/atmospheremod.sh
+. "$HERE/parts/atmospheremod.sh"
+
+atmospheremod_refuse_running "undo"
+if ! atmospheremod_is_installed; then
+  echo "AtmosphereMod is not installed: nothing to undo"
+  exit 0
+fi
+atmospheremod_zip
+atmospheremod_run uninstall "$ATMOSPHEREMOD_ZIP"
+echo "AtmosphereMod is out of the simulator folder, of ReShade.ini and of Community; its settings and patched shaders stay in $(atmospheremod_data_folder), and deleting that folder removes them"
