@@ -1,0 +1,15 @@
+{
+  "name": "MFG Unlocker",
+  "tested_version": "1.7.0",
+  "tested_on": "2026-11-05",
+  "needs": ["simulator-closed"],
+  "touches_addon_files": true,
+  "installed": {
+    "sim": ["version.dll"]
+  },
+  "install": {
+    "from": "https://github.com/dashdogy/MFG-Unlocker/releases",
+    "paid": false,
+    "kind": "native"
+  }
+}

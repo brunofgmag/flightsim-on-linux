@@ -1,0 +1,76 @@
+title: RenoDX HDR for MSFS 2024
+description: How to run the RenoDX HDR mod for MSFS 2024 (Nexus Mods mod 26, version 1) under Proton FS2024 next to AtmosphereMod: the file from Nexus, why the two clash, the one setting that fixes it and what it costs, and how to keep both with their full effect.
+---
+<h1>RenoDX HDR for MSFS 2024</h1>
+<p class="lead">Tested with version 1 of the RenoDX HDR mod for Microsoft Flight Simulator 2024, from Nexus Mods (mod 26), on 5 November 2026. It is a ReShade add-on by HDRgameAnalysis, built on ShortFuse's RenoDX. It lowers the raised black level of the game's HDR and adds sliders for peak brightness, paper white and UI brightness. Alone it needs <a href="reshade.html">ReShade</a> and HDR on. Next to <a href="atmospheremod.html">AtmosphereMod</a> it does nothing until one setting changes, and this guide says why.</p>
+
+<p><span class="tag warn">touches add-on files</span> <code>apply</code> edits AtmosphereMod's settings: <code>InjectGraphicsRootSignature</code> under <code>[ATMOSPHEREMOD]</code> in <code>ReShade.ini</code>, from 1 to 0. It does so only when AtmosphereMod is installed, injects, and puts its parameters in the same place as RenoDX. The first time, it keeps the value it replaced in <code>compatdata/2537590/flightsim-on-linux-backup/renodx-hdr</code>, and this puts it back:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo renodx-hdr</code></pre>
+
+<h2>Get it</h2>
+<p>The mod is free and has one source, <a href="https://www.nexusmods.com/microsoftflightsimulator2024/mods/26">its page on Nexus Mods</a>, which you open in a browser. No command here can fetch it. Download the zip from the Files tab.</p>
+<ul>
+  <li>The zip that was tested has sha256 <code>226df85c594e8ef6cfb4d416d2bb20d598b32e927d60f6f0a914a0605c3b4af2</code>. It holds <code>README.txt</code>, <code>LICENSE.txt</code> and <code>renodx-msfs2024.addon64</code>.</li>
+  <li><code>renodx-msfs2024.addon64</code> has sha256 <code>304008e72d2fa6a9efe23bea527dec79525ae82decd7c16ef0c36bb27eeecb7e</code>. ReShade logs it as <code>Registered add-on "RenoDX" v0.2026.1101.238</code>.</li>
+</ul>
+<p>The licence is MIT: the RenoDX framework is copyright 2025 Carlos Lopez Jr. (ShortFuse) and the mod is copyright 2026 HDRgameAnalysis. The author tested it on the Microsoft Store version 1.9.21.0. The test here was the Steam version. The README warns that a game update can change the game's shaders and stop the mod until it is updated.</p>
+
+<h2>Install it</h2>
+<p>Install <a href="reshade.html">ReShade</a> first, version 6.8.0 or newer, with add-on support. The simulator has to be closed. Without a file, the command prints where to get the mod:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install renodx-hdr</code></pre>
+<p>Then give it the zip you downloaded, or the <code>.addon64</code> inside it:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install renodx-hdr /path/to/the-zip</code></pre>
+<p>It checks the sha256 of the <code>.addon64</code>, so a re-zipped copy of the same file is fine and another version is not: it is refused, and nothing is installed. It also refuses while the simulator runs, when ReShade's <code>dxgi.dll</code> is not in the simulator's folder, and when another <code>renodx-*.addon64</code> is there, because the mod's README allows no other RenoDX add-on beside it. Then it copies <code>renodx-msfs2024.addon64</code> into the simulator's folder, beside <code>dxgi.dll</code>.</p>
+<p>HDR has to be on before the simulator starts, because the game picks HDR or SDR at startup. On the test machine <code>ReShade.log</code> showed the swap chain in <code>hdr10_pq</code>.</p>
+
+<h2>Make it run</h2>
+<p>Without AtmosphereMod there is nothing to fix:</p>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon apply renodx-hdr</code></pre>
+<p>says so, changes nothing and runs the check. With AtmosphereMod 0.5.1 as its installer leaves it, the mod loads, finds its two shaders and replaces neither. Here is why.</p>
+<ul>
+  <li>RenoDX replaces two pixel shaders, <code>0x6bc6b2f3</code> (<code>ph_2d_HDR10</code>) and <code>0x5244e47d</code> (<code>ph_tonemapping</code>). They belong to the simulator's global graphics root signature, the one with 23 parameters.</li>
+  <li>With <code>InjectGraphicsRootSignature=1</code>, AtmosphereMod adds to that root signature the root constants <code>b0 space50 x16</code> and a root descriptor <code>u0 space50</code>. RenoDX puts its own constant buffer at <code>b13 space50</code>, the same register space.</li>
+  <li>ReShade 6.8.0 hands the root signature to the add-ons one after another, in the order they loaded, and each gets it as the one before changed it. <code>ReShade.log</code> shows AtmosphereMod loading before RenoDX, so RenoDX meets a root signature that already uses space 50 and gives up on it. The log shows <code>Params not created</code> and <code>Failed to replace pipeline</code>, and the image doesn't change.</li>
+</ul>
+<p>Three runs on 5 November 2026 tell the cause from the other candidates:</p>
+<table>
+  <tr><th>Run</th><th>AtmosphereMod</th><th>What <code>ReShade.log</code> shows</th></tr>
+  <tr><td>11:51</td><td>Official, space 50, injection on</td><td>Every replacement fails.</td></tr>
+  <tr><td>15:49</td><td>Official, <code>InjectGraphicsRootSignature=0</code></td><td><code>will insert cbuffer 13 at root_index 23</code>, 7 lines <code>Replacing pipeline for 0x6bc6b2f3</code>, 2 for <code>0x5244e47d</code>, no <code>Failed to replace pipeline</code>.</td></tr>
+  <tr><td>16:20</td><td>Private build in space 51, injection on</td><td><code>will insert cbuffer 13 at root_index 25</code>, the same 7 and 2 replacements, no <code>Failed to replace pipeline</code>.</td></tr>
+</table>
+<p>What decides is the space they share, not the number of parameters. <code>Params not created</code> is not the line to look for: it appears in the two runs that worked as well. <code>Failed to replace pipeline</code> is.</p>
+<p><code>apply</code> turns the injection off when AtmosphereMod is installed, <code>InjectGraphicsRootSignature</code> is 1, and its parameters are in space 50. The space comes from <code>logs/layouts.txt</code> in AtmosphereMod's data folder, where a line like <code>[23] root constants b0 space50 x16 dwords</code> is AtmosphereMod's own parameters. It believes that file only when it is newer than the AtmosphereMod install. With no file, or an older one, it assumes space 50, the official build's. It changes that one line and keeps every other line and the file's line endings. When any of the three conditions fails, it changes nothing and says which.</p>
+<h3>What it costs</h3>
+<p>With the injection off, AtmosphereMod can't build the replacement of its <code>ps_deferredRendering</code> pass, which needs the injected root signature. Its <code>events.log</code> says <code>failed to create replacement graphics pipeline for pixel shader ... (is InjectGraphicsRootSignature on?)</code>. In the run at 15:49 the vkd3d-proton log had 8 errors, <code>dxil-spirv: Failed to remap UAV 50:0</code>, and they are the 8 failures of that pass. That pass is AtmosphereMod's haze over the ground, which goes back to the simulator's own. The sky and the clouds keep the mod.</p>
+<p>AtmosphereMod's installer sets the value back to 1 every time it runs, which is after every simulator update. Run <code>apply</code> again after each one. The check fails when you forget.</p>
+
+<h2>Keep both at full effect</h2>
+<p>The two mods clash only because they use the same register space. With AtmosphereMod's space moved off 50, both run with the injection on. That takes two constants, <code>kModSpace</code> in <code>addon/src/atmosphere_mod.cpp</code> and <code>MOD_SPACE</code> in <code>tools/patch_dxil.py</code>, which patches the shaders the installer makes. On 5 November 2026, at 16:20, a build of release 0.5.1 with both set to 51 ran with RenoDX: RenoDX logged <code>will insert cbuffer 13 at root_index 25</code>, AtmosphereMod made 254 replacements, 8 of them in <code>ps_deferredRendering</code>, none failed, and its <code>layouts.txt</code> showed <code>b0 space51 x16</code>.</p>
+<p>Section 1c of AtmosphereMod's licence lets you build and run a version with your own changes for private use. Section 2b forbids publishing or sharing a modified version, or a work based on its source. So this repository ships no patch, script or binary for it, and this guide leaves the building to you. The cost is upkeep: every AtmosphereMod update needs the change made again on the new source, and running the official installer puts space 50 back, after which RenoDX fails without a word on the screen. The check catches that, because <code>layouts.txt</code> is then older than the install and space 50 is assumed. <a href="https://github.com/tomwhoca/AtmosphereMod/issues/22">Issue 22 on AtmosphereMod's GitHub</a> asks its author to make the space a setting, with 50 as the default, so the build would no longer be needed.</p>
+
+<h2>Start it</h2>
+<p>There is nothing to start. The add-on loads with the simulator. Press Home to open ReShade and set everything in its RenoDX tab, as the mod's README says.</p>
+
+<h2>Check it</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon check renodx-hdr</code></pre>
+<p>It prints five lines, each starting with <code>ok</code> or <code>FAIL</code>, and a sixth once there is a log to read, and it changes nothing. The five are:</p>
+<ul>
+  <li>ReShade's <code>dxgi.dll</code> is in the simulator's folder;</li>
+  <li><code>renodx-msfs2024.addon64</code> is there (one line), and its sha256 is the tested one (another line). Another hash fails and says the add-on is untested with that file;</li>
+  <li>no other RenoDX add-on is there;</li>
+  <li>if AtmosphereMod is installed: it passes when <code>InjectGraphicsRootSignature</code> is 0, or when <code>layouts.txt</code> shows AtmosphereMod's parameters outside space 50, and fails otherwise, with the command to run. If AtmosphereMod is not installed, the line says nothing clashes.</li>
+</ul>
+<p>The sixth line comes from <code>ReShade.log</code>, when it shows RenoDX registered. It fails on <code>Failed to replace pipeline</code>, and it passes on <code>will insert cbuffer</code>, with the root index. The log is the last run's, so the check reads it only when it is newer than the add-on files, AtmosphereMod's install and the last <code>apply</code>. Otherwise the line says the log is older than the last change, and the way to settle it is to start the simulator once and run the check again.</p>
+
+<h2>Known problems</h2>
+<ul>
+  <li>The fix needs the injection off, and that takes AtmosphereMod's ground haze with it, unless you run AtmosphereMod from a private build as the section above describes.</li>
+  <li>A simulator update can change the shaders RenoDX looks for, and the mod stops until its author updates it.</li>
+  <li>The result was judged by eye on an HDR screen. The picture itself was not measured, and neither was the frame rate.</li>
+  <li>The mod's README allows no other RenoDX add-on in the same folder, its DevKit included.</li>
+</ul>
+
+<h2>Undo</h2>
+<pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo renodx-hdr</code></pre>
+<p>This puts <code>InjectGraphicsRootSignature</code> back to the value it had before the first <code>apply</code>, one line only, and nothing else in <code>ReShade.ini</code> changes. Without a saved value it says there is nothing to undo. If AtmosphereMod's section is no longer in the file, it writes nothing. The add-on itself stays. To remove it, delete <code>renodx-msfs2024.addon64</code> from the simulator's folder, and its section in <code>ReShade.ini</code> if you want that gone too.</p>

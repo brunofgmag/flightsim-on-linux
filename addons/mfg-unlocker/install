@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HERE="$(dirname "$(readlink -f "$0")")"
+# shellcheck source=/dev/null
+. "$HERE/parts/download.sh"
+MFG_VERSION="1.7.0"
+MFG_URL="https://github.com/dashdogy/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip"
+MFG_SHA256="5bd19d03288e1ece1d0bb2030ac072b36758045028da192044dcaad73fd901dd"
+
+sim="${FSOL_SIM_INSTALL:?no simulator install folder found; run: flightsim-on-linux machine}"
+cache="${FSOL_CACHE:?FSOL_CACHE is not set}/downloads"
+
+[ "${FSOL_SIM_RUNNING:-0}" != 1 ] || { echo "close the simulator before you install the add-on" >&2; exit 1; }
+
+file="${FSOL_INSTALLER:-}"
+if [ -z "$file" ]; then
+  file="$cache/MFGUnlocker-v$MFG_VERSION.zip"
+  mfg_fetch "$MFG_URL" "$MFG_SHA256" "$file"
+fi
+exec python3 -I "$HERE/parts/mfg.py" install "$sim" "$file" "$MFG_SHA256"
