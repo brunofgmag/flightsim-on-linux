@@ -854,6 +854,11 @@ class MfgPageTest(unittest.TestCase):
         for needed in ("optional", "top and bottom", "IMMEDIATE", "Off no longer turns V-Sync off"):
             self.assertIn(needed, tearing)
 
+    def test_it_says_to_keep_the_frame_rate_below_the_refresh_rate_with_fifo(self):
+        caveat = next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if "below the refresh rate" in item)
+        for needed in (FIFO, "Reflex FPS limit", "119", "85 to 90", "DLSS-G preset", "only until"):
+            self.assertIn(needed, caveat)
+
     def test_it_says_the_repository_ships_no_dll(self):
         self.assertIn("ships no DLL", self.text)
 
