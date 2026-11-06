@@ -27,7 +27,7 @@ DLL_SHA256 = "e6b6e6b70a6ed3af839c9647a32fc22660ae6b2d655062c5c072246c91fc10c7"
 PATCHED_SHA256 = "a610fc756ce93e04be6719a9077e85eca3c3121fdad8a4cf9a9a7cf3d3dce5cf"
 FULL_OPTIONS = 'STEAM_COMPAT_LIBRARY_PATHS=/games WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_fg_override=on,ngx_dlss_fg_override_render_preset_selection=render_preset_b VKD3D_CONFIG=no_upload_hvv game %command%'
 FIRST_RUN = '{"followGame":true,"mode":"follow","multiplier":2,"dynamicTargetFrameRate":0,"dlssgPreset":3,"vsyncMode":0,"reflexFrameLimitFps":0,"generatedOnlyDebug":false,"intervalLogging":true,"version":13,"dlss5":false}'
-FIFO = "VKD3D_SWAPCHAIN_PRESENT_MODE=FIFO"
+MAILBOX = "VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX"
 FIXED = FIRST_RUN.replace('"followGame":true,"mode":"follow"', '"followGame":false,"mode":"fixed"')
 LOG = """[16:21:08.004] Backend module: S:\\steamapps\\common\\MSFS2024\\VERSION.dll, file 1.7.0.1145, product "MFG Unlocker" 1.7.0
 [16:21:08.094] MFG_PROXY_UI state=active boundary=real-factory-return nativeTableWrites=0
@@ -521,10 +521,10 @@ class MfgCheckTest(MfgCase):
         self.options(FULL_OPTIONS, user="5678")
         self.assertEqual(self.check()[0], 0)
 
-    def test_the_fifo_present_mode_is_not_needed_and_not_named_with_or_without_it(self):
+    def test_the_present_mode_variable_is_not_needed_and_not_named_with_or_without_it(self):
         code, without = self.check()
         self.assertEqual(code, 0, without)
-        self.options(FULL_OPTIONS.replace(" %command%", f" {FIFO} %command%"))
+        self.options(FULL_OPTIONS.replace(" %command%", f" {MAILBOX} %command%"))
         code, with_it = self.check()
         self.assertEqual(code, 0, with_it)
         self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", "\n".join(without + with_it))
@@ -707,7 +707,7 @@ class MfgApplyTest(MfgCase):
         _, out, _ = self.apply()
         self.assertIn("hold everything the mod needs", out)
 
-    def test_it_does_not_ask_for_the_fifo_present_mode(self):
+    def test_it_does_not_ask_for_the_present_mode_variable(self):
         self.configured(FIRST_RUN)
         _, out, err = self.apply()
         self.assertIn("hold everything the mod needs", out)
@@ -845,19 +845,31 @@ class MfgPageTest(unittest.TestCase):
         for needed in ("RtlIsThreadWithinLoaderCallout", "isfinite", "PAGE_WRITECOPY", "application graphics import publication unavailable", "DLSS 5 inputs refused", "123"):
             self.assertIn(needed, self.text)
 
-    def test_it_offers_the_fifo_present_mode_for_tearing_outside_the_four_launch_options(self):
-        self.assertIn(FIFO, self.text)
+    def tearing_item(self):
+        return next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if MAILBOX in item)
+
+    def test_it_offers_mailbox_for_tearing_outside_the_four_launch_options(self):
         self.assertIn("the four launch options", self.text)
         launch_line = re.search(r"<pre><code>(WINEDLLOVERRIDES=.*?)</code></pre>", self.text).group(1)
         self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", launch_line)
-        tearing = next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if FIFO in item)
-        for needed in ("optional", "top and bottom", "IMMEDIATE", "Off no longer turns V-Sync off"):
-            self.assertIn(needed, tearing)
+        for needed in ("optional", "top and bottom", f"<code>{MAILBOX}</code> before <code>%command%</code>", "V-Sync to Off in the mod's menu has no effect"):
+            self.assertIn(needed, self.tearing_item())
 
-    def test_it_says_to_keep_the_frame_rate_below_the_refresh_rate_with_fifo(self):
-        caveat = next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if "below the refresh rate" in item)
-        for needed in (FIFO, "Reflex FPS limit", "119", "85 to 90", "DLSS-G preset", "only until"):
-            self.assertIn(needed, caveat)
+    def test_it_says_fifo_holds_the_game_and_the_frame_rate_fell_with_it(self):
+        for needed in ("<code>FIFO</code>", "holds the game until the screen refreshes", "frame rate fell", "Steam performance monitor turned red"):
+            self.assertIn(needed, self.tearing_item())
+
+    def test_it_says_vrr_took_away_the_hitch_left_without_it(self):
+        for needed in ("without VRR", "small hitch every few seconds", "about 120 FPS", "went away once VRR was on", "Adaptive sync to Automatic"):
+            self.assertIn(needed, self.tearing_item())
+
+    def test_it_says_the_variable_is_ignored_where_the_driver_lacks_mailbox(self):
+        for needed in ("has to offer MAILBOX", "ignores the variable", "Wayland window", "<code>PROTON_ENABLE_WAYLAND=1</code>", "not for an X11 one"):
+            self.assertIn(needed, self.tearing_item())
+
+    def test_it_no_longer_offers_fifo_or_a_frame_limit_below_the_refresh_rate(self):
+        for gone in ("VKD3D_SWAPCHAIN_PRESENT_MODE=FIFO", "below the refresh rate", "Reflex FPS limit"):
+            self.assertNotIn(gone, self.text)
 
     def test_it_says_the_repository_ships_no_dll(self):
         self.assertIn("ships no DLL", self.text)
