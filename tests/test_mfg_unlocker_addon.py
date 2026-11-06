@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import subprocess
 import unittest
 import zipfile
@@ -26,6 +27,7 @@ DLL_SHA256 = "e6b6e6b70a6ed3af839c9647a32fc22660ae6b2d655062c5c072246c91fc10c7"
 PATCHED_SHA256 = "a610fc756ce93e04be6719a9077e85eca3c3121fdad8a4cf9a9a7cf3d3dce5cf"
 FULL_OPTIONS = 'STEAM_COMPAT_LIBRARY_PATHS=/games WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_fg_override=on,ngx_dlss_fg_override_render_preset_selection=render_preset_b VKD3D_CONFIG=no_upload_hvv game %command%'
 FIRST_RUN = '{"followGame":true,"mode":"follow","multiplier":2,"dynamicTargetFrameRate":0,"dlssgPreset":3,"vsyncMode":0,"reflexFrameLimitFps":0,"generatedOnlyDebug":false,"intervalLogging":true,"version":13,"dlss5":false}'
+FIFO = "VKD3D_SWAPCHAIN_PRESENT_MODE=FIFO"
 FIXED = FIRST_RUN.replace('"followGame":true,"mode":"follow"', '"followGame":false,"mode":"fixed"')
 LOG = """[16:21:08.004] Backend module: S:\\steamapps\\common\\MSFS2024\\VERSION.dll, file 1.7.0.1145, product "MFG Unlocker" 1.7.0
 [16:21:08.094] MFG_PROXY_UI state=active boundary=real-factory-return nativeTableWrites=0
@@ -519,6 +521,14 @@ class MfgCheckTest(MfgCase):
         self.options(FULL_OPTIONS, user="5678")
         self.assertEqual(self.check()[0], 0)
 
+    def test_the_fifo_present_mode_is_not_needed_and_not_named_with_or_without_it(self):
+        code, without = self.check()
+        self.assertEqual(code, 0, without)
+        self.options(FULL_OPTIONS.replace(" %command%", f" {FIFO} %command%"))
+        code, with_it = self.check()
+        self.assertEqual(code, 0, with_it)
+        self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", "\n".join(without + with_it))
+
     def test_no_steam_folder_gives_one_failure_with_the_next_step(self):
         code, out, _ = self.call(mfg.check, str(self.sim), "")
         lines = out.splitlines()
@@ -697,6 +707,12 @@ class MfgApplyTest(MfgCase):
         _, out, _ = self.apply()
         self.assertIn("hold everything the mod needs", out)
 
+    def test_it_does_not_ask_for_the_fifo_present_mode(self):
+        self.configured(FIRST_RUN)
+        _, out, err = self.apply()
+        self.assertIn("hold everything the mod needs", out)
+        self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", out + err)
+
     def test_the_launch_options_are_still_listed_when_the_config_file_is_missing(self):
         self.options("game %command%")
         code, out, _ = self.apply()
@@ -828,6 +844,15 @@ class MfgPageTest(unittest.TestCase):
     def test_it_says_which_patch_is_for_which_log_line(self):
         for needed in ("RtlIsThreadWithinLoaderCallout", "isfinite", "PAGE_WRITECOPY", "application graphics import publication unavailable", "DLSS 5 inputs refused", "123"):
             self.assertIn(needed, self.text)
+
+    def test_it_offers_the_fifo_present_mode_for_tearing_outside_the_four_launch_options(self):
+        self.assertIn(FIFO, self.text)
+        self.assertIn("the four launch options", self.text)
+        launch_line = re.search(r"<pre><code>(WINEDLLOVERRIDES=.*?)</code></pre>", self.text).group(1)
+        self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", launch_line)
+        tearing = next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if FIFO in item)
+        for needed in ("optional", "top and bottom", "IMMEDIATE", "Off no longer turns V-Sync off"):
+            self.assertIn(needed, tearing)
 
     def test_it_says_the_repository_ships_no_dll(self):
         self.assertIn("ships no DLL", self.text)
