@@ -575,13 +575,14 @@ class BridgeLaunchTest(P42Case):
     def test_a_bridge_already_running_is_left_alone(self):
         self.install_package(BRIDGE_REL)
         self.run_simulator()
-        process = start_stand_in(self.root, self.token, "Q:\\pilot\\Community\\p42-util-chaseplane\\Modules\\ChasePlane\\CP MSFS Bridge.exe")
+        process = start_stand_in(self.root, self.token, "Q:\\pilot\\Community\\p42-util-chaseplane\\Modules\\ChasePlane\\CP MSFS Bridge.exe", outlive_watchers=True)
         self.addCleanup(process.wait)
         self.addCleanup(process.kill)
         time.sleep(0.2)
         result = self.chaseplane("launch-bridge", FSOL_SIM_RUNNING="1")
         self.assertEqual(result.returncode, 0)
         time.sleep(0.3)
+        self.assertIsNone(process.poll())
         self.assertEqual(self.calls("cli") + self.calls("wine"), [])
 
 

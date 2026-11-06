@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import signal
 import subprocess
 from pathlib import Path
 
@@ -67,11 +68,15 @@ def stand_in_name(windows_path):
     return STAND_IN_DRIVE + windows_path[2:]
 
 
-def start_stand_in(folder, token, argv0, seconds=30):
+def deaf_to_sigterm():
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+
+def start_stand_in(folder, token, argv0, seconds=30, outlive_watchers=False):
     if REAL_DRIVES.match(argv0):
         raise ValueError(f"a stand-in must not look like a program of the real prefix: {argv0}")
     link = Path(folder) / "stand-ins" / re.sub(r"[^A-Za-z0-9._-]", "_", argv0)
     link.parent.mkdir(parents=True, exist_ok=True)
     if not link.exists():
         link.symlink_to(shutil.which("sleep"))
-    return subprocess.Popen([argv0, str(seconds)], executable=str(link), env={**os.environ, "FSOL_TEST_TOKEN": token})
+    return subprocess.Popen([argv0, str(seconds)], executable=str(link), env={**os.environ, "FSOL_TEST_TOKEN": token}, preexec_fn=deaf_to_sigterm if outlive_watchers else None)

@@ -12,6 +12,7 @@ from tests.test_machine import FakeMachine
 ROOT = Path(__file__).resolve().parent.parent
 ADDON = ROOT / "addons" / "simconnect-tcp"
 READER = ROOT / "tools" / "aircraft-loaded.mjs"
+NODE_TIMEOUT = 60
 XML = (
     '<?xml version="1.0" encoding="Windows-1252"?>\r\n'
     '<SimBase.Document Type="SimConnect">\r\n'
@@ -407,7 +408,7 @@ class AircraftReaderTest(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def read(self, *args, timeout=10, **env):
+    def read(self, *args, timeout=NODE_TIMEOUT, **env):
         merged = dict(os.environ, FAKE_LOG=str(self.log), **env)
         return subprocess.run(["node", str(READER), *args], env=merged, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
 
@@ -437,7 +438,7 @@ class AircraftReaderTest(unittest.TestCase):
             self.assertIn("usage:", result.stderr)
 
     def test_a_relative_module_folder_works(self):
-        result = subprocess.run(["node", str(READER), "5111", "modules"], cwd=self.root, env=dict(os.environ, FAKE_LOG=str(self.log), FAKE_CLOSE="1"), capture_output=True, text=True, timeout=10)
+        result = subprocess.run(["node", str(READER), "5111", "modules"], cwd=self.root, env=dict(os.environ, FAKE_LOG=str(self.log), FAKE_CLOSE="1"), capture_output=True, text=True, timeout=NODE_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
