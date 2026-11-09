@@ -247,16 +247,16 @@ class ShapeTest(unittest.TestCase):
 
     def test_what_each_addon_installs_and_where_it_comes_from(self):
         expected = {
-            "active-sky": ("http://www.hifisimtech.com/", True, "installer", False),
-            "rex-atmos-core": ("https://rexaxis.com", None, "installer", False),
-            "vraas": ("the Contrail store (LAND3 Simulations)", None, "store", True),
-            "beyondatc": ("https://www.beyondatc.net", None, "installer", False),
-            "navigraph-simlink": (None, None, "installer", True),
-            "flightsim-dispatch": (None, None, "installer", True),
+            "active-sky": ("http://www.hifisimtech.com/", "installer", False),
+            "rex-atmos-core": ("https://rexaxis.com", "installer", False),
+            "vraas": ("the Contrail store (LAND3 Simulations)", "store", True),
+            "beyondatc": ("https://www.beyondatc.net", "installer", False),
+            "navigraph-simlink": (None, "installer", True),
+            "flightsim-dispatch": (None, "installer", True),
         }
-        for name, (source, paid, kind, scripted) in expected.items():
+        for name, (source, kind, scripted) in expected.items():
             addon = addons.load(ROOT / "addons" / name)
-            self.assertEqual((addon.install["paid"], addon.install["kind"], addon.can_install), (paid, kind, scripted), name)
+            self.assertEqual((addon.install["kind"], addon.can_install), (kind, scripted), name)
             if source:
                 self.assertEqual(addon.install["from"], source)
         self.assertIn("api.volanta.app/api/v1/ClientUpdate/latest.yml", addons.load(ROOT / "addons" / "volanta").install["from"])

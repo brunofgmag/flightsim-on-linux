@@ -607,7 +607,7 @@ class InstallAndShortcutTest(unittest.TestCase):
     def test_the_manifest_reports_the_versions_the_test_machine_has_and_where_to_get_the_installer(self):
         addon = fsol_addons.load(ADDON)
         self.assertEqual((addon.tested_version, addon.tested_on), ("3.0.0.7613", "2026-10-29"))
-        self.assertEqual(addon.install, {"from": "https://fenixsim.com", "paid": None, "kind": "installer"})
+        self.assertEqual(addon.install, {"from": "https://fenixsim.com", "kind": "installer"})
         self.assertTrue(addon.can_install)
 
     def test_the_setup_runs_alone_in_the_prefix_and_the_script_waits_for_the_prefix_to_end(self):

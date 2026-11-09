@@ -266,7 +266,7 @@ class ShapeTest(SiCase):
         self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.tested_on), ("sayintentions", ["proton-fs2024", "simulator-closed"], "5.6.5.4", "2026-10-21"))
         self.assertTrue(addon.touches_addon_files)
         self.assertTrue(addon.can_install)
-        self.assertEqual(addon.install, {"from": "https://www.SayIntentions.AI", "paid": None, "kind": "installer"})
+        self.assertEqual(addon.install, {"from": "https://www.SayIntentions.AI", "kind": "installer"})
         self.assertEqual([shortcut["title"] for shortcut in addon.shortcuts], ["SayIntentions.AI"])
 
     def test_the_manifest_has_a_loop_watcher_that_runs_the_links_script(self):

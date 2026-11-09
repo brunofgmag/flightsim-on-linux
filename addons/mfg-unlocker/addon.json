@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "https://github.com/dashdogy/MFG-Unlocker/releases",
-    "paid": false,
     "kind": "native"
   }
 }

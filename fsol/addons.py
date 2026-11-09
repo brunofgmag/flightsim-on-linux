@@ -22,7 +22,7 @@ TRIGGERS = ("simulator", "none", "always", "while_simulator")
 TRIGGER_REGEXES = ("aircraft", "process")
 OPTIONAL_SCRIPTS = ("install", "launch", "close")
 SCRIPT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-INSTALL_FIELDS = {"from", "paid", "kind", "own_prefix"}
+INSTALL_FIELDS = {"from", "kind", "own_prefix"}
 SHORTCUT_FIELDS = {"title", "script", "args", "comment", "icon", "close", "mime"}
 WATCHER_FIELDS = {"app", "script", "args", "grace", "poll", "wait_for", "trigger", "stop", "health", "loop"}
 HEALTH_FIELDS = {"listening", "connected_to", "lost_for", "restart"}
@@ -107,8 +107,6 @@ def install_problems(install):
         problems.append("install.from must say where to get the program")
     if install.get("kind") not in KINDS:
         problems.append(f"install.kind must be one of {', '.join(KINDS)}")
-    if "paid" in install and install["paid"] is not None and not isinstance(install["paid"], bool):
-        problems.append("install.paid must be true, false or null")
     if "own_prefix" in install and not isinstance(install["own_prefix"], bool):
         problems.append("install.own_prefix must be true or false")
     problems.extend(f"unknown install field {name!r}" for name in sorted(set(install) - INSTALL_FIELDS))

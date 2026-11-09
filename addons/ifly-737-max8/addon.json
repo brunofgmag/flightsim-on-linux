@@ -10,7 +10,6 @@
   },
   "install": {
     "from": "your vendor account (iFly), which offers the iFly Manager setup",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

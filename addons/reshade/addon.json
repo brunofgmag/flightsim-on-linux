@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "reshade.me, installed on a Windows machine, then copied from that install: there is no Linux installer",
-    "paid": false,
     "kind": "installer"
   }
 }

@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "https://github.com/ResetXPDR/MSFS_AutoFPS/releases",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

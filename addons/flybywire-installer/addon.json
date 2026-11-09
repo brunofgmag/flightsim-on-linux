@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "FlyByWire Simulations' website: the Linux AppImage of the FlyByWire Installer",
-    "paid": null,
     "kind": "native"
   }
 }

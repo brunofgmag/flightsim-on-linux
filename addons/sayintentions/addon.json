@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "https://www.SayIntentions.AI",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

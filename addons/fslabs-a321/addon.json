@@ -10,7 +10,6 @@
   },
   "install": {
     "from": "https://www.flightsimlabs.com/",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

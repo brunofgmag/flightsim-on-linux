@@ -247,7 +247,7 @@ class AddonMenuTest(GuiTestCase):
 
 class CliContractTest(AddonMenuTest):
     SPEC = {"name": "Demo", "tested_version": "1", "tested_on": "2026-10-31", "needs": [], "touches_addon_files": False,
-            "installed": {"community": ["demo-*"]}, "install": {"from": "https://example.org/demo", "paid": None, "kind": "installer"}}
+            "installed": {"community": ["demo-*"]}, "install": {"from": "https://example.org/demo", "kind": "installer"}}
 
     def real_install_output(self):
         folder = self.addons / "demo"

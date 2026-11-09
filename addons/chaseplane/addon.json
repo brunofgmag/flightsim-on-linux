@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "Parallel 42's website, the ChasePlane installer for MSFS 2024",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

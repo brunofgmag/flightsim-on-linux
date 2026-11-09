@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "your distribution's opendeck package (on Arch, the opendeck package of the official repositories); the project is nekename/OpenDeck on GitHub",
-    "paid": false,
     "kind": "native"
   }
 }

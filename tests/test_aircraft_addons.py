@@ -47,15 +47,15 @@ PAGES_OF_OTHERS = {"contrail.html", "aerosoft-one.html", "navigraph-hub.html"}
 MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
 EXPECTED = {
-    "pmdg-oc3": {"version": "3.0.289", "on": "2026-10-13", "needs": ["simulator-closed"], "touches": False, "kind": "installer", "paid": None, "shortcuts": ["PMDG OC3"]},
-    "ifly-737-max8": {"version": "1.1.0.3", "on": "2026-10-16", "needs": [], "touches": False, "kind": "installer", "paid": None, "shortcuts": ["iFly Manager"]},
-    "just-flight-rj-professional": {"version": "0.1.6", "on": "2026-10-16", "needs": [], "touches": False, "kind": "installer", "paid": True, "shortcuts": []},
-    "tfdi-md-11": {"version": "1.1.32", "on": "2026-10-13", "needs": ["simulator-closed"], "touches": True, "kind": "installer", "paid": None, "shortcuts": ["MD-11 Extended Simulation"]},
-    "fss-e-jets": {"version": "1.0.2", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "paid": None, "shortcuts": []},
-    "fss-727": {"version": "1.1.7", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "paid": None, "shortcuts": []},
-    "aerosoft-a346-pro": {"version": "1.0.5", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "paid": None, "shortcuts": []},
-    "a340-performance-tool": {"version": "1.1.0", "on": "2026-10-28", "needs": ["simulator-closed"], "touches": True, "kind": None, "paid": None, "shortcuts": ["A340 Performance Tool"]},
-    "fsrealistic-plus": {"version": "1.1.9", "on": "2026-10-14", "needs": ["simulator-closed"], "touches": False, "kind": "installer", "paid": None, "shortcuts": []},
+    "pmdg-oc3": {"version": "3.0.289", "on": "2026-10-13", "needs": ["simulator-closed"], "touches": False, "kind": "installer", "shortcuts": ["PMDG OC3"]},
+    "ifly-737-max8": {"version": "1.1.0.3", "on": "2026-10-16", "needs": [], "touches": False, "kind": "installer", "shortcuts": ["iFly Manager"]},
+    "just-flight-rj-professional": {"version": "0.1.6", "on": "2026-10-16", "needs": [], "touches": False, "kind": "installer", "shortcuts": []},
+    "tfdi-md-11": {"version": "1.1.32", "on": "2026-10-13", "needs": ["simulator-closed"], "touches": True, "kind": "installer", "shortcuts": ["MD-11 Extended Simulation"]},
+    "fss-e-jets": {"version": "1.0.2", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "shortcuts": []},
+    "fss-727": {"version": "1.1.7", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "shortcuts": []},
+    "aerosoft-a346-pro": {"version": "1.0.5", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "shortcuts": []},
+    "a340-performance-tool": {"version": "1.1.0", "on": "2026-10-28", "needs": ["simulator-closed"], "touches": True, "kind": None, "shortcuts": ["A340 Performance Tool"]},
+    "fsrealistic-plus": {"version": "1.1.9", "on": "2026-10-14", "needs": ["simulator-closed"], "touches": False, "kind": "installer", "shortcuts": []},
 }
 INSTALLED = {
     "pmdg-oc3": ("prefix", f"{PREFIX_USER}/Local/Programs/pmdg-oc3/PMDG OC3.exe"),
@@ -231,7 +231,6 @@ class ShapeTest(unittest.TestCase):
                 self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), (id_, want["version"], want["on"], want["needs"], want["touches"]))
                 self.assertEqual([shortcut["title"] for shortcut in addon.shortcuts], want["shortcuts"])
                 self.assertEqual((addon.install or {}).get("kind"), want["kind"])
-                self.assertEqual((addon.install or {}).get("paid"), want["paid"])
                 self.assertIsNone(addon.watcher)
 
     def test_a_vendor_whose_page_is_unknown_is_named_as_your_account_and_never_guessed(self):

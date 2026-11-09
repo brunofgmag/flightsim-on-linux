@@ -30,7 +30,7 @@
 
 <h2>Get it</h2>
 <p>Volanta's site, <a href="https://volanta.app">volanta.app</a>, serves a Linux AppImage, and that build can't reach MSFS. The flight data comes from a connector, <code>VolantaPlugin_x64.exe</code>, that the app downloads and runs, and the scanner that finds MSFS 2024 looks for <code>UserCfg.opt</code> from <code>LOCALAPPDATA</code>, a variable that exists only inside Wine. You need the Windows build.</p>
-<p>The Windows build is listed in the update channel of the app itself. Open <code>https://api.volanta.app/api/v1/ClientUpdate/latest.yml</code> in a browser: it gives the address of <code>volanta-1.19.2.exe</code> (or a newer one) and its SHA-512. Use a browser. The site and its CDN answer <code>curl</code> with 403 from Cloudflare. The installer is an electron-builder one. The price wasn't recorded.</p>
+<p>The Windows build is listed in the update channel of the app itself. Open <code>https://api.volanta.app/api/v1/ClientUpdate/latest.yml</code> in a browser: it gives the address of <code>volanta-1.19.2.exe</code> (or a newer one) and its SHA-512. Use a browser. The site and its CDN answer <code>curl</code> with 403 from Cloudflare. The installer is an electron-builder one.</p>
 
 <h2>Install it</h2>
 <p>Close the simulator and every program in its prefix first, and run nothing else while the installer works. <a href="rules.html">The ground rules</a> explain why. Then give the installer to the CLI:</p>

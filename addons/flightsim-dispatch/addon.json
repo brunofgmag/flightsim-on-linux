@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "flightsimdispatch.net (the program's own window links to the download)",
-    "paid": null,
     "kind": "installer",
     "own_prefix": true
   },

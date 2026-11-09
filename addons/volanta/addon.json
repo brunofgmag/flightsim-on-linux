@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "https://api.volanta.app/api/v1/ClientUpdate/latest.yml (open it in a browser: it lists the Windows installer, while the site's own download is a Linux AppImage that cannot reach the simulator)",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [
