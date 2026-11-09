@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-ATMOSPHEREMOD_VERSION="0.5.1"
+ATMOSPHEREMOD_VERSION="0.7.1"
 ATMOSPHEREMOD_URL="https://github.com/tomwhoca/AtmosphereMod/releases/download/v$ATMOSPHEREMOD_VERSION/AtmosphereMod-$ATMOSPHEREMOD_VERSION.zip"
-ATMOSPHEREMOD_SHA256="0d46acf43a8b363c1eb31f6054b443c8176f8c6053614c183478ba44b42bd7ac"
+ATMOSPHEREMOD_SHA256="49a8aba9fd0b37cc1bb3b008cc537592a7d865edc7b5fca9feb7d54a1147b4d7"
 ATMOSPHEREMOD_WINDOWS_DATA='C:\users\steamuser\AppData\Local\AtmosphereMod'
 ATMOSPHEREMOD_EFB="atmospheremod-weather"
 
@@ -23,6 +23,10 @@ atmospheremod_refuse_running() {
 
 atmospheremod_refuse_without_reshade() {
   [ -f "$(atmospheremod_sim)/dxgi.dll" ] || { echo "ReShade is not in the simulator folder; run first: flightsim-on-linux addon install reshade <dxgi.dll of a Windows ReShade install>" >&2; exit 1; }
+}
+
+atmospheremod_beside_renodx() {
+  compgen -G "$(atmospheremod_sim)/renodx-*.addon64" > /dev/null
 }
 
 atmospheremod_is_installed() {
@@ -83,6 +87,10 @@ atmospheremod_release_folder() {
 atmospheremod_install_arguments() {
   local installer="$1" community="$2"
   ATMOSPHEREMOD_ARGUMENTS=(--data "$ATMOSPHEREMOD_WINDOWS_DATA" --yes --sim "$(addon_windows_path "$(atmospheremod_sim)")" --community "$(addon_windows_path "$community")" --dxc "$installer\\dxc\\bin\\x64")
+  if atmospheremod_beside_renodx; then
+    echo "RenoDX is in the simulator folder, so the installer runs with --renodx and puts AtmosphereMod's parameters in register space 51, away from RenoDX's"
+    ATMOSPHEREMOD_ARGUMENTS+=(--renodx)
+  fi
 }
 
 atmospheremod_uninstall_arguments() {
