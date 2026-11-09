@@ -1278,6 +1278,12 @@ class PageTest(unittest.TestCase):
         self.assertIn("49a8aba9fd0b37cc1bb3b008cc537592a7d865edc7b5fca9feb7d54a1147b4d7", text)
         self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.1/AtmosphereMod-0.7.1.zip", text)
 
+    def test_the_atmospheremod_page_gives_the_measured_numbers_of_the_tested_release(self):
+        text = self.page("atmospheremod")
+        self.assertIn("Tested with AtmosphereMod 0.5.1 on 1 November 2026 and with 0.7.1 on 9 November 2026", text)
+        self.assertIn("0.7.1 patched 3079", text)
+        self.assertIn("registered 0.7.1.0", text)
+
     def test_the_atmospheremod_page_lists_renodx_among_the_installer_arguments(self):
         text = self.page("atmospheremod")
         arguments = text[text.index("The arguments are the mod's own"): text.index("</ul>", text.index("The arguments are the mod's own"))]
