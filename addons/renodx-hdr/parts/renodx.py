@@ -16,11 +16,14 @@ REGISTERED = 'Registered add-on "RenoDX"'
 FAILED = "Failed to replace pipeline"
 INSERTED = re.compile(r"will insert cbuffer (\d+) at root_index (\d+)")
 KEY = "InjectGraphicsRootSignature"
+SPACE_KEY = "RegisterSpace"
 STASH = f"{KEY}.orig"
 RENODX_SPACE = 50
+FIRST_WITH_RENODX_OPTION = (0, 7, 0)
 INSTALL = "flightsim-on-linux addon install renodx-hdr"
 APPLY = "flightsim-on-linux addon apply renodx-hdr"
-Situation = namedtuple("Situation", "installed state spaces")
+REINSTALL = "flightsim-on-linux addon install atmospheremod"
+Situation = namedtuple("Situation", "installed state spaces source version")
 USAGE = "usage: renodx.py install|apply|check|undo <simulator folder> <prefix folder> <backup folder>"
 
 
@@ -90,17 +93,56 @@ def injection_state(text):
     return {"1": "on", "0": "off"}.get(atmosphere.read_value(text, atmosphere.SECTION, KEY), "unknown")
 
 
+def configured_space(text):
+    value = atmosphere.read_value(text, atmosphere.SECTION, SPACE_KEY)
+    return [int(value)] if value and value.isdigit() else None
+
+
+def where_parameters_go(sim, prefix, text):
+    measured = atmosphere.mod_spaces(sim, prefix)
+    if measured is not None:
+        return measured, "layouts.txt"
+    configured = configured_space(text)
+    if configured is not None:
+        return configured, SPACE_KEY
+    return None, None
+
+
+def installed_version(prefix):
+    record = atmosphere.read_record(prefix) or {}
+    numbers = re.findall(r"\d+", str(record.get("version", "")))[:3]
+    return tuple(int(number) for number in numbers) or None
+
+
 def situation(sim, prefix):
     sim = Path(sim)
     installed = (sim / atmosphere.ADDON_FILE).is_file()
-    state = injection_state(atmosphere.read_text(sim / atmosphere.RESHADE_INI) or "")
-    return Situation(installed, state, atmosphere.mod_spaces(sim, prefix))
+    text = atmosphere.read_text(sim / atmosphere.RESHADE_INI) or ""
+    spaces, source = where_parameters_go(sim, prefix, text)
+    return Situation(installed, injection_state(text), spaces, source, installed_version(prefix))
 
 
-def describe_spaces(spaces):
-    if spaces is None:
-        return "space 50, which is assumed because layouts.txt is missing or older than the AtmosphereMod install"
-    return "space " + ", ".join(str(space) for space in spaces)
+def has_renodx_option(now):
+    return now.version is not None and now.version >= FIRST_WITH_RENODX_OPTION
+
+
+def describe_spaces(now):
+    if now.spaces is None:
+        return f"space 50, which is assumed because layouts.txt is missing or older than the AtmosphereMod install and ReShade.ini has no {SPACE_KEY} under [{atmosphere.SECTION}]"
+    named = "space " + ", ".join(str(space) for space in now.spaces)
+    if now.source == SPACE_KEY:
+        return f"{named}, which {SPACE_KEY} under [{atmosphere.SECTION}] in ReShade.ini sets, because layouts.txt is missing or older than the AtmosphereMod install"
+    return named
+
+
+def version_text(now):
+    return ".".join(str(number) for number in now.version) if now.version else "of unknown version"
+
+
+def move_step(now):
+    if has_renodx_option(now):
+        return f"run: {REINSTALL}, which runs AtmosphereMod's installer with --renodx because RenoDX is in the simulator folder, and that moves AtmosphereMod to space 51 with the injection on"
+    return f"run: {REINSTALL}, which updates AtmosphereMod {version_text(now)} to a release whose installer moves it to space 51 with the injection on, or keep this release and run: {APPLY}, which turns the injection off"
 
 
 def collides(spaces):
@@ -118,11 +160,15 @@ def verdict(now):
 
 
 def apart_message(now):
-    return f"AtmosphereMod puts its parameters in {describe_spaces(now.spaces)}, and RenoDX uses space {RENODX_SPACE}, so they do not meet"
+    return f"AtmosphereMod puts its parameters in {describe_spaces(now)}, and RenoDX uses space {RENODX_SPACE}, so they do not meet"
 
 
 def unknown_message(next_step):
     return f"{KEY} is not 0 or 1 under [{atmosphere.SECTION}] in ReShade.ini, so this add-on cannot tell what AtmosphereMod does; run the AtmosphereMod install again, {next_step}"
+
+
+def unknown_step(now):
+    return f"with: {REINSTALL}" if has_renodx_option(now) else f"which sets it to 1, and then: {APPLY}"
 
 
 def skip_reason(now):
@@ -134,7 +180,7 @@ def skip_reason(now):
     if kind == "apart":
         return apart_message(now)
     if kind == "unknown":
-        return unknown_message("which sets it to 1, and then apply again")
+        return unknown_message(unknown_step(now))
     return None
 
 
@@ -161,12 +207,16 @@ def apply(sim, prefix, backup):
     if reason:
         print(f"nothing was changed: {reason}")
         return 0
+    if has_renodx_option(now):
+        print(f"nothing was changed: AtmosphereMod {version_text(now)} puts its parameters in {describe_spaces(now)}, where RenoDX puts its own; {move_step(now)}", file=sys.stderr)
+        return 1
     text = atmosphere.read_text(sim / atmosphere.RESHADE_INI)
     stash_original(backup, atmosphere.read_value(text, atmosphere.SECTION, KEY))
     write_ini(sim, atmosphere.replace_value(text, atmosphere.SECTION, KEY, "0"))
-    print(f"{KEY}=0 is set under [{atmosphere.SECTION}] in ReShade.ini, because AtmosphereMod puts its parameters in {describe_spaces(now.spaces)}, where RenoDX puts its own; the value it had is kept for undo")
+    print(f"{KEY}=0 is set under [{atmosphere.SECTION}] in ReShade.ini, because AtmosphereMod {version_text(now)} puts its parameters in {describe_spaces(now)}, where RenoDX puts its own; the value it had is kept for undo")
     print("the cost: AtmosphereMod's ground haze (its ps_deferredRendering pass) stays the simulator's own, because that pass needs the injected root signature; its sky and clouds keep the mod")
     print("the AtmosphereMod install sets the value back to 1, so run apply again after every run of it")
+    print(f"to keep the haze, run instead: {REINSTALL}, which updates AtmosphereMod to a release whose installer moves it to space 51 with the injection on")
     return 0
 
 
@@ -192,8 +242,8 @@ def conflict_line(sim, prefix):
     if kind == "apart":
         return ok(apart_message(now))
     if kind == "on":
-        return fail(f"AtmosphereMod adds parameters in {describe_spaces(now.spaces)} to the graphics root signature, where RenoDX adds its own, and RenoDX then fails to replace its shaders; run: {APPLY}")
-    return fail(unknown_message(f"then: {APPLY}"))
+        return fail(f"RenoDX fails to replace its shaders, because AtmosphereMod adds its parameters to the same graphics root signature in the register space RenoDX uses, {describe_spaces(now)}; {move_step(now)}")
+    return fail(unknown_message(unknown_step(now)))
 
 
 def settings_changed_at(sim, prefix, backup):

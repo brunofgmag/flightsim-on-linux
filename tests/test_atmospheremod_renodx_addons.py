@@ -136,12 +136,12 @@ class MachineCase(unittest.TestCase):
         (self.sim / "ReShade.ini").write_bytes(text.encode())
         at(self.sim / "ReShade.ini", 0)
 
-    def install_atmospheremod(self, ini=RESHADE_INI, patched=3, failed=0, pack=PACK):
+    def install_atmospheremod(self, ini=RESHADE_INI, patched=3, failed=0, pack=PACK, version="0.5.1"):
         write(self.sim / "AtmosphereMod.addon64", "MZ AtmosphereMod")
         self.write_ini(ini)
         for number in range(patched):
             write(self.data / "shaders" / f"{number:08x}.cso", "DXIL")
-        write(self.data / "install.json", json.dumps({"version": "0.5.1", "pak": pack, "patched": patched, "failed": failed}))
+        write(self.data / "install.json", json.dumps({"version": version, "pak": pack, "patched": patched, "failed": failed}))
         write(self.sim / "Shaders" / pack, "pack")
         for path in (self.sim / "AtmosphereMod.addon64", self.data / "install.json", self.sim / "Shaders" / pack):
             at(path, 0)
@@ -158,7 +158,7 @@ class MachineCase(unittest.TestCase):
 class ShapeTest(unittest.TestCase):
     def test_atmospheremod_is_a_downloaded_install_that_runs_in_a_prefix_of_its_own(self):
         addon = addons.load(ATMOSPHERE)
-        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("atmospheremod", "0.5.1", "2026-11-01", ["simulator-closed"], False))
+        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("atmospheremod", "0.7.1", "2026-11-09", ["simulator-closed"], False))
         self.assertEqual(addon.installed, {"sim": ["AtmosphereMod.addon64"]})
         self.assertEqual((addon.install["kind"], addon.install["paid"], addon.install["own_prefix"]), ("native", False, True))
         self.assertTrue(addon.can_install)
@@ -166,7 +166,7 @@ class ShapeTest(unittest.TestCase):
 
     def test_renodx_hdr_takes_a_file_from_nexus_and_edits_atmospheremods_setting(self):
         addon = addons.load(RENODX)
-        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("renodx-hdr", "1", "2026-11-05", ["simulator-closed"], True))
+        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("renodx-hdr", "1", "2026-11-09", ["simulator-closed"], True))
         self.assertEqual(addon.installed, {"sim": ["renodx-msfs2024.addon64"]})
         self.assertEqual((addon.install["kind"], addon.install["paid"]), ("installer", False))
         self.assertEqual(addon.install["from"], "https://www.nexusmods.com/microsoftflightsimulator2024/mods/26")
@@ -184,9 +184,9 @@ class ShapeTest(unittest.TestCase):
 
     def test_the_pinned_download_is_the_public_release_asset(self):
         text = (ATMOSPHERE / "parts" / "atmospheremod.sh").read_text()
-        self.assertIn('ATMOSPHEREMOD_VERSION="0.5.1"', text)
+        self.assertIn('ATMOSPHEREMOD_VERSION="0.7.1"', text)
         self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v$ATMOSPHEREMOD_VERSION/AtmosphereMod-$ATMOSPHEREMOD_VERSION.zip", text)
-        self.assertIn('ATMOSPHEREMOD_SHA256="0d46acf43a8b363c1eb31f6054b443c8176f8c6053614c183478ba44b42bd7ac"', text)
+        self.assertIn('ATMOSPHEREMOD_SHA256="49a8aba9fd0b37cc1bb3b008cc537592a7d865edc7b5fca9feb7d54a1147b4d7"', text)
 
     def test_the_renodx_file_that_was_tested_is_pinned_by_its_hash(self):
         text = (RENODX / "parts" / "renodx.py").read_text()
@@ -448,6 +448,25 @@ class AtmosphereInstallRunTest(AtmosphereBashCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.sibling / "system.reg").read_text(), "sim system.reg\n")
 
+    def test_with_renodx_in_the_simulator_folder_the_installer_also_gets_renodx_and_says_why(self):
+        write(self.sim / "renodx-msfs2024.addon64", "MZ")
+        result = self.run_mode("install")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.arguments()[-1], "--renodx")
+        self.assertEqual(self.arguments().count("--renodx"), 1)
+        self.assertIn("register space 51", result.stdout)
+
+    def test_without_renodx_the_installer_gets_neither_space_option_so_it_keeps_the_space_in_reshade_ini(self):
+        result = self.run_mode("install")
+        self.assertNotIn("--renodx", self.arguments())
+        self.assertNotIn("--no-renodx", self.arguments())
+        self.assertNotIn("register space", result.stdout)
+
+    def test_a_file_named_like_renodx_in_another_folder_does_not_count(self):
+        write(self.sim / "Shaders" / "renodx-msfs2024.addon64", "MZ")
+        self.run_mode("install")
+        self.assertNotIn("--renodx", self.arguments())
+
     def test_it_leaves_an_existing_add_ons_prefix_alone_and_says_nothing_about_it(self):
         write(self.sibling / "user.reg", "grown\n")
         result = self.run_mode("install")
@@ -502,6 +521,11 @@ class AtmosphereUninstallRunTest(AtmosphereBashCase):
         self.run_mode("uninstall")
         self.assertEqual(self.stdin(), "y\nn\n")
         self.assertNotIn("--yes", self.arguments())
+
+    def test_the_uninstall_never_gets_a_space_option_even_beside_renodx(self):
+        write(self.sim / "renodx-msfs2024.addon64", "MZ")
+        self.run_mode("uninstall")
+        self.assertNotIn("--renodx", self.arguments())
 
     def test_the_work_folder_goes_after_an_uninstall_too(self):
         self.run_mode("uninstall")
@@ -572,12 +596,12 @@ class AtmosphereInstallScriptTest(MachineCase):
     def test_it_downloads_the_pinned_url_and_runs_nothing_when_the_hash_differs(self):
         result = self.script("install")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.5.1/AtmosphereMod-0.5.1.zip", self.log.read_text())
+        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.1/AtmosphereMod-0.7.1.zip", self.log.read_text())
         self.assertIn("nothing was run", result.stderr)
         self.assertEqual(list((self.root / "cache" / "downloads").iterdir()), [])
 
     def test_a_zip_given_by_hand_with_another_hash_is_refused_and_nothing_is_downloaded(self):
-        file = self.root / "AtmosphereMod-0.6.0.zip"
+        file = self.root / "AtmosphereMod-0.5.1.zip"
         file.write_bytes(b"a newer release")
         result = self.script("install", FSOL_INSTALLER=str(file))
         self.assertEqual(result.returncode, 1)
@@ -616,13 +640,13 @@ class AtmosphereUndoScriptTest(MachineCase):
         write(self.sim / "AtmosphereMod.addon64", "MZ")
         result = self.script("undo")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("AtmosphereMod-0.5.1.zip", self.log.read_text())
+        self.assertIn("AtmosphereMod-0.7.1.zip", self.log.read_text())
 
     def test_a_link_in_community_alone_counts_as_installed(self):
         (self.community / "atmospheremod-weather").symlink_to(self.root / "gone")
         result = self.script("undo")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("AtmosphereMod-0.5.1.zip", self.log.read_text())
+        self.assertIn("AtmosphereMod-0.7.1.zip", self.log.read_text())
 
 
 class RenoDXCase(MachineCase):
@@ -661,6 +685,11 @@ class RenoDXCase(MachineCase):
 
     def ini_without_injection_change(self):
         return RESHADE_INI.replace("InjectGraphicsRootSignature=1", "InjectGraphicsRootSignature=0")
+
+    def with_option(self, space=50, version="0.7.1", layouts=None, offset=10):
+        self.install_atmospheremod(ini=RESHADE_INI.replace("TunablesPath=", f"RegisterSpace={space}\r\nTunablesPath="), version=version)
+        if layouts is not None:
+            self.write_layouts(layouts, offset=offset)
 
 
 class RenoDXInstallTest(RenoDXCase):
@@ -841,6 +870,68 @@ class RenoDXApplyTest(RenoDXCase):
         code, output = self.check()
         self.assertEqual(code, 0, output)
 
+    def test_with_a_release_that_has_the_renodx_option_it_changes_nothing_and_names_the_reinstall(self):
+        self.with_option(space=50, layouts=50)
+        before = tree(self.root)
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("nothing was changed", result.stderr)
+        self.assertIn("addon install atmospheremod", result.stderr)
+        self.assertIn("--renodx", result.stderr)
+        self.assertNotIn("addon apply renodx-hdr", result.stderr)
+        self.assertEqual(tree(self.root), before)
+
+    def test_0_7_0_is_the_first_release_with_the_option_and_0_6_1_still_gets_the_injection_turned_off(self):
+        self.with_option(space=50, version="0.7.0", layouts=50)
+        self.assertEqual(self.script("apply").returncode, 1)
+        self.assertEqual(self.injection(), "1")
+        self.with_option(space=50, version="0.6.1", layouts=50)
+        self.assertEqual(self.script("apply").returncode, 0)
+        self.assertEqual(self.injection(), "0")
+
+    def test_a_record_without_a_version_counts_as_an_old_release(self):
+        self.official()
+        write(self.data / "install.json", json.dumps({"pak": PACK, "patched": 3, "failed": 0}))
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.injection(), "0")
+        self.assertIn("of unknown version", result.stdout)
+
+    def test_right_after_a_reinstall_with_renodx_registerspace_is_believed_over_the_older_layouts_txt(self):
+        self.with_option(space=51, layouts=50, offset=-10)
+        before = tree(self.root)
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("nothing was changed", result.stdout)
+        self.assertIn("space 51, which RegisterSpace under [ATMOSPHEREMOD] in ReShade.ini sets", result.stdout)
+        self.assertEqual(tree(self.root), before)
+
+    def test_registerspace_50_without_a_newer_layouts_txt_still_clashes(self):
+        self.with_option(space=50)
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("space 50, which RegisterSpace", result.stderr)
+
+    def test_a_layouts_txt_newer_than_the_install_wins_over_registerspace(self):
+        self.with_option(space=51, layouts=50)
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("space 50", result.stderr)
+        self.assertNotIn("RegisterSpace", result.stderr)
+
+    def test_a_registerspace_that_is_not_a_number_counts_as_missing(self):
+        self.install_atmospheremod(ini=RESHADE_INI.replace("TunablesPath=", "RegisterSpace=fifty-one\r\nTunablesPath="), version="0.7.1")
+        result = self.script("apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("space 50, which is assumed", result.stderr)
+
+    def test_an_old_release_is_still_fixed_by_turning_the_injection_off_and_is_told_about_the_update(self):
+        self.official()
+        result = self.script("apply")
+        self.assertEqual(self.injection(), "0")
+        self.assertIn("AtmosphereMod 0.5.1 puts its parameters", result.stdout)
+        self.assertIn("to keep the haze, run instead: flightsim-on-linux addon install atmospheremod", result.stdout)
+
     def test_without_atmospheremod_nothing_changes(self):
         self.write_ini()
         before = tree(self.root)
@@ -947,7 +1038,32 @@ class RenoDXCheckTest(RenoDXCase):
         failures = self.failures(output)
         self.assertEqual(len(failures), 1)
         self.assertIn("addon apply renodx-hdr", failures[0])
+        self.assertIn("addon install atmospheremod", failures[0])
         self.assertIn("space 50", failures[0])
+
+    def test_with_a_release_that_has_the_renodx_option_the_conflict_names_the_reinstall_and_not_apply(self):
+        self.with_option(space=50, layouts=50)
+        code, output = self.check()
+        self.assertEqual(code, 1)
+        failures = self.failures(output)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("run: flightsim-on-linux addon install atmospheremod", failures[0])
+        self.assertIn("--renodx", failures[0])
+        self.assertNotIn("addon apply renodx-hdr", failures[0])
+
+    def test_right_after_a_reinstall_with_renodx_it_passes_before_the_simulator_has_run(self):
+        self.with_option(space=51, layouts=50, offset=-10)
+        code, output = self.check()
+        self.assertEqual(code, 0, output)
+        self.assertEqual(lines(output), ["ok"] * 5)
+        self.assertIn("space 51, which RegisterSpace", output)
+
+    def test_a_missing_injection_setting_on_a_release_with_the_option_names_the_reinstall(self):
+        self.install_atmospheremod(ini=RESHADE_INI.replace("InjectGraphicsRootSignature=1\r\n", ""), version="0.7.1")
+        code, output = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("cannot tell what AtmosphereMod does", self.failures(output)[0])
+        self.assertIn("with: flightsim-on-linux addon install atmospheremod", self.failures(output)[0])
 
     def test_after_apply_the_same_machine_passes(self):
         self.official()
@@ -1159,8 +1275,32 @@ class PageTest(unittest.TestCase):
 
     def test_the_atmospheremod_page_gives_the_pinned_hash_and_the_licence_limits(self):
         text = self.page("atmospheremod")
-        self.assertIn("0d46acf43a8b363c1eb31f6054b443c8176f8c6053614c183478ba44b42bd7ac", text)
-        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.5.1/AtmosphereMod-0.5.1.zip", text)
+        self.assertIn("49a8aba9fd0b37cc1bb3b008cc537592a7d865edc7b5fca9feb7d54a1147b4d7", text)
+        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.1/AtmosphereMod-0.7.1.zip", text)
+
+    def test_the_atmospheremod_page_gives_the_measured_numbers_of_the_tested_release(self):
+        text = self.page("atmospheremod")
+        self.assertIn("Tested with AtmosphereMod 0.5.1 on 1 November 2026 and with 0.7.1 on 9 November 2026", text)
+        self.assertIn("0.7.1 patched 3079", text)
+        self.assertIn("registered 0.7.1.0", text)
+
+    def test_the_atmospheremod_page_lists_renodx_among_the_installer_arguments(self):
+        text = self.page("atmospheremod")
+        arguments = text[text.index("The arguments are the mod's own"): text.index("</ul>", text.index("The arguments are the mod's own"))]
+        self.assertIn("<code>--renodx</code>, only when a <code>renodx-*.addon64</code> is in the simulator's folder", arguments)
+
+    def test_the_renodx_page_makes_the_reinstall_with_renodx_the_way_and_the_injection_off_the_fallback(self):
+        text = self.page("renodx-hdr")
+        make_it_run = text[text.index("<h2>Make it run</h2>"): text.index("<h3>Why the two clash</h3>")]
+        self.assertIn("Install AtmosphereMod.cmd --renodx", make_it_run)
+        self.assertIn("flightsim-on-linux addon install atmospheremod\n", make_it_run)
+        self.assertNotIn("InjectGraphicsRootSignature=0", make_it_run)
+        self.assertLess(text.index("<h2>With AtmosphereMod older than 0.7.0</h2>"), text.index("<h2>Before 0.7.0: a private build</h2>"))
+
+    def test_the_renodx_page_gives_the_run_with_the_official_option(self):
+        text = self.page("renodx-hdr")
+        self.assertIn("AtmosphereMod: root parameters in register space 51 (installed with --renodx)", text)
+        self.assertIn("RenoDX: compatible, register space 51", text)
 
     def test_the_renodx_page_gives_the_nexus_page_and_the_hashes_of_the_tested_files(self):
         text = self.page("renodx-hdr")
