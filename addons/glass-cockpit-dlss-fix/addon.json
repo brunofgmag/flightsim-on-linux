@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases",
-    "paid": false,
     "kind": "native"
   }
 }

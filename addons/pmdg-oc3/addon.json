@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "PMDG's public update manifest, https://cdn.pmdg.com/oc3-client-releases/prod.yml; run: flightsim-on-linux addon launch pmdg-oc3 update, which downloads the installer, checks it and installs it",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

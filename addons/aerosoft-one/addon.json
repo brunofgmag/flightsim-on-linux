@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "Aerosoft's website: the Linux AppImage of Aerosoft One, not the Windows setup",
-    "paid": null,
     "kind": "native"
   }
 }

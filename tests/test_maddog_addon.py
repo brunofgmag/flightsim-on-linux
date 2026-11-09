@@ -195,7 +195,7 @@ class ShapeTest(MaddogCase):
     def test_the_manifest_is_complete(self):
         addon = addons.load(ADDON)
         self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.tested_on), ("maddog-md80", ["proton-fs2024", "simulator-closed"], "2.1 b283", "2026-10-22"))
-        self.assertEqual(addon.install, {"from": "https://www.flythemaddog.com", "paid": True, "kind": "installer"})
+        self.assertEqual(addon.install, {"from": "https://www.flythemaddog.com", "kind": "installer"})
         self.assertEqual([(entry["title"], entry["script"]) for entry in addon.shortcuts], [("Maddog Manager", "maddog-manager"), ("Maddog registration", "register")])
         self.assertTrue(addon.can_install)
         self.assertTrue(addon.touches_addon_files)

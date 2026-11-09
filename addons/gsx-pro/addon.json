@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "http://www.fsdreamteam.com",
-    "paid": true,
     "kind": "installer"
   },
   "shortcuts": [

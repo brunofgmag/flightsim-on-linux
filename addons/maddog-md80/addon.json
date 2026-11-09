@@ -10,7 +10,6 @@
   },
   "install": {
     "from": "https://www.flythemaddog.com",
-    "paid": true,
     "kind": "installer"
   },
   "shortcuts": [

@@ -163,7 +163,7 @@ class ShapeTest(unittest.TestCase):
         addon = addons.load(ATMOSPHERE)
         self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("atmospheremod", "0.7.1", "2026-11-09", ["simulator-closed"], False))
         self.assertEqual(addon.installed, {"sim": ["AtmosphereMod.addon64"]})
-        self.assertEqual((addon.install["kind"], addon.install["paid"], addon.install["own_prefix"]), ("native", False, True))
+        self.assertEqual((addon.install["kind"], addon.install["own_prefix"]), ("native", True))
         self.assertTrue(addon.can_install)
         self.assertFalse(addon.install_needs_file)
 
@@ -171,7 +171,7 @@ class ShapeTest(unittest.TestCase):
         addon = addons.load(RENODX)
         self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("renodx-hdr", "1", "2026-11-09", ["simulator-closed"], True))
         self.assertEqual(addon.installed, {"sim": ["renodx-msfs2024.addon64"]})
-        self.assertEqual((addon.install["kind"], addon.install["paid"]), ("installer", False))
+        self.assertEqual(addon.install["kind"], "installer")
         self.assertEqual(addon.install["from"], "https://www.nexusmods.com/microsoftflightsimulator2024/mods/26")
         self.assertTrue(addon.can_install)
         self.assertTrue(addon.install_needs_file)

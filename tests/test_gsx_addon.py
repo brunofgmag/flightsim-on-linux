@@ -462,7 +462,7 @@ class ShapeTest(GsxCase):
         addon = addons.load(ADDON)
         self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.tested_on), ("gsx-pro", ["proton-fs2024", "simulator-closed"], "4.0.23", "2026-10-17"))
         self.assertTrue(addon.touches_addon_files)
-        self.assertEqual(addon.install, {"from": "http://www.fsdreamteam.com", "paid": True, "kind": "installer"})
+        self.assertEqual(addon.install, {"from": "http://www.fsdreamteam.com", "kind": "installer"})
         self.assertEqual([shortcut["title"] for shortcut in addon.shortcuts], ["FSDT Installer"])
         self.assertIsNone(addon.watcher)
 

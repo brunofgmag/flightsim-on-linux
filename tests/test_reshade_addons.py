@@ -106,7 +106,6 @@ class ReShadeShapeTest(unittest.TestCase):
         self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.touches_addon_files), ("reshade", ["simulator-closed"], "6.8.0", False))
         self.assertEqual(addon.installed, {"sim": ["dxgi.dll"]})
         self.assertEqual(addon.install["kind"], "installer")
-        self.assertIs(addon.install["paid"], False)
         self.assertTrue(addon.can_install)
         self.assertEqual(addon.shortcuts, [])
 

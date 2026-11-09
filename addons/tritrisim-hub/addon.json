@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "TriTriSim's website: the TriTriSim Hub installer for Windows, an NSIS setup",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

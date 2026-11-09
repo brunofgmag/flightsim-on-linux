@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "your Just Flight account",
-    "paid": true,
     "kind": "installer"
   }
 }

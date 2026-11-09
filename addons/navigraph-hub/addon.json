@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "Navigraph's website: the Navigraph Hub installer for Windows",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

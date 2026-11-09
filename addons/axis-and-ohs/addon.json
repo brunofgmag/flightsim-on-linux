@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "Lorby's website, the Axis and Ohs installer for MSFS 2024",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

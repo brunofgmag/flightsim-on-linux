@@ -29,7 +29,7 @@
 <p class="lead">Tested with FlightSim Dispatch 1.5.0.2 on 17 October 2026. It comes as a zip, runs in a Wine prefix of its own and needs no fix.</p>
 
 <h2>Get it</h2>
-<p>FlightSim Dispatch is a database of real flights from the 1950s to today. You search by airport, airline, aircraft, duration and year to pick a real route to fly. The program's own window says it is distributed by flightsimdispatch.net. The file is <code>FlightSimDispatch.1.5.0.2.zip</code>, a PyInstaller and PyQt5 program with a 543 MB SQLite database, <code>FlightDB.db</code>, next to it. The price wasn't recorded.</p>
+<p>FlightSim Dispatch is a database of real flights from the 1950s to today. You search by airport, airline, aircraft, duration and year to pick a real route to fly. The program's own window says it is distributed by flightsimdispatch.net. The file is <code>FlightSimDispatch.1.5.0.2.zip</code>, a PyInstaller and PyQt5 program with a 543 MB SQLite database, <code>FlightDB.db</code>, next to it.</p>
 
 <h2>Install it</h2>
 <p>Install the <code>wine</code> package of your distribution first. The test machine used Wine 11.20 from Arch's <code>wine</code>. This add-on uses neither Proton nor the simulator's prefix. FlightSim Dispatch never talks to the simulator: on 17 October 2026, <code>strings -n 6 FlightSimDispatch.exe | grep -ci simconnect</code> printed 0, and the libraries packed into it are Python 3.14, Qt 5, OpenSSL and SQLite. So none of the simulator prefix's rules apply to it. Then give the zip to the CLI:</p>

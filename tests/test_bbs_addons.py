@@ -157,7 +157,6 @@ class NestShapeTest(NestCase):
         addon = addons.load(NEST)
         self.assertEqual((addon.id, addon.needs, addon.tested_version, addon.tested_on), ("bbs-nest", ["proton-fs2024"], "1.0.0.0", "2026-10-28"))
         self.assertEqual(addon.install["kind"], "installer")
-        self.assertIsNone(addon.install["paid"])
         self.assertEqual([(entry["title"], entry["script"], entry["close"]) for entry in addon.shortcuts], [("BBS Nest", "launch", "close")])
         self.assertIsNone(addon.watcher)
         self.assertTrue(addon.can_install)

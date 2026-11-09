@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "Orbx's website: the Windows installer of Orbx Central, not the Linux AppImage",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

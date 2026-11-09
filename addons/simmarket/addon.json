@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "simMarket's website: the Windows installer, a Squirrel package",
-    "paid": null,
     "kind": "installer"
   },
   "shortcuts": [

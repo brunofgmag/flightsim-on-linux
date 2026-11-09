@@ -423,7 +423,7 @@ class LaunchCase(unittest.TestCase):
 class ShapeTest(LaunchCase):
     def test_the_manifest_has_the_menu_entry_the_watcher_and_the_install_source(self):
         addon = addons.load(ADDON)
-        self.assertEqual(addon.install, {"from": "https://www.flightsimlabs.com/", "paid": None, "kind": "installer"})
+        self.assertEqual(addon.install, {"from": "https://www.flightsimlabs.com/", "kind": "installer"})
         self.assertEqual([shortcut["title"] for shortcut in addon.shortcuts], ["FSLabs Control Center"])
         self.assertEqual(addon.watcher["trigger"], {"aircraft": "FSLabs A3|fsl-a32x"})
         self.assertEqual((addon.watcher["stop"], addon.watcher["args"], addon.watcher["script"]), ("with_simulator_if_started", ["-NOTIFY"], "launch"))

@@ -216,7 +216,7 @@ INSTALL = '#!/bin/sh\necho "installer=$FSOL_INSTALLER"\necho "env=${NoDefaultCur
 LAUNCH = '#!/bin/sh\necho "$FSOL_ADDON|$FSOL_SIM_RUNNING|${NoDefaultCurrentDirectoryInExePath-unset}|$*" > "$FSOL_PREFIX/launched"\n'
 FULL = dict(
     SPEC,
-    install={"from": "https://example.org/demo", "paid": False, "kind": "installer"},
+    install={"from": "https://example.org/demo", "kind": "installer"},
     shortcuts=[{"title": "Demo", "script": "launch", "args": ["--minimized"], "close": "close", "mime": ["x-scheme-handler/demo"], "icon": {"place": "prefix", "glob": "drive_c/demo.exe"}}],
     watcher={"app": r"^C:.*\\Demo\.exe", "args": ["-autostart"], "grace": 20, "poll": 8, "stop": "with_simulator", "wait_for": {"process": "couatl", "timeout": 300}, "health": {"listening": 8651}},
 )
@@ -278,7 +278,7 @@ class OptionalFieldsTest(OptionalCase):
 
     def test_native_and_manual_installs_need_no_file(self):
         for kind, needs in (("installer", True), ("store", True), ("native", False), ("manual", False)):
-            spec = dict(SPEC, install={"from": "somewhere", "paid": None, "kind": kind})
+            spec = dict(SPEC, install={"from": "somewhere", "kind": kind})
             self.assertEqual(addons.load(self.addon(spec=spec)).install_needs_file, needs, kind)
 
     def test_every_problem_in_the_new_fields_is_named(self):
@@ -292,7 +292,7 @@ class OptionalFieldsTest(OptionalCase):
             addons.load(self.addon(spec=spec))
         message = str(raised.exception)
         for expected in (
-            "install.from must say where", "install.kind must be one of", "install.paid must be true, false or null", "unknown install field 'extra'",
+            "install.from must say where", "install.kind must be one of", "unknown install field 'paid'", "unknown install field 'extra'",
             "shortcuts[0].title must be a one-line string", "shortcuts[0].script 'ghost' is missing or not executable", "shortcuts[0].args must be a list of strings",
             "shortcuts[0].icon must be", "shortcuts[0].close 'gone' is missing or not executable", "shortcuts[0].mime must be a list of strings", "unknown field 'extra' in shortcuts[0]",
             "shortcuts[1] must be an object",
@@ -457,19 +457,13 @@ class InstallTest(OptionalCase):
         self.full()
         code, output = self.cli("addon", "install", "demo")
         self.assertEqual(code, 0)
-        self.assertEqual(output.splitlines(), ["Demo Add-on", "  get it from: https://example.org/demo (free)", "  kind: installer", "  then run: flightsim-on-linux addon install demo <the file you downloaded>"])
+        self.assertEqual(output.splitlines(), ["Demo Add-on", "  get it from: https://example.org/demo", "  kind: installer", "  then run: flightsim-on-linux addon install demo <the file you downloaded>"])
         self.assertFalse((self.fake.prefix / "installed").exists())
 
-    def test_the_price_is_said_only_when_known(self):
-        for paid, text in ((True, "(paid)"), (None, "")):
-            self.full(spec=dict(FULL, install={"from": "https://example.org/demo", "paid": paid, "kind": "installer"}))
-            _, output = self.cli("addon", "install", "demo")
-            self.assertIn(f"  get it from: https://example.org/demo{' ' + text if text else ''}\n", output)
-
     def test_an_addon_with_no_install_script_just_says_where_to_get_it(self):
-        self.full(spec=dict(SPEC, install={"from": "the store", "paid": True, "kind": "store"}), install=None)
+        self.full(spec=dict(SPEC, install={"from": "the store", "kind": "store"}), install=None)
         code, output = self.cli("addon", "install", "demo")
-        self.assertEqual((code, output.splitlines()[1:]), (0, ["  get it from: the store (paid)", "  kind: store"]))
+        self.assertEqual((code, output.splitlines()[1:]), (0, ["  get it from: the store", "  kind: store"]))
 
     def test_a_file_goes_to_the_install_script_as_an_absolute_path_with_the_wine_trap_removed(self):
         self.full()
@@ -504,7 +498,7 @@ class InstallTest(OptionalCase):
         self.assertFalse((self.fake.prefix / "installed").exists())
 
     def test_an_add_on_with_a_prefix_of_its_own_installs_while_the_simulators_prefix_is_busy(self):
-        self.full(spec=dict(FULL, install={"from": "https://example.org/demo", "paid": None, "kind": "installer", "own_prefix": True}))
+        self.full(spec=dict(FULL, install={"from": "https://example.org/demo", "kind": "installer", "own_prefix": True}))
         setup = Path(self.temp.name) / "Setup.exe"
         write(setup, "MZ")
         self.fake.run_wineserver(self.fake.prefix, 0)
@@ -549,7 +543,7 @@ class InstallTest(OptionalCase):
         self.assertNotIn("next:", output)
 
     def test_a_native_install_script_runs_without_a_file(self):
-        self.full(spec=dict(FULL, install={"from": "pip", "paid": False, "kind": "native"}), install='#!/bin/sh\necho "file=[${FSOL_INSTALLER-none}]"\n')
+        self.full(spec=dict(FULL, install={"from": "pip", "kind": "native"}), install='#!/bin/sh\necho "file=[${FSOL_INSTALLER-none}]"\n')
         code, output = self.cli_all("addon", "install", "demo")[:2]
         self.assertEqual(code, 0)
         self.assertIn("  file=[none]", output)
@@ -567,7 +561,7 @@ class InstallTest(OptionalCase):
         self.assertEqual((code, "is not a file" in err), (2, True))
 
     def test_a_file_for_an_addon_with_no_install_script_is_refused(self):
-        self.full(spec=dict(SPEC, install={"from": "the store", "paid": True, "kind": "store"}), install=None)
+        self.full(spec=dict(SPEC, install={"from": "the store", "kind": "store"}), install=None)
         code, _, err = self.cli_all("addon", "install", "demo", str(Path(self.temp.name) / "Setup.exe"))
         self.assertEqual((code, "has no install script" in err), (2, True))
 

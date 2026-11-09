@@ -9,7 +9,6 @@
   },
   "install": {
     "from": "your vendor account (rkApps)",
-    "paid": null,
     "kind": "installer"
   }
 }

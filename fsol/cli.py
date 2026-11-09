@@ -230,8 +230,7 @@ def source_lines(addon):
     info = addon.install
     if not info:
         return []
-    cost = {True: " (paid)", False: " (free)"}.get(info.get("paid"), "")
-    return [f"  get it from: {info['from']}{cost}", f"  kind: {info['kind']}"]
+    return [f"  get it from: {info['from']}", f"  kind: {info['kind']}"]
 
 
 def prefix_reasons(found):

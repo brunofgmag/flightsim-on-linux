@@ -84,7 +84,7 @@ class MfgShapeTest(unittest.TestCase):
         self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.0", "2026-11-05", True))
         self.assertEqual(addon.needs, ["simulator-closed"])
         self.assertEqual(addon.installed, {"sim": ["version.dll"]})
-        self.assertEqual(addon.install, {"from": "https://github.com/dashdogy/MFG-Unlocker/releases", "paid": False, "kind": "native"})
+        self.assertEqual(addon.install, {"from": "https://github.com/dashdogy/MFG-Unlocker/releases", "kind": "native"})
         self.assertTrue(addon.can_install)
         self.assertFalse(addon.install_needs_file)
 
