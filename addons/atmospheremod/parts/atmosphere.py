@@ -8,6 +8,8 @@ RESHADE_DLL = "dxgi.dll"
 RESHADE_INI = "ReShade.ini"
 RESHADE_LOG = "ReShade.log"
 SECTION = "ATMOSPHEREMOD"
+SPACE_KEY = "RegisterSpace"
+DEFAULT_SPACE = 50
 PATHS = ("DataPath", "TunablesPath")
 RECORD = "install.json"
 SHADER_PACK = "SHADERSPAK.*.SM6.PC.PAK"
@@ -145,6 +147,17 @@ def pack_line(sim, record):
     return line(recorded == pack, f"the shaders were patched from {pack}, the shader pack the simulator has now", f"the simulator was updated: its shader pack is {pack} and the shaders were patched from {recorded}; run the install again")
 
 
+def space_lines(sim, record):
+    patched = record.get("register_space")
+    text = read_text(Path(sim) / RESHADE_INI)
+    if patched is None or text is None or section_bounds(text.splitlines(), SECTION)[0] is None:
+        return []
+    value = read_value(text, SECTION, SPACE_KEY)
+    used = str(DEFAULT_SPACE) if value is None else value
+    setting = f"no {SPACE_KEY}, which means space {DEFAULT_SPACE}," if value is None else f"{SPACE_KEY}={value}"
+    return [line(used == str(patched), f"the shaders were patched for register space {patched}, and [{SECTION}] in {RESHADE_INI} has {setting} for the add-on to match", f"the shaders were patched for register space {patched}, but [{SECTION}] in {RESHADE_INI} has {setting}, so the add-on looks in another space and the simulator keeps its own shaders; run: {INSTALL}")]
+
+
 def log_line(sim, prefix):
     text = read_text(Path(sim) / RESHADE_LOG)
     since = installed_at(sim, prefix)
@@ -163,6 +176,7 @@ def check_lines(sim, prefix):
     lines = presence_lines(sim) + [settings_line(sim)] + record_lines(record, prefix)
     if record is not None:
         lines.append(pack_line(sim, record))
+        lines += space_lines(sim, record)
     return lines + log_line(sim, prefix)
 
 
