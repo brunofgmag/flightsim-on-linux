@@ -136,12 +136,15 @@ class MachineCase(unittest.TestCase):
         (self.sim / "ReShade.ini").write_bytes(text.encode())
         at(self.sim / "ReShade.ini", 0)
 
-    def install_atmospheremod(self, ini=RESHADE_INI, patched=3, failed=0, pack=PACK, version="0.5.1"):
+    def install_atmospheremod(self, ini=RESHADE_INI, patched=3, failed=0, pack=PACK, version="0.5.1", register_space=None):
         write(self.sim / "AtmosphereMod.addon64", "MZ AtmosphereMod")
         self.write_ini(ini)
         for number in range(patched):
             write(self.data / "shaders" / f"{number:08x}.cso", "DXIL")
-        write(self.data / "install.json", json.dumps({"version": version, "pak": pack, "patched": patched, "failed": failed}))
+        record = {"version": version, "pak": pack, "patched": patched, "failed": failed}
+        if register_space is not None:
+            record["register_space"] = register_space
+        write(self.data / "install.json", json.dumps(record))
         write(self.sim / "Shaders" / pack, "pack")
         for path in (self.sim / "AtmosphereMod.addon64", self.data / "install.json", self.sim / "Shaders" / pack):
             at(path, 0)
@@ -234,6 +237,49 @@ class AtmosphereCheckTest(MachineCase):
         result = self.script("check")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(lines(result.stdout), ["ok"] * 6)
+
+    def with_space(self, patched, setting):
+        ini = RESHADE_INI if setting is None else RESHADE_INI.replace("TunablesPath=", f"RegisterSpace={setting}\r\nTunablesPath=")
+        self.install_atmospheremod(ini=ini, version="0.7.1", register_space=patched)
+
+    def test_a_release_that_records_its_space_gets_a_seventh_line_when_the_ini_matches(self):
+        self.with_space(51, "51")
+        result = self.script("check")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(lines(result.stdout), ["ok"] * 7)
+        self.assertIn("patched for register space 51, and [ATMOSPHEREMOD] in ReShade.ini has RegisterSpace=51", result.stdout)
+
+    def test_a_registerspace_other_than_the_patched_one_fails_alone_and_says_to_install_again(self):
+        self.with_space(51, "50")
+        result = self.script("check")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(len(self.failures(result)), 1)
+        self.assertIn("patched for register space 51, but [ATMOSPHEREMOD] in ReShade.ini has RegisterSpace=50", self.failures(result)[0])
+        self.assertIn("addon install atmospheremod", self.failures(result)[0])
+
+    def test_no_registerspace_means_50_so_it_passes_for_shaders_patched_in_50_and_fails_for_51(self):
+        self.with_space(50, None)
+        self.assertEqual(self.script("check").returncode, 0)
+        self.with_space(51, None)
+        result = self.script("check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("has no RegisterSpace, which means space 50,", self.failures(result)[0])
+
+    def test_a_registerspace_that_is_not_a_number_fails(self):
+        self.with_space(51, "fifty-one")
+        self.assertEqual(self.script("check").returncode, 1)
+
+    def test_a_registerspace_in_another_section_does_not_count(self):
+        self.with_space(51, None)
+        self.write_ini(RESHADE_INI.replace("[OVERLAY]", "[GENERAL2]\r\nRegisterSpace=51\r\n\r\n[OVERLAY]"))
+        self.assertEqual(self.script("check").returncode, 1)
+
+    def test_an_ini_without_the_section_fails_once_on_the_section_and_not_again_on_the_space(self):
+        self.with_space(51, "51")
+        self.write_ini("[GENERAL]\r\nEffectSearchPaths=.\r\n")
+        result = self.script("check")
+        self.assertEqual(len(self.failures(result)), 1)
+        self.assertNotIn("register space", result.stdout)
 
     def test_without_reshade_it_fails_and_says_to_install_it(self):
         (self.sim / "dxgi.dll").unlink()
@@ -1310,7 +1356,7 @@ class PageTest(unittest.TestCase):
 
     def test_the_check_line_counts_on_the_pages_match_what_the_checks_print(self):
         self.assertIn("It prints six lines", self.page("atmospheremod"))
-        self.assertIn("a seventh once", self.page("atmospheremod"))
+        self.assertIn("A release from 0.7.0 on adds a line about the register space, and a log to read adds one more", self.page("atmospheremod"))
         self.assertIn("five lines", self.page("renodx-hdr"))
 
 
