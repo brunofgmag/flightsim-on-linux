@@ -161,7 +161,7 @@ class MachineCase(unittest.TestCase):
 class ShapeTest(unittest.TestCase):
     def test_atmospheremod_is_a_downloaded_install_that_runs_in_a_prefix_of_its_own(self):
         addon = addons.load(ATMOSPHERE)
-        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("atmospheremod", "0.7.1", "2026-11-09", ["simulator-closed"], False))
+        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.needs, addon.touches_addon_files), ("atmospheremod", "0.7.2", "2026-11-12", ["simulator-closed"], False))
         self.assertEqual(addon.installed, {"sim": ["AtmosphereMod.addon64"]})
         self.assertEqual((addon.install["kind"], addon.install["own_prefix"]), ("native", True))
         self.assertTrue(addon.can_install)
@@ -187,9 +187,9 @@ class ShapeTest(unittest.TestCase):
 
     def test_the_pinned_download_is_the_public_release_asset(self):
         text = (ATMOSPHERE / "parts" / "atmospheremod.sh").read_text()
-        self.assertIn('ATMOSPHEREMOD_VERSION="0.7.1"', text)
+        self.assertIn('ATMOSPHEREMOD_VERSION="0.7.2"', text)
         self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v$ATMOSPHEREMOD_VERSION/AtmosphereMod-$ATMOSPHEREMOD_VERSION.zip", text)
-        self.assertIn('ATMOSPHEREMOD_SHA256="49a8aba9fd0b37cc1bb3b008cc537592a7d865edc7b5fca9feb7d54a1147b4d7"', text)
+        self.assertIn('ATMOSPHEREMOD_SHA256="6d916cab5c7331708911b63286547452991ed0456d70883d7ef249efa937a118"', text)
 
     def test_the_renodx_file_that_was_tested_is_pinned_by_its_hash(self):
         text = (RENODX / "parts" / "renodx.py").read_text()
@@ -642,7 +642,7 @@ class AtmosphereInstallScriptTest(MachineCase):
     def test_it_downloads_the_pinned_url_and_runs_nothing_when_the_hash_differs(self):
         result = self.script("install")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.1/AtmosphereMod-0.7.1.zip", self.log.read_text())
+        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.2/AtmosphereMod-0.7.2.zip", self.log.read_text())
         self.assertIn("nothing was run", result.stderr)
         self.assertEqual(list((self.root / "cache" / "downloads").iterdir()), [])
 
@@ -686,13 +686,13 @@ class AtmosphereUndoScriptTest(MachineCase):
         write(self.sim / "AtmosphereMod.addon64", "MZ")
         result = self.script("undo")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("AtmosphereMod-0.7.1.zip", self.log.read_text())
+        self.assertIn("AtmosphereMod-0.7.2.zip", self.log.read_text())
 
     def test_a_link_in_community_alone_counts_as_installed(self):
         (self.community / "atmospheremod-weather").symlink_to(self.root / "gone")
         result = self.script("undo")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("AtmosphereMod-0.7.1.zip", self.log.read_text())
+        self.assertIn("AtmosphereMod-0.7.2.zip", self.log.read_text())
 
 
 class RenoDXCase(MachineCase):
@@ -1321,14 +1321,14 @@ class PageTest(unittest.TestCase):
 
     def test_the_atmospheremod_page_gives_the_pinned_hash_and_the_licence_limits(self):
         text = self.page("atmospheremod")
-        self.assertIn("49a8aba9fd0b37cc1bb3b008cc537592a7d865edc7b5fca9feb7d54a1147b4d7", text)
-        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.1/AtmosphereMod-0.7.1.zip", text)
+        self.assertIn("6d916cab5c7331708911b63286547452991ed0456d70883d7ef249efa937a118", text)
+        self.assertIn("https://github.com/tomwhoca/AtmosphereMod/releases/download/v0.7.2/AtmosphereMod-0.7.2.zip", text)
 
     def test_the_atmospheremod_page_gives_the_measured_numbers_of_the_tested_release(self):
         text = self.page("atmospheremod")
-        self.assertIn("Tested with AtmosphereMod 0.5.1 on 1 November 2026 and with 0.7.1 on 9 November 2026", text)
-        self.assertIn("0.7.1 patched 3079", text)
-        self.assertIn("registered 0.7.1.0", text)
+        self.assertIn("Tested with AtmosphereMod 0.5.1 on 1 November 2026, with 0.7.1 on 9 November 2026 and with 0.7.2 on 12 November 2026", text)
+        self.assertIn("0.7.2 patched 3079", text)
+        self.assertIn("registered 0.7.2.0", text)
 
     def test_the_atmospheremod_page_lists_renodx_among_the_installer_arguments(self):
         text = self.page("atmospheremod")
