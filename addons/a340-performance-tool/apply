@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo "already nothing to apply: the tool works one flight at a time; turn it on before a flight with: flightsim-on-linux addon launch a340-performance-tool on"
