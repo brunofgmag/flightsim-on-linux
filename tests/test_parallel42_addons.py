@@ -439,7 +439,8 @@ class ManagerLaunchTest(P42Case):
         self.install_package(MANAGER_REL)
         self.chaseplane("launch")
         log = self.cache / "logs/chaseplane.log"
-        self.assertTrue(self.wait_for(log.exists))
+        self.assertTrue(self.wait_for(lambda: any(line.startswith("protontricks") for line in self.recorded())))
+        self.assertTrue(log.exists())
         self.assertEqual(oct(log.stat().st_mode & 0o777), "0o600")
 
 
