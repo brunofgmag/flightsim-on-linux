@@ -30,10 +30,17 @@ fetch_probe() {
   echo "$target"
 }
 
-run_wine_wayland() {
+run_wine_with_libraries() {
   local inner="LD_LIBRARY_PATH=\"\$1\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"; shift; export LD_LIBRARY_PATH; exec \"\$@\""
-  timeout 120 env -u DISPLAY "${RUNNER[@]}" sh -c "$inner" sh \
+  timeout 120 "${RUNNER[@]}" sh -c "$inner" sh \
     "$TOOL/files/lib/x86_64-linux-gnu:$TOOL/files/lib/i386-linux-gnu" "$TOOL/files/bin/wine" "$@" 2> /dev/null | tr -d '\r'
+}
+
+run_wine_wayland() {
+  (
+    unset DISPLAY
+    run_wine_with_libraries "$@"
+  )
 }
 
 wayland_socket() {
@@ -312,6 +319,10 @@ report_windows_program 'ntdll leaves readable memory after every heap block (Axi
   heap-read-slack-test.exe
 report_windows_program 'ntdll stops walking a free list of blocks that are too small (simulator stopping once a second with the FSLabs A321)' \
   heap-free-list-scan-test.exe
+status=0
+output="$(run_wine_with_libraries "$(windows_path "$WORK/mp3dmod-mpeg2-frames-test.exe")")" || status=$?
+[ "$status" -eq 0 ] && verdict=ok || verdict=FAIL
+report 'mp3dmod decodes every frame of an MPEG-2.5 Layer III file (SayIntentions.AI controller and copilot voices playing as silence)' "$verdict" "${output:-no output}"
 
 name="reading another process after an EPERM leaves its main thread running (stutter with ChasePlane)"
 if [ "$(cat /proc/sys/kernel/yama/ptrace_scope 2> /dev/null)" = 1 ]; then
@@ -508,7 +519,7 @@ fi
 run_hdr_output_test() {
   local -x WINEDLLOVERRIDES="$WINEDLLOVERRIDES;d3d11,d3d10core,dxgi,d3d12,d3d12core=n"
   local -x DXVK_LOG_PATH=none DXVK_FILTER_DEVICE_NAME="$GPU" WINE_USE_EGL=1 DXVK_CONFIG="" DXVK_HDR="" DXVK_NO_HDR=""
-  run_wine_wayland "$(windows_path "$WORK/dxgi-hdr-output-test.exe")"
+  run_wine_with_libraries "$(windows_path "$WORK/dxgi-hdr-output-test.exe")"
 }
 
 name="DXVK dxgi reports HDR10 on every output Wine sees in HDR (simulator HDR option)"

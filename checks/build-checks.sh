@@ -48,6 +48,7 @@ x86_64-w64-mingw32-gcc -O2 -o "$OUT/bcrypt-pbkdf2-alg-handle-test.exe" "$HERE/sr
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/ncrypt-ecdh-p256-test.exe" "$HERE/src/ncrypt-ecdh-p256-test.c" -lncrypt -lbcrypt
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/ncrypt-ecdsa-p256-test.exe" "$HERE/src/ncrypt-ecdsa-p256-test.c" -lncrypt -lbcrypt
 x86_64-w64-mingw32-gcc -O2 -o "$OUT/expand-cabinet-filter-test.exe" "$HERE/src/expand-cabinet-filter-test.c" -lcabinet
+x86_64-w64-mingw32-gcc -O2 -o "$OUT/mp3dmod-mpeg2-frames-test.exe" "$HERE/src/mp3dmod-mpeg2-frames-test.c" -lmfplat -lmfreadwrite -lmfuuid -lole32
 if pkg-config --exists libei-1.0 libsystemd; then
   read -r -a EIS_FLAGS < <(pkg-config --cflags --libs libei-1.0 libsystemd)
   gcc -O2 -Wall -o "$OUT/eis-pointer" "$HERE/src/eis-pointer.c" "${EIS_FLAGS[@]}"
