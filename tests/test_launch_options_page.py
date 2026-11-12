@@ -116,13 +116,12 @@ class LaunchOptionsPageTest(unittest.TestCase):
             self.assertIn(needed, text)
         self.assertNotIn("foreground window when another window takes the focus", text)
 
-    def test_vkd3d_config_and_the_rebar_preference_are_gone_from_the_page_and_every_profile(self):
-        for gone in ("VKD3D_CONFIG", "no_upload_hvv", "no_gpu_upload_heap", "ReBAR"):
-            self.assertNotIn(gone, self.text)
-        for heading, line in profile_lines(self.text).items():
-            self.assertNotIn("VKD3D_CONFIG", line, heading)
-        for other in (*PAGES.glob("*.html"), ROOT / "site" / "llms.txt"):
-            self.assertNotIn("VKD3D_CONFIG", other.read_text(), other.name)
+    def test_rebar_off_is_a_preference_with_the_egll_measurement_and_its_cost(self):
+        rebar = subsection(section(self.text, "Preferences"), "ReBAR off for the simulator")
+        for words in ("VKD3D_CONFIG=no_upload_hvv,no_gpu_upload_heap", "EGLL", "13,600 MB", "15 GB", "GPU performance"):
+            self.assertIn(words, rebar)
+        lines = profile_lines(self.text)
+        self.assertEqual({heading for heading, line in lines.items() if "VKD3D_CONFIG" in line}, {"All of it together, for a machine like the test machine"})
 
     def test_the_owners_extras_are_optional_preferences_with_their_reasons(self):
         preferences = section(self.text, "Preferences")
