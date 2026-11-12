@@ -12,6 +12,7 @@ NAV = (
     ("index.html", "Home"),
     ("start.html", "Start here"),
     ("proton-fs2024.html", "Proton FS2024"),
+    ("launch-options.html", "Launch options"),
     ("rules.html", "Ground rules"),
     ("addons.html", "Add-ons"),
     ("installers.html", "Installing add-ons"),

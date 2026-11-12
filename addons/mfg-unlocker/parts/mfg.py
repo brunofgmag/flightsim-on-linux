@@ -17,22 +17,32 @@ ROOT = PARTS.parents[2]
 sys.path.insert(0, str(ROOT))
 machine = importlib.import_module("fsol.machine")
 
+RELEASE = "1.7.1-xmx.1"
 PROXY = "version.dll"
+PROXY_SHA256 = "6a606ef333ad5764b5b379b1486ef10ecf81654d1139a5267812a2ae3af1d001"
 ARCHIVE_MEMBER = "MFGUnlocker.dll"
+XESS_FOLDER = "RTXMFG-XeSS"
+XESS_SDK = "XeSS SDK 3.0.2"
+XESS_SDK_FOLDER = "bin"
+XESS_FILES = {
+    "libxess_fg.dll": "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27",
+    "libxell.dll": "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7",
+}
 CONFIG = "RTXMFG-Universal.json"
 BACKUP_NAME = f"{CONFIG}.orig"
-WANTED = {"followGame": False, "mode": "fixed"}
+WANTED = {"followGame": False, "mode": "fixed", "xmx": 1, "xmxXell": 1}
 NVIDIA = "10de"
 ADA = re.compile(r"\bRTX\s*40\d0\b|\bAda\b", re.IGNORECASE)
 LOG_GLOB = "RTXMFG-*.log"
 LOG_PROOFS = (
     ("capability=8.9 verified=1", "the mod found the RTX 40 GPU through CUDA", "the mod did not find the RTX 40 GPU through CUDA; check that PROTON_NVIDIA_NVCUDA=1 is in the launch options and start the simulator again"),
-    ("MFG_PROXY_UI state=active", "the mod's menu installed", "the mod's menu did not install; the patched version.dll has to be the one that loaded, and the simulator has to have started since it was installed"),
+    ("MFG_PROXY_UI state=active", "the mod's menu installed", "the mod's menu did not install; the fork's version.dll has to be the one that loaded, and the simulator has to have started since it was installed"),
+    ("XMX runtime ", f"the mod loaded Intel's two libraries from {XESS_FOLDER}", f"the mod did not load Intel's two libraries from {XESS_FOLDER}; check that both files are there and start the simulator again"),
 )
 GENERATED = ("RTXMFG-*", "RTX40MFG-UI*.ini")
 APPLY = "flightsim-on-linux addon apply mfg-unlocker"
 INSTALL = "flightsim-on-linux addon install mfg-unlocker"
-USAGE = "usage: mfg.py install <simulator folder> <zip> <zip sha256> | apply <simulator folder> <Steam folder> <backup folder> | check <simulator folder> <Steam folder> | undo <simulator folder> <backup folder>"
+USAGE = "usage: mfg.py install <simulator folder> <zip> <zip sha256> <XeSS SDK zip> <SDK sha256> | apply <simulator folder> <Steam folder> <backup folder> | check <simulator folder> <Steam folder> | undo <simulator folder> <backup folder>"
 
 
 def discrete_module():
@@ -45,7 +55,7 @@ def discrete_module():
 discrete = discrete_module()
 
 
-class PatchError(Exception):
+class InstallError(Exception):
     pass
 
 
@@ -56,99 +66,105 @@ class LaunchPart(NamedTuple):
     holds: Callable[[dict], bool]
 
 
+class Artifact(NamedTuple):
+    name: str
+    path: Path
+    sha256: str
+    label: str
+
+
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def load_table():
-    return json.loads((PARTS / "patches.json").read_text())
+def artifacts(sim):
+    proxy = Artifact(PROXY, Path(sim) / PROXY, PROXY_SHA256, f"the MFG Unlocker fork {RELEASE}")
+    runtime = [Artifact(f"{XESS_FOLDER}/{name}", Path(sim) / XESS_FOLDER / name, digest, f"Intel's {name} from the {XESS_SDK}") for name, digest in XESS_FILES.items()]
+    return proxy, runtime
 
 
-def table_runs(table):
-    return [(int(run["offset"], 16), bytes.fromhex(run["original"]), bytes.fromhex(run["patched"])) for patch in table["patches"] for run in patch["runs"]]
-
-
-def patch_image(data, table):
-    digest = sha256(data)
-    if digest != table["input_sha256"]:
-        raise PatchError(f"the DLL has sha256 {digest}, not the {table['input_sha256']} this patch table was made for")
-    runs = table_runs(table)
-    for offset, original, _ in runs:
-        if data[offset:offset + len(original)] != original:
-            raise PatchError(f"the bytes at offset {offset:#x} are not the ones this patch table expects")
-    image = bytearray(data)
-    for offset, _, patched in runs:
-        image[offset:offset + len(patched)] = patched
-    result = sha256(image)
-    if result != table["output_sha256"]:
-        raise PatchError(f"the patched DLL has sha256 {result}, not the {table['output_sha256']} the patch table promises")
-    return bytes(image)
-
-
-def proxy_state(sim, table=None):
-    path = Path(sim) / PROXY
-    if not path.is_file():
+def artifact_state(artifact):
+    if not artifact.path.is_file():
         return "absent", None
-    digest = sha256(path.read_bytes())
-    return ("ours" if digest == (table or load_table())["output_sha256"] else "foreign"), digest
+    digest = sha256(artifact.path.read_bytes())
+    return ("ours" if digest == artifact.sha256 else "foreign"), digest
 
 
-def proxy_problem(sim, table=None):
-    state, digest = proxy_state(sim, table)
+def artifact_problem(artifact):
+    state, digest = artifact_state(artifact)
     if state == "absent":
-        return f"{PROXY} is not in the simulator folder; run: {INSTALL}"
+        return f"{artifact.path} is not there; run: {INSTALL}"
     if state == "foreign":
-        return f"{Path(sim) / PROXY} is not the patched MFG Unlocker (sha256 {digest}); another mod may use that name, and {INSTALL} does not overwrite it"
+        return f"{artifact.path} is not {artifact.label} (sha256 {digest}); another mod may use that name, and {INSTALL} does not overwrite it"
     return None
 
 
-def archive_problem(archive, archive_sha):
+def installation_problem(sim):
+    proxy, runtime = artifacts(sim)
+    return next(filter(None, map(artifact_problem, [proxy, *runtime])), None)
+
+
+def archive_problem(archive, archive_sha, source=""):
     try:
         archive_bytes = Path(archive).read_bytes()
     except OSError as error:
         return f"cannot read {archive}: {error}"
     if sha256(archive_bytes) != archive_sha:
-        return f"{archive} is not the release this add-on was tested with (sha256 {archive_sha}); nothing was installed"
+        return f"{archive} is not the release this add-on was tested with ({source}sha256 {archive_sha}); nothing was installed"
     return None
 
 
-def patched_image(archive, table):
+def archive_member(archive, member, wanted_sha):
     try:
         with zipfile.ZipFile(archive) as bundle:
-            return patch_image(bundle.read(ARCHIVE_MEMBER), table)
-    except (zipfile.BadZipFile, KeyError) as error:
-        raise PatchError(f"{ARCHIVE_MEMBER} cannot be read from the zip ({error!r})") from error
+            data = bundle.read(member)
+    except (zipfile.BadZipFile, KeyError, OSError) as error:
+        raise InstallError(f"{member} cannot be read from {archive} ({error!r})") from error
+    if sha256(data) != wanted_sha:
+        raise InstallError(f"{member} in {archive} has sha256 {sha256(data)}, not the {wanted_sha} this add-on was tested with")
+    return data
 
 
-def write_proxy(sim, image):
-    part = Path(sim) / f"{PROXY}.part"
-    part.write_bytes(image)
-    os.replace(part, Path(sim) / PROXY)
+def write_file(path, data):
+    part = path.with_name(f"{path.name}.part")
+    part.write_bytes(data)
+    os.replace(part, path)
 
 
-def install(archive, archive_sha, sim):
-    sim = Path(sim)
-    problem = archive_problem(archive, archive_sha)
+def foreign_files(targets):
+    states = [(target, *artifact_state(target)) for target in targets]
+    return [(target, digest) for target, state, digest in states if state == "foreign"]
+
+
+def images_to_write(archive, sdk, proxy, runtime):
+    wanted = [(proxy, archive, ARCHIVE_MEMBER)] + [(target, sdk, f"{XESS_SDK_FOLDER}/{target.path.name}") for target in runtime]
+    return [(target, archive_member(source, member, target.sha256)) for target, source, member in wanted if artifact_state(target)[0] == "absent"]
+
+
+def install(archive, archive_sha, sdk, sdk_sha, sim):
+    problem = archive_problem(archive, archive_sha) or archive_problem(sdk, sdk_sha, f"the {XESS_SDK}, ")
     if problem:
         print(problem, file=sys.stderr)
         return 1
-    table = load_table()
-    state, digest = proxy_state(sim, table)
-    if state == "foreign":
-        print(f"{sim / PROXY} is not the patched MFG Unlocker (sha256 {digest}); nothing was installed. Move it away first, if you want this one in its place", file=sys.stderr)
+    proxy, runtime = artifacts(sim)
+    for target, digest in foreign_files([proxy, *runtime]):
+        print(f"{target.path} is not {target.label} (sha256 {digest}); nothing was installed. Move it away first, if you want ours in its place", file=sys.stderr)
         return 1
-    if state == "ours":
-        print(f"the patched MFG Unlocker {table['release']} is already in {sim}; next: {APPLY}")
-        return 0
     try:
-        image = patched_image(archive, table)
-    except PatchError as error:
-        print(f"{archive} cannot be patched: {error}; nothing was installed", file=sys.stderr)
+        pending = images_to_write(archive, sdk, proxy, runtime)
+    except InstallError as error:
+        print(f"{error}; the files cannot be installed and nothing was installed", file=sys.stderr)
         return 1
-    write_proxy(sim, image)
-    if not (sim / "dxgi.dll").is_file():
+    if not pending:
+        print(f"the MFG Unlocker fork {RELEASE} and Intel's two XeSS files are already in {sim}; next: {APPLY}")
+        return 0
+    (Path(sim) / XESS_FOLDER).mkdir(exist_ok=True)
+    proxy_last = sorted(pending, key=lambda item: item[0] is proxy)
+    for target, image in proxy_last:
+        write_file(target.path, image)
+    if not (Path(sim) / "dxgi.dll").is_file():
         print("note: ReShade's dxgi.dll is not in the simulator folder, and this build was only tested with ReShade present")
-    print(f"the patched MFG Unlocker {table['release']} is in {sim} as {PROXY}; next: {APPLY}")
+    print(f"the MFG Unlocker fork {RELEASE} is in {sim} as {PROXY}, with Intel's libxess_fg.dll and libxell.dll in {XESS_FOLDER}; next: {APPLY}")
     return 0
 
 
@@ -189,12 +205,16 @@ def gpu_line():
     return passed(f"the GPU is {gpu.name}, an RTX 40 series card")
 
 
-def proxy_line(sim):
-    table = load_table()
-    problem = proxy_problem(sim, table)
+def artifact_line(artifact):
+    problem = artifact_problem(artifact)
     if problem:
         return failed(problem)
-    return passed(f"{PROXY} in the simulator folder is the patched MFG Unlocker {table['release']}")
+    return passed(f"{artifact.name} in the simulator folder is {artifact.label}")
+
+
+def installation_lines(sim):
+    proxy, runtime = artifacts(sim)
+    return [artifact_line(artifact) for artifact in [proxy, *runtime]]
 
 
 def environment_of(options):
@@ -223,8 +243,7 @@ def overrides_hold_version(value):
 LAUNCH_PARTS = (
     LaunchPart("WINEDLLOVERRIDES", 'WINEDLLOVERRIDES="version=n,b"', "without it Wine loads its builtin version.dll and never the mod", lambda env: overrides_hold_version(env.get("WINEDLLOVERRIDES", ""))),
     LaunchPart("PROTON_NVIDIA_NVCUDA", "PROTON_NVIDIA_NVCUDA=1", "without it the mod finds no RTX 40 GPU, because it takes that route only when CUDA answers with compute capability 8.9", lambda env: env.get("PROTON_NVIDIA_NVCUDA") == "1"),
-    LaunchPart("PROTON_DLSS_UPGRADE", "PROTON_DLSS_UPGRADE=1", "without it Proton does not put the newest DLSS frame generation in the prefix, and that is the copy the mod patches", lambda env: env.get("PROTON_DLSS_UPGRADE") == "1"),
-    LaunchPart("ngx_dlss_fg_override", "ngx_dlss_fg_override=on in DXVK_NVAPI_DRS_SETTINGS", "DLSS frame generation needs it, and that variable takes a comma-separated list, so add it to the one you have", lambda env: "ngx_dlss_fg_override=on" in env.get("DXVK_NVAPI_DRS_SETTINGS", "").split(",")),
+    LaunchPart("PROTON_DLSS_UPGRADE", "PROTON_DLSS_UPGRADE=1", "without it Proton does not put the newest DLSS frame generation in the prefix, and the mod was tested with that copy", lambda env: env.get("PROTON_DLSS_UPGRADE") == "1"),
 )
 
 
@@ -288,9 +307,13 @@ def with_keys(text, wanted):
     return edited
 
 
+def is_number(value, wanted=None):
+    return isinstance(value, int) and not isinstance(value, bool) and (wanted is None or value == wanted)
+
+
 def multiplier_suffix(data):
     multiplier = data.get("multiplier")
-    if isinstance(multiplier, int) and not isinstance(multiplier, bool):
+    if is_number(multiplier):
         return f", at {multiplier}x"
     return ""
 
@@ -313,6 +336,16 @@ def config_lines(sim):
             data.get("mode") == "fixed",
             f'"mode" is "fixed" in {CONFIG}{multiplier_suffix(data)}',
             f'"mode" is {json.dumps(data.get("mode"))} in {CONFIG}, and the mod generates frames in the simulator only in fixed mode; run: {APPLY}',
+        ),
+        verdict(
+            is_number(data.get("xmx"), 1),
+            f'"xmx" is 1 in {CONFIG}: Intel\'s XeFG draws the generated frames',
+            f'"xmx" is {json.dumps(data.get("xmx"))} in {CONFIG}, so NVIDIA\'s generator makes the frames and Intel\'s XeFG is not used; run: {APPLY}',
+        ),
+        verdict(
+            is_number(data.get("xmxXell"), 1),
+            f'"xmxXell" is 1 in {CONFIG}: the game\'s Reflex sleep goes to XeLL',
+            f'"xmxXell" is {json.dumps(data.get("xmxXell"))} in {CONFIG}, so the game\'s Reflex sleep does not go to XeLL, and with VK_NV_low_latency2 on it took a 30 fps base down to about 23 fps on the test machine; run: {APPLY}',
         ),
     ]
 
@@ -352,7 +385,7 @@ def apply_config(sim, backup):
     backup_before_first_change(sim, backup)
     if edited != text:
         path.write_bytes(edited.encode("utf-8"))
-    print(f'"followGame" is false and "mode" is "fixed" in {CONFIG}; the multiplier is yours, in the mod\'s menu (Backspace) or in the "multiplier" key')
+    print(f'"followGame" is false, "mode" is "fixed", "xmx" is 1 and "xmxXell" is 1 in {CONFIG}; the multiplier is yours, in the mod\'s menu (Backspace) or in the "multiplier" key. "xmx" takes effect at the next start of the simulator')
     return 0
 
 
@@ -369,7 +402,7 @@ def report_launch_options(steam):
 
 
 def apply(sim, steam, backup):
-    problem = proxy_problem(sim)
+    problem = installation_problem(sim)
     if problem:
         print(problem, file=sys.stderr)
         return 1
@@ -379,25 +412,34 @@ def apply(sim, steam, backup):
 
 
 def check(sim, steam):
-    lines = [gpu_line(), proxy_line(sim)] + launch_lines(steam) + config_lines(sim) + log_lines(sim)
+    lines = [gpu_line()] + installation_lines(sim) + launch_lines(steam) + config_lines(sim) + log_lines(sim)
     for _, line in lines:
         print(line)
     return 0 if all(good for good, _ in lines) else 1
 
 
 def generated_files(sim):
-    return sorted({path.name for pattern in GENERATED for path in Path(sim).glob(pattern)})
+    return sorted({path.name for pattern in GENERATED for path in Path(sim).glob(pattern) if path.is_file()})
 
 
-def undo_proxy(sim):
-    state, digest = proxy_state(sim)
+def undo_artifact(artifact):
+    state, digest = artifact_state(artifact)
     if state == "ours":
-        (Path(sim) / PROXY).unlink()
-        print(f"{PROXY}, the patched MFG Unlocker, is removed from the simulator folder")
+        artifact.path.unlink()
+        print(f"{artifact.name}, {artifact.label}, is removed from the simulator folder")
     elif state == "foreign":
-        print(f"{Path(sim) / PROXY} is not the patched MFG Unlocker (sha256 {digest}), so it stays")
+        print(f"{artifact.path} is not {artifact.label} (sha256 {digest}), so it stays")
     else:
-        print(f"{PROXY} is not in the simulator folder")
+        print(f"{artifact.name} is not in the simulator folder")
+
+
+def undo_installation(sim):
+    proxy, runtime = artifacts(sim)
+    for artifact in [proxy, *runtime]:
+        undo_artifact(artifact)
+    folder = Path(sim) / XESS_FOLDER
+    if folder.is_dir() and not any(folder.iterdir()):
+        folder.rmdir()
 
 
 def undo_config(sim, backup):
@@ -411,7 +453,7 @@ def undo_config(sim, backup):
 
 
 def undo(sim, backup):
-    undo_proxy(sim)
+    undo_installation(sim)
     undo_config(sim, backup)
     left = generated_files(sim)
     if left:
@@ -421,7 +463,7 @@ def undo(sim, backup):
 
 
 def main(argv):
-    sizes = {"install": 4, "apply": 4, "check": 3, "undo": 3}
+    sizes = {"install": 6, "apply": 4, "check": 3, "undo": 3}
     if not argv or argv[0] not in sizes or len(argv) != sizes[argv[0]]:
         print(USAGE, file=sys.stderr)
         return 2
@@ -430,7 +472,7 @@ def main(argv):
         print("FAIL no simulator install folder found; run: flightsim-on-linux machine")
         return 1
     if action == "install":
-        return install(rest[0], rest[1], sim)
+        return install(rest[0], rest[1], rest[2], rest[3], sim)
     if action == "apply":
         return apply(sim, rest[0], rest[1])
     if action == "check":

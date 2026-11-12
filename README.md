@@ -33,7 +33,7 @@ git clone https://github.com/brunofgmag/flightsim-on-linux.git ~/flightsim-on-li
 
 `doctor` needs only Python 3. The build needs git, curl, a C toolchain with autoconf, flex, bison, perl, the MinGW-w64 C and C++ cross compilers, meson, ninja, glslang and widl; `doctor` lists what is missing. See [Start here](https://brunofgmag.github.io/flightsim-on-linux/start.html) for the full walk-through.
 
-Once Proton FS2024 is in place, each add-on goes in with `addon install <id> <installer>` and `addon apply <id>`. `addon shortcut <id>` adds its menu entry, and `addon watcher <id>` starts it with the simulator. The site has a page on [installing add-ons](https://brunofgmag.github.io/flightsim-on-linux/installers.html), one on [shortcuts and watchers](https://brunofgmag.github.io/flightsim-on-linux/shortcuts-and-watchers.html) and one for each add-on.
+Once Proton FS2024 is in place, each add-on goes in with `addon install <id> <installer>` and `addon apply <id>`. `addon shortcut <id>` adds its menu entry, and `addon watcher <id>` starts it with the simulator. The site has a page on [installing add-ons](https://brunofgmag.github.io/flightsim-on-linux/installers.html), one on [shortcuts and watchers](https://brunofgmag.github.io/flightsim-on-linux/shortcuts-and-watchers.html), one on the simulator's [launch options](https://brunofgmag.github.io/flightsim-on-linux/launch-options.html) and one for each add-on.
 
 ## Working on it
 

@@ -18,3 +18,15 @@ mfg_fetch() {
   fi
   mv "$file.part" "$file"
 }
+
+mfg_require() {
+  local file="$1" sha="$2"
+  if [ ! -f "$file" ]; then
+    echo "cannot read $file; nothing was installed" >&2
+    return 1
+  fi
+  if [ "$(mfg_sha256 "$file")" != "$sha" ]; then
+    echo "$file is not the release this add-on was tested with (sha256 $sha); nothing was installed" >&2
+    return 1
+  fi
+}
