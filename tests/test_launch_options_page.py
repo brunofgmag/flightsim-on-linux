@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PAGES = ROOT / "site" / "pages"
 PAGE = PAGES / "launch-options.html"
 SECTIONS = ["Where they go", "Needed by everyone", "When you see the problem", "By machine", "Preferences", "One line for each profile"]
-LEFT_OUT = ("VKD3D_FRAME_RATE", "QT_WAYLAND_DISABLE_WINDOWDECORATION", "Fastlaunch")
+OWNER_EXTRAS = ("VKD3D_FRAME_RATE=120", "QT_WAYLAND_DISABLE_WINDOWDECORATION=1", "-Fastlaunch")
 PRESET_M = "DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m"
 
 
@@ -116,17 +116,30 @@ class LaunchOptionsPageTest(unittest.TestCase):
             self.assertIn(needed, text)
         self.assertNotIn("foreground window when another window takes the focus", text)
 
-    def test_vkd3d_config_and_the_rebar_preference_are_gone_from_the_page_and_every_profile(self):
-        for gone in ("VKD3D_CONFIG", "no_upload_hvv", "no_gpu_upload_heap", "ReBAR"):
-            self.assertNotIn(gone, self.text)
-        for heading, line in profile_lines(self.text).items():
-            self.assertNotIn("VKD3D_CONFIG", line, heading)
-        for other in (*PAGES.glob("*.html"), ROOT / "site" / "llms.txt"):
-            self.assertNotIn("VKD3D_CONFIG", other.read_text(), other.name)
+    def test_rebar_off_is_a_preference_with_the_egll_measurement_and_its_cost(self):
+        rebar = subsection(section(self.text, "Preferences"), "ReBAR off for the simulator")
+        for words in ("VKD3D_CONFIG=no_upload_hvv,no_gpu_upload_heap", "EGLL", "13,600 MB", "15 GB", "GPU performance"):
+            self.assertIn(words, rebar)
+        lines = profile_lines(self.text)
+        self.assertEqual({heading for heading, line in lines.items() if "VKD3D_CONFIG" in line}, {"All of it together, for a machine like the test machine"})
 
-    def test_options_with_no_documented_reason_are_left_out(self):
-        for name in LEFT_OUT:
-            self.assertNotIn(name, self.text)
+    def test_the_owners_extras_are_optional_preferences_with_their_reasons(self):
+        preferences = section(self.text, "Preferences")
+        extras = subsection(preferences, "Three the owner uses, all optional")
+        for option in OWNER_EXTRAS:
+            self.assertIn(option, extras)
+        for reason in ("window decoration", "intro", "after <code>%command%</code>", "120"):
+            self.assertIn(reason, extras)
+        before = self.text.split("<h2>Preferences</h2>")[0]
+        for option in OWNER_EXTRAS:
+            self.assertNotIn(option, before)
+
+    def test_scskiller_is_optional_not_a_launch_option_and_not_yet_proven(self):
+        part = subsection(self.text, "Compiling shaders before you fly")
+        for words in ("SCSKiller", "optional", "isn't a launch option", "AppImage", "driver update", "__GL_0xcfcfa1=0"):
+            self.assertIn(words, part)
+        for heading, line in profile_lines(self.text).items():
+            self.assertNotIn("SCSKiller", line, heading)
 
     def test_it_names_nobody_and_nothing_personal(self):
         for name in ("Bruno", "brunom", "/home/", "Jogos"):
@@ -147,7 +160,7 @@ class LaunchOptionsPageTest(unittest.TestCase):
 
     def test_no_profile_has_the_frame_generation_preset_or_an_option_left_out(self):
         for heading, line in profile_lines(self.text).items():
-            for gone in ("fg_override", "render_preset_c", *LEFT_OUT, "VKD3D_DISABLE_EXTENSIONS"):
+            for gone in ("fg_override", "render_preset_c", *OWNER_EXTRAS, "VKD3D_DISABLE_EXTENSIONS"):
                 self.assertNotIn(gone, line, heading)
 
     def test_hdr_and_the_wayland_driver_are_only_in_the_profiles_that_ask_for_them(self):

@@ -72,6 +72,9 @@ Slice=games.slice</code></pre>
   <li><code>VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX</code>, only if the picture tears with V-Sync on. It needs a Wayland window and a driver that offers MAILBOX for it.</li>
 </ul>
 <p>With XeLL sleep on, you don't need <code>VKD3D_DISABLE_EXTENSIONS=VK_NV_low_latency2</code> any more.</p>
+<h3>Compiling shaders before you fly</h3>
+<p>This one isn't a launch option, and it is optional. <a href="https://github.com/BlueHeisenberg/SCSKiller">SCSKiller</a> compiles a game's shaders before you play, so the driver doesn't stop to compile them in the middle of a flight. Since version 1.4.6 it runs natively on Linux as an AppImage, and it writes what it compiles into Steam's shader cache for the simulator, with nothing to add to the launch line. It does a different job from <code>__GL_0xcfcfa1=0</code>: SCSKiller fills the cache that the simulator reads when it creates its shaders, and the setting stops the driver from recompiling in the background while you fly.</p>
+<p>Its gain on Linux isn't proven yet. On 12 November 2026 the first flight after a SCSKiller compile found 6032 shaders in the cache and compiled 39, but the cache already held what the simulator had compiled in earlier flights, so that doesn't show SCSKiller's share. The flight that shows it is the first one after an NVIDIA driver update, which empties the cache. Older versions, run inside Proton, matched only 2.3% to 19.6% of the cache the game itself writes.</p>
 
 <h2>Preferences</h2>
 <p>These are choices of the test machine's owner. They aren't needed, and they cost something or haven't been measured against the alternative.</p>
@@ -85,6 +88,15 @@ Slice=games.slice</code></pre>
   <li>The simulator's own <code>nvngx_dlss.dll</code> is version 310.6.0.0, and whether it has preset M wasn't checked. The upgrade guarantees a file that has it.</li>
   <li>Some setups also force a DLSS frame generation preset here, <code>ngx_dlss_fg_override=on,ngx_dlss_fg_override_render_preset_selection=render_preset_c</code>. This page doesn't recommend it. The owner decided on 12 November 2026 to take it out. The drop in frame rate with presets A and B came from the Reflex sleep under <code>VK_NV_low_latency2</code>, not from the preset: without the extension the output held 120 in every preset. And under XMX the mod doesn't use NVIDIA's generator preset.</li>
 </ul>
+<h3>Three the owner uses, all optional</h3>
+<ul>
+  <li><code>QT_WAYLAND_DISABLE_WINDOWDECORATION=1</code> removes the window decoration that Wine's windows got under Wayland, which showed on the simulator's window.</li>
+  <li><code>-Fastlaunch</code> skips the simulator's intro logos and goes straight to loading, which saves time at every start. It is an argument of the simulator, so it goes after <code>%command%</code>, not before it.</li>
+  <li><code>VKD3D_FRAME_RATE=120</code> limits the frame rate to 120. Pick your screen's refresh rate, or leave it out.</li>
+</ul>
+<h3>ReBAR off for the simulator</h3>
+<pre><code>VKD3D_CONFIG=no_upload_hvv,no_gpu_upload_heap</code></pre>
+<p>On the test machine the NVIDIA driver keeps ReBAR on for the whole card (<code>nvidia-smi -q -d MEMORY</code> showed a BAR1 of 16,384 MiB), and vkd3d-proton decides whether to use the memory the CPU can see. <code>no_upload_hvv</code> stops the upload heap from using it. <code>no_gpu_upload_heap</code> turns off the <code>GPU_UPLOAD_HEAP</code> that the game asks for. With only the first, that path stays. On 16 October 2026 the vkd3d-proton log said <code>Forcing HOST_COHERENT for UPLOAD heap</code> instead of <code>HVV usage is allowed</code>, and the owner saw 1 to 2 GB less video memory in use in the same scene. On 12 November 2026, at EGLL on a 16 GB card, the simulator used about 13,600 MB of video memory with the option and ran out at 15 GB without it. vkd3d-proton's README warns that the option costs GPU performance, and nobody has measured that cost on its own.</p>
 
 <h2>One line for each profile</h2>
 <p>Copy the one that fits, and add your own <code>STEAM_COMPAT_LIBRARY_PATHS</code> if you use ChasePlane. Each line stands alone.</p>
@@ -97,5 +109,5 @@ Slice=games.slice</code></pre>
 <h3>MFG Unlocker with XMX</h3>
 <pre><code>WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_DLSS_UPGRADE=1 __GL_0xcfcfa1=0 VKD3D_SWAPCHAIN_LATENCY_FRAMES=2 %command%</code></pre>
 <h3>All of it together, for a machine like the test machine</h3>
-<pre><code>__GL_0xcfcfa1=0 VKD3D_SWAPCHAIN_LATENCY_FRAMES=2 WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX WAYLANDDRV_FOCUS_LOSS=0 game %command%</code></pre>
-<p>Drop what doesn't fit your machine: <code>__GL_0xcfcfa1=0</code> if your driver isn't 620.70.06, <code>PROTON_ENABLE_HDR=1</code> without an HDR monitor, <code>game</code> without the script, and <code>VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX</code> if nothing tears.</p>
+<pre><code>__GL_0xcfcfa1=0 VKD3D_SWAPCHAIN_LATENCY_FRAMES=2 WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m VKD3D_CONFIG=no_upload_hvv,no_gpu_upload_heap VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX WAYLANDDRV_FOCUS_LOSS=0 game %command%</code></pre>
+<p>Drop what doesn't fit your machine: <code>__GL_0xcfcfa1=0</code> if your driver isn't 620.70.06, <code>PROTON_ENABLE_HDR=1</code> without an HDR monitor, <code>game</code> without the script, <code>VKD3D_CONFIG</code> if your simulator stays inside its video memory without it, and <code>VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX</code> if nothing tears.</p>
