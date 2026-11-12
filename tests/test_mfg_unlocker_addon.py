@@ -29,7 +29,7 @@ SDK_URL = "https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2
 SDK_SHA256 = "88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
 XESS_FG_SHA256 = "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
 XELL_SHA256 = "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7"
-FULL_OPTIONS = 'STEAM_COMPAT_LIBRARY_PATHS=/games WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m VKD3D_CONFIG=no_upload_hvv game %command%'
+FULL_OPTIONS = 'STEAM_COMPAT_LIBRARY_PATHS=/games WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m game %command%'
 FIRST_RUN = '{"followGame":true,"mode":"follow","multiplier":2,"dynamicTargetFrameRate":0,"dlssgPreset":3,"vsyncMode":0,"reflexFrameLimitFps":0,"generatedOnlyDebug":false,"intervalLogging":true,"version":13,"xmx":0,"reflexSleepSkip":0,"xmxXell":0,"dlss5":false}'
 MAILBOX = "VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX"
 FIXED = FIRST_RUN.replace('"followGame":true,"mode":"follow"', '"followGame":false,"mode":"fixed"').replace('"xmx":0', '"xmx":1').replace('"xmxXell":0', '"xmxXell":1')

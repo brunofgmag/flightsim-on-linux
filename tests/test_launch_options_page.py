@@ -60,7 +60,7 @@ class LaunchOptionsPageTest(unittest.TestCase):
         text = section(self.text, "When you see the problem")
         for option, needed in (
             ("PROTON_NO_NTSYNC=1", "freezes in the main menu or while loading an aircraft"),
-            ("WAYLANDDRV_FOCUS_LOSS=0", "keeps the simulator as the foreground window"),
+            ("WAYLANDDRV_FOCUS_LOSS=0", "keeps the simulator from losing focus in a multi-monitor setup"),
             ("STEAM_COMPAT_LIBRARY_PATHS", "Only the ChasePlane bridge needs it"),
         ):
             self.assertIn(option, text)
@@ -110,10 +110,19 @@ class LaunchOptionsPageTest(unittest.TestCase):
         self.assertIn("doesn't recommend it", mentions[0])
         self.assertIn("12 November 2026", mentions[0])
 
-    def test_rebar_off_is_a_preference_with_its_cost(self):
-        text = subsection(section(self.text, "Preferences"), "ReBAR off for the simulator")
-        for needed in ("VKD3D_CONFIG=no_upload_hvv,no_gpu_upload_heap", "1 to 2 GB less video memory", "costs GPU performance", "nobody measured each one alone"):
+    def test_the_focus_loss_option_is_for_other_monitors_and_does_not_promise_alt_tab(self):
+        text = subsection(section(self.text, "When you see the problem"), "WAYLANDDRV_FOCUS_LOSS=0")
+        for needed in ("multi-monitor setup", "another window on another monitor", "Alt+Tab still makes the simulator window lose focus with the option set"):
             self.assertIn(needed, text)
+        self.assertNotIn("foreground window when another window takes the focus", text)
+
+    def test_vkd3d_config_and_the_rebar_preference_are_gone_from_the_page_and_every_profile(self):
+        for gone in ("VKD3D_CONFIG", "no_upload_hvv", "no_gpu_upload_heap", "ReBAR"):
+            self.assertNotIn(gone, self.text)
+        for heading, line in profile_lines(self.text).items():
+            self.assertNotIn("VKD3D_CONFIG", line, heading)
+        for other in (*PAGES.glob("*.html"), ROOT / "site" / "llms.txt"):
+            self.assertNotIn("VKD3D_CONFIG", other.read_text(), other.name)
 
     def test_options_with_no_documented_reason_are_left_out(self):
         for name in LEFT_OUT:
