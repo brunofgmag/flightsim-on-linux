@@ -1628,6 +1628,7 @@ class SimlinkLaunchTest(SimlinkCase):
 
     def test_the_sign_in_link_is_never_printed(self):
         result = self.script("launch", self.LINK)
+        self.wait_for_record()
         self.assertNotIn("SECRET-CODE", result.stdout + result.stderr)
 
     def test_an_argument_that_is_not_the_sign_in_link_is_refused(self):
@@ -1643,6 +1644,7 @@ class SimlinkLaunchTest(SimlinkCase):
 
     def test_it_does_not_need_the_simulator(self):
         self.assertEqual(self.script("launch", FSOL_SIM_RUNNING="0").returncode, 0)
+        self.wait_for_record()
 
     def test_a_missing_program_says_how_to_install_it(self):
         (self.folder / "NavigraphSimlink.exe").unlink()
