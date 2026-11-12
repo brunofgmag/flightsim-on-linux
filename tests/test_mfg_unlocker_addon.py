@@ -22,9 +22,9 @@ PAGE = ROOT / "site" / "pages" / "mfg-unlocker.html"
 RTX_5080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 5080", "0x10de", "0x2c02")
 RTX_4090_LAPTOP = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 4090 Laptop GPU", "0x10de", "0x2757")
 GTX_1080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce GTX 1080", "0x10de", "0x1b80")
-ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.1/MFGUnlocker-v1.7.1-xmx.1.zip"
-ZIP_SHA256 = "ca5719cbe73a7053422bf1a7794e1951f782865d5fd4f12721e9f1aa78605dea"
-DLL_SHA256 = "6a606ef333ad5764b5b379b1486ef10ecf81654d1139a5267812a2ae3af1d001"
+ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.2/MFGUnlocker-v1.7.1-xmx.2.zip"
+ZIP_SHA256 = "2d5d36960df058037f596075b6509935624aaaacefd658c4ebe7970061f73944"
+DLL_SHA256 = "8606cc4a76df92a31cc4d751177134f7ec447921e756a35608cdd24436a52e32"
 SDK_URL = "https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip"
 SDK_SHA256 = "88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
 XESS_FG_SHA256 = "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
@@ -74,7 +74,7 @@ def make_zip(path, members):
 class MfgShapeTest(unittest.TestCase):
     def test_the_manifest_says_what_the_add_on_needs(self):
         addon = addons.load(MFG)
-        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.1", "2026-11-12", True))
+        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.2", "2026-11-12", True))
         self.assertEqual(addon.needs, ["simulator-closed"])
         self.assertEqual(addon.installed, {"sim": ["version.dll"]})
         self.assertEqual(addon.install, {"from": "https://github.com/brunofgmag/MFG-Unlocker/releases", "kind": "native"})
@@ -83,14 +83,14 @@ class MfgShapeTest(unittest.TestCase):
 
     def test_the_pinned_downloads_are_the_forks_release_and_intels_sdk(self):
         text = (MFG / "install").read_text()
-        self.assertIn('MFG_VERSION="1.7.1-xmx.1"', text)
+        self.assertIn('MFG_VERSION="1.7.1-xmx.2"', text)
         self.assertIn("https://github.com/brunofgmag/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip", text)
         self.assertIn(f'MFG_SHA256="{ZIP_SHA256}"', text)
         self.assertIn(f'XESS_URL="{SDK_URL}"', text)
         self.assertIn(f'XESS_SHA256="{SDK_SHA256}"', text)
 
     def test_the_helper_pins_the_release_dll_and_the_two_intel_files(self):
-        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.1")
+        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.2")
         self.assertEqual(mfg.PROXY_SHA256, DLL_SHA256)
         self.assertEqual(mfg.XESS_FILES, {"libxess_fg.dll": XESS_FG_SHA256, "libxell.dll": XELL_SHA256})
         self.assertEqual(mfg.XESS_FOLDER, XESS_FOLDER)
@@ -533,7 +533,7 @@ class MfgCheckTest(MfgCase):
 
     def test_the_dll_line_says_it_is_the_fork(self):
         _, lines = self.check()
-        self.assertIn("1.7.1-xmx.1", lines[1])
+        self.assertIn("1.7.1-xmx.2", lines[1])
 
     def test_without_the_intel_folder_both_libraries_fail_and_say_to_install(self):
         shutil.rmtree(self.xess)
@@ -1104,7 +1104,7 @@ class MfgPageTest(unittest.TestCase):
             self.assertIn(needed, self.text)
 
     def test_it_says_what_the_fork_is_and_where_it_lives(self):
-        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.1", "dashdogy", "mavismmg", "XMX", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
+        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.2", "dashdogy", "mavismmg", "XMX", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
             self.assertIn(needed, self.text)
 
     def test_it_says_how_to_go_back_to_upstream(self):

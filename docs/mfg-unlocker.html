@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MFG Unlocker · Flightsim on Linux</title>
-  <meta name="description" content="How to run the MFG Unlocker fork 1.7.1-xmx.1 in MSFS 2024 under Proton FS2024 on an RTX 40 card: the pinned downloads, XMX mode with Intel&#x27;s two XeSS files, XeLL sleep, the launch options and the config keys.">
+  <meta name="description" content="How to run the MFG Unlocker fork 1.7.1-xmx.2 in MSFS 2024 under Proton FS2024 on an RTX 40 card: the pinned downloads, XMX mode with Intel&#x27;s two XeSS files, XeLL sleep, the launch options and the config keys.">
   <link rel="stylesheet" href="assets/style.css?v=a4ab8d480220">
   <script src="assets/copy.js?v=2f6d6fef1e6c" defer></script>
 </head>
@@ -27,7 +27,7 @@
   </header>
   <main class="wrap">
 <h1>MFG Unlocker</h1>
-<p class="lead">Tested with the MFG Unlocker fork 1.7.1-xmx.1 on 12 November 2026, on an RTX 4080 with Proton FS2024 and ReShade as <code>dxgi.dll</code>. It adds multi frame generation, 3x to 6x, to the simulator's DLSS frame generation on an RTX 40 card, with a menu that opens on Backspace. The fork already carries what Wine needs, and it adds XMX mode, where Intel's XeFG model draws the generated frames. This add-on installs the fork and sets the config keys it needs.</p>
+<p class="lead">Tested with the MFG Unlocker fork 1.7.1-xmx.2 on 12 November 2026, on an RTX 4080 with Proton FS2024 and ReShade as <code>dxgi.dll</code>. It adds multi frame generation, 3x to 6x, to the simulator's DLSS frame generation on an RTX 40 card, with a menu that opens on Backspace. The fork already carries what Wine needs, and it adds XMX mode, where Intel's XeFG model draws the generated frames. This add-on installs the fork and sets the config keys it needs.</p>
 
 <p><span class="tag warn">touches add-on files</span> The install writes the fork's DLL as <code>version.dll</code> in the simulator's folder and two of Intel's libraries in <code>RTXMFG-XeSS</code> beside it. <code>apply</code> edits the mod's own config file, <code>RTXMFG-Universal.json</code>, in the same folder. The first time, it keeps the original in <code>compatdata/2537590/flightsim-on-linux-backup/mfg-unlocker</code>, and this puts it back and removes the three files:</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon undo mfg-unlocker</code></pre>
@@ -39,13 +39,13 @@
   <li><strong>XeLL sleep</strong> sends the game's Reflex sleep to Intel's XeLL while XMX generates. Under Proton it also keeps the low latency mode off in vkd3d-proton, so vkd3d-proton keeps its own queue limit of two frames. With it on you don't need <code>VKD3D_DISABLE_EXTENSIONS=VK_NV_low_latency2</code>. On the test machine, in a flight on 12 November 2026 with that extension on, the real frame went from 42.8 ms to 33.3 ms the moment XeLL sleep was ticked, and the video memory stayed steady. Without XeLL sleep and with the extension on, the Reflex sleep loop pulled a 30 fps base down to about 23 fps.</li>
   <li><strong>The Proton fixes.</strong> The menu and the adapter-parent route work with ReShade loaded as <code>dxgi.dll</code>. DLSS 5 compiles its compute shaders with Wine's <code>D3DCompile</code> and opens its provider when Wine reports <code>PAGE_WRITECOPY</code>. DLSS 5 accepts depth, motion vectors and exposure with mips, as the simulator sends them. Earlier versions of this add-on changed those places in upstream's file as byte patches at install. The fork has them in its source, so the add-on patches nothing any more.</li>
 </ul>
-<p>The fork's README, at the top of <a href="https://github.com/brunofgmag/MFG-Unlocker">its repository page</a>, says the same. Its builds are on its own <a href="https://github.com/brunofgmag/MFG-Unlocker/releases/tag/v1.7.1-xmx.1">releases page</a>, and upstream's release has neither the fixes nor XMX.</p>
+<p>The fork's README, at the top of <a href="https://github.com/brunofgmag/MFG-Unlocker">its repository page</a>, says the same. Its builds are on its own <a href="https://github.com/brunofgmag/MFG-Unlocker/releases/tag/v1.7.1-xmx.2">releases page</a>, and upstream's release has neither the fixes nor XMX.</p>
 
 <h2>Get it</h2>
 <p>You don't need to download anything yourself: the install command does, and checks every hash. This repository ships no DLL.</p>
 <ul>
-  <li>The fork's zip, <code>MFGUnlocker-v1.7.1-xmx.1.zip</code>, has sha256 <code>ca5719cbe73a7053422bf1a7794e1951f782865d5fd4f12721e9f1aa78605dea</code>.</li>
-  <li><code>MFGUnlocker.dll</code> inside it, the only file in the zip, has sha256 <code>6a606ef333ad5764b5b379b1486ef10ecf81654d1139a5267812a2ae3af1d001</code>. A <code>version.dll</code> with this hash counts as this add-on's.</li>
+  <li>The fork's zip, <code>MFGUnlocker-v1.7.1-xmx.2.zip</code>, has sha256 <code>2d5d36960df058037f596075b6509935624aaaacefd658c4ebe7970061f73944</code>.</li>
+  <li><code>MFGUnlocker.dll</code> inside it, the only file in the zip, has sha256 <code>8606cc4a76df92a31cc4d751177134f7ec447921e756a35608cdd24436a52e32</code>. A <code>version.dll</code> with this hash counts as this add-on's.</li>
   <li>Intel's <a href="https://github.com/intel/xess/releases/tag/v3.0.2">XeSS SDK 3.0.2</a>, <code>XeSS_SDK_3.0.2.zip</code>, has sha256 <code>88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990</code>. It is about 77 MB, and the install takes two files from its <code>bin</code> folder:
     <ul>
       <li><code>libxess_fg.dll</code>, version 1.3.1.78, with sha256 <code>ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27</code>. XMX needs that version: with another one, NVIDIA's generator keeps running.</li>
@@ -58,8 +58,8 @@
 <h2>Install it</h2>
 <p>Install <a href="reshade.html">ReShade</a> first: the fork was measured with it, and this guide has not been tried without it. The simulator has to be closed.</p>
 <pre><code>~/flightsim-on-linux/bin/flightsim-on-linux addon install mfg-unlocker</code></pre>
-<p>The command downloads the fork's zip from <code>https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.1/MFGUnlocker-v1.7.1-xmx.1.zip</code> with <code>curl</code>, checks its sha256 and keeps it in <code>~/.cache/flightsim-on-linux/downloads</code>. Then it does the same with <code>https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip</code>. It reads <code>MFGUnlocker.dll</code> and the two Intel libraries from the zips and checks the sha256 of each. Only then does it write anything: the two libraries into <code>RTXMFG-XeSS</code> in the simulator's folder, then the DLL as <code>version.dll</code> beside <code>FlightSimulator2024.exe</code>. Any file that doesn't match stops it before anything is written. The hashes are pinned because these are the files the add-on was tested with.</p>
-<p>If you already downloaded the fork's zip, give it to the command: <code>addon install mfg-unlocker /path/to/MFGUnlocker-v1.7.1-xmx.1.zip</code>. It must be the same release, and the command still fetches Intel's SDK.</p>
+<p>The command downloads the fork's zip from <code>https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.2/MFGUnlocker-v1.7.1-xmx.2.zip</code> with <code>curl</code>, checks its sha256 and keeps it in <code>~/.cache/flightsim-on-linux/downloads</code>. Then it does the same with <code>https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip</code>. It reads <code>MFGUnlocker.dll</code> and the two Intel libraries from the zips and checks the sha256 of each. Only then does it write anything: the two libraries into <code>RTXMFG-XeSS</code> in the simulator's folder, then the DLL as <code>version.dll</code> beside <code>FlightSimulator2024.exe</code>. Any file that doesn't match stops it before anything is written. The hashes are pinned because these are the files the add-on was tested with.</p>
+<p>If you already downloaded the fork's zip, give it to the command: <code>addon install mfg-unlocker /path/to/MFGUnlocker-v1.7.1-xmx.2.zip</code>. It must be the same release, and the command still fetches Intel's SDK.</p>
 <p>A <code>version.dll</code> that is not the fork's, or a <code>libxess_fg.dll</code> or <code>libxell.dll</code> in <code>RTXMFG-XeSS</code> that is not Intel's file above, stops the install. The command names the file and its sha256, and nothing here overwrites it: another mod may use that name. Files you keep in <code>RTXMFG-XeSS</code> stay. Files that already match are left alone, and the install writes only what is missing.</p>
 
 <h2>Make it run</h2>
