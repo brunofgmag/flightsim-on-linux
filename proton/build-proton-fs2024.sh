@@ -59,6 +59,7 @@ PATCHES=(
   "$ROOT/patches/wine/ntdll-heap-read-slack.patch"
   "$ROOT/patches/wine/ntdll-heap-bounded-free-list-scan.patch"
   "$ROOT/patches/wine/win32u-steam-overlay-wayland-input.patch"
+  "$ROOT/patches/wine/mp3dmod-count-short-mpeg2-frames.patch"
 )
 
 MODULES=(
@@ -74,6 +75,7 @@ MODULES=(
   "dlls/d2d1/x86_64-windows/d2d1.dll:lib/wine/x86_64-windows/d2d1.dll"
   "dlls/dwrite/x86_64-windows/dwrite.dll:lib/wine/x86_64-windows/dwrite.dll"
   "dlls/mmdevapi/x86_64-windows/mmdevapi.dll:lib/wine/x86_64-windows/mmdevapi.dll"
+  "dlls/mp3dmod/x86_64-windows/mp3dmod.dll:lib/wine/x86_64-windows/mp3dmod.dll"
   "dlls/gdiplus/x86_64-windows/gdiplus.dll:lib/wine/x86_64-windows/gdiplus.dll"
   "dlls/shell32/x86_64-windows/shell32.dll:lib/wine/x86_64-windows/shell32.dll"
   "dlls/windows.storage.applicationdata/x86_64-windows/windows.storage.applicationdata.dll:lib/wine/x86_64-windows/windows.storage.applicationdata.dll"
