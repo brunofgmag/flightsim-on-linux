@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PAGES = ROOT / "site" / "pages"
 PAGE = PAGES / "launch-options.html"
 SECTIONS = ["Where they go", "Needed by everyone", "When you see the problem", "By machine", "Preferences", "One line for each profile"]
-LEFT_OUT = ("VKD3D_FRAME_RATE", "QT_WAYLAND_DISABLE_WINDOWDECORATION", "Fastlaunch")
+OWNER_EXTRAS = ("VKD3D_FRAME_RATE=120", "QT_WAYLAND_DISABLE_WINDOWDECORATION=1", "-Fastlaunch")
 PRESET_M = "DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m"
 
 
@@ -124,9 +124,23 @@ class LaunchOptionsPageTest(unittest.TestCase):
         for other in (*PAGES.glob("*.html"), ROOT / "site" / "llms.txt"):
             self.assertNotIn("VKD3D_CONFIG", other.read_text(), other.name)
 
-    def test_options_with_no_documented_reason_are_left_out(self):
-        for name in LEFT_OUT:
-            self.assertNotIn(name, self.text)
+    def test_the_owners_extras_are_optional_preferences_with_their_reasons(self):
+        preferences = section(self.text, "Preferences")
+        extras = subsection(preferences, "Three the owner uses, all optional")
+        for option in OWNER_EXTRAS:
+            self.assertIn(option, extras)
+        for reason in ("window decoration", "intro", "after <code>%command%</code>", "120"):
+            self.assertIn(reason, extras)
+        before = self.text.split("<h2>Preferences</h2>")[0]
+        for option in OWNER_EXTRAS:
+            self.assertNotIn(option, before)
+
+    def test_scskiller_is_optional_not_a_launch_option_and_not_yet_proven(self):
+        part = subsection(self.text, "Compiling shaders before you fly")
+        for words in ("SCSKiller", "optional", "isn't a launch option", "AppImage", "driver update", "__GL_0xcfcfa1=0"):
+            self.assertIn(words, part)
+        for heading, line in profile_lines(self.text).items():
+            self.assertNotIn("SCSKiller", line, heading)
 
     def test_it_names_nobody_and_nothing_personal(self):
         for name in ("Bruno", "brunom", "/home/", "Jogos"):
@@ -147,7 +161,7 @@ class LaunchOptionsPageTest(unittest.TestCase):
 
     def test_no_profile_has_the_frame_generation_preset_or_an_option_left_out(self):
         for heading, line in profile_lines(self.text).items():
-            for gone in ("fg_override", "render_preset_c", *LEFT_OUT, "VKD3D_DISABLE_EXTENSIONS"):
+            for gone in ("fg_override", "render_preset_c", *OWNER_EXTRAS, "VKD3D_DISABLE_EXTENSIONS"):
                 self.assertNotIn(gone, line, heading)
 
     def test_hdr_and_the_wayland_driver_are_only_in_the_profiles_that_ask_for_them(self):

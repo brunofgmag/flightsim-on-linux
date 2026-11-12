@@ -97,6 +97,9 @@ Slice=games.slice</code></pre>
   <li><code>VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX</code>, only if the picture tears with V-Sync on. It needs a Wayland window and a driver that offers MAILBOX for it.</li>
 </ul>
 <p>With XeLL sleep on, you don't need <code>VKD3D_DISABLE_EXTENSIONS=VK_NV_low_latency2</code> any more.</p>
+<h3>Compiling shaders before you fly</h3>
+<p>This one isn't a launch option, and it is optional. <a href="https://github.com/BlueHeisenberg/SCSKiller">SCSKiller</a> compiles a game's shaders before you play, so the driver doesn't stop to compile them in the middle of a flight. Since version 1.4.6 it runs natively on Linux as an AppImage, and it writes what it compiles into Steam's shader cache for the simulator, with nothing to add to the launch line. It does a different job from <code>__GL_0xcfcfa1=0</code>: SCSKiller fills the cache that the simulator reads when it creates its shaders, and the setting stops the driver from recompiling in the background while you fly.</p>
+<p>Its gain on Linux isn't proven yet. On 12 November 2026 the first flight after a SCSKiller compile found 6032 shaders in the cache and compiled 39, but the cache already held what the simulator had compiled in earlier flights, so that doesn't show SCSKiller's share. The flight that shows it is the first one after an NVIDIA driver update, which empties the cache. Older versions, run inside Proton, matched only 2.3% to 19.6% of the cache the game itself writes.</p>
 
 <h2>Preferences</h2>
 <p>These are choices of the test machine's owner. They aren't needed, and they cost something or haven't been measured against the alternative.</p>
@@ -109,6 +112,12 @@ Slice=games.slice</code></pre>
   <li>The variable takes a comma-separated list. If your line has it already, add these two settings to its list.</li>
   <li>The simulator's own <code>nvngx_dlss.dll</code> is version 310.6.0.0, and whether it has preset M wasn't checked. The upgrade guarantees a file that has it.</li>
   <li>Some setups also force a DLSS frame generation preset here, <code>ngx_dlss_fg_override=on,ngx_dlss_fg_override_render_preset_selection=render_preset_c</code>. This page doesn't recommend it. The owner decided on 12 November 2026 to take it out. The drop in frame rate with presets A and B came from the Reflex sleep under <code>VK_NV_low_latency2</code>, not from the preset: without the extension the output held 120 in every preset. And under XMX the mod doesn't use NVIDIA's generator preset.</li>
+</ul>
+<h3>Three the owner uses, all optional</h3>
+<ul>
+  <li><code>QT_WAYLAND_DISABLE_WINDOWDECORATION=1</code> removes the window decoration that Wine's windows got under Wayland, which showed on the simulator's window.</li>
+  <li><code>-Fastlaunch</code> skips the simulator's intro logos and goes straight to loading, which saves time at every start. It is an argument of the simulator, so it goes after <code>%command%</code>, not before it.</li>
+  <li><code>VKD3D_FRAME_RATE=120</code> limits the frame rate to 120. Pick your screen's refresh rate, or leave it out.</li>
 </ul>
 
 <h2>One line for each profile</h2>
