@@ -8,7 +8,8 @@ framework="net$(dotnet --version | cut -d. -f1).0"
 work="$(mktemp -d "${TMPDIR:-/tmp}/windowsbase-timer-build.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 cp "$HERE/Program.cs" "$HERE/windowsbase-timer.csproj" "$work/"
-dotnet build "$work/windowsbase-timer.csproj" -c Release -o "$work/out" -p:TargetFramework="$framework" -nologo -v quiet > "$work/build.log" 2>&1 || { cat "$work/build.log" >&2; exit 1; }
+dotnet restore "$work/windowsbase-timer.csproj" -p:TargetFramework="$framework" -v quiet > "$work/build.log" 2>&1 || { cat "$work/build.log" >&2; exit 1; }
+dotnet build "$work/windowsbase-timer.csproj" --no-restore -c Release -o "$work/out" -p:TargetFramework="$framework" -nologo -v quiet >> "$work/build.log" 2>&1 || { cat "$work/build.log" >&2; exit 1; }
 rm -rf "${1:?}/windowsbase-timer"
 mkdir -p "$1/windowsbase-timer"
 cp "$work"/out/* "$1/windowsbase-timer/"
