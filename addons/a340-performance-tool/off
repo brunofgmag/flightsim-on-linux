@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-HERE="$(dirname "$(readlink -f "$0")")"
-# shellcheck source=/dev/null
-. "$HERE/parts/common.sh"
-
-a340_sim_running && a340_fail "MSFS 2024 is open. Close the simulator before turning the tool off."
-a340_restore "Turned off by hand."

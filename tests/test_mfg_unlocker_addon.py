@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import unittest
 import zipfile
@@ -21,28 +22,31 @@ PAGE = ROOT / "site" / "pages" / "mfg-unlocker.html"
 RTX_5080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 5080", "0x10de", "0x2c02")
 RTX_4090_LAPTOP = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 4090 Laptop GPU", "0x10de", "0x2757")
 GTX_1080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce GTX 1080", "0x10de", "0x1b80")
-ZIP_URL = "https://github.com/dashdogy/MFG-Unlocker/releases/download/v1.7.0/MFGUnlocker-v1.7.0.zip"
-ZIP_SHA256 = "5bd19d03288e1ece1d0bb2030ac072b36758045028da192044dcaad73fd901dd"
-DLL_SHA256 = "e6b6e6b70a6ed3af839c9647a32fc22660ae6b2d655062c5c072246c91fc10c7"
-PATCHED_SHA256 = "a610fc756ce93e04be6719a9077e85eca3c3121fdad8a4cf9a9a7cf3d3dce5cf"
-FULL_OPTIONS = 'STEAM_COMPAT_LIBRARY_PATHS=/games WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_fg_override=on,ngx_dlss_fg_override_render_preset_selection=render_preset_b VKD3D_CONFIG=no_upload_hvv game %command%'
-FIRST_RUN = '{"followGame":true,"mode":"follow","multiplier":2,"dynamicTargetFrameRate":0,"dlssgPreset":3,"vsyncMode":0,"reflexFrameLimitFps":0,"generatedOnlyDebug":false,"intervalLogging":true,"version":13,"dlss5":false}'
+ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.1/MFGUnlocker-v1.7.1-xmx.1.zip"
+ZIP_SHA256 = "ca5719cbe73a7053422bf1a7794e1951f782865d5fd4f12721e9f1aa78605dea"
+DLL_SHA256 = "6a606ef333ad5764b5b379b1486ef10ecf81654d1139a5267812a2ae3af1d001"
+SDK_URL = "https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip"
+SDK_SHA256 = "88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
+XESS_FG_SHA256 = "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
+XELL_SHA256 = "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7"
+FULL_OPTIONS = 'STEAM_COMPAT_LIBRARY_PATHS=/games WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m game %command%'
+FIRST_RUN = '{"followGame":true,"mode":"follow","multiplier":2,"dynamicTargetFrameRate":0,"dlssgPreset":3,"vsyncMode":0,"reflexFrameLimitFps":0,"generatedOnlyDebug":false,"intervalLogging":true,"version":13,"xmx":0,"reflexSleepSkip":0,"xmxXell":0,"dlss5":false}'
 MAILBOX = "VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX"
-FIXED = FIRST_RUN.replace('"followGame":true,"mode":"follow"', '"followGame":false,"mode":"fixed"')
-LOG = """[16:21:08.004] Backend module: S:\\steamapps\\common\\MSFS2024\\VERSION.dll, file 1.7.0.1145, product "MFG Unlocker" 1.7.0
-[16:21:08.094] MFG_PROXY_UI state=active boundary=real-factory-return nativeTableWrites=0
-[16:21:09.734] D157 D3D12 adapter verification: luid=0x00000000000003F2 capability=8.9 verified=1
-[16:25:13.441] State heartbeat: route=local ready=1 routeFailure=0 control=fixed 3x gameFG=1 appliedFG=1 restart=0 | presented=3
+FIXED = FIRST_RUN.replace('"followGame":true,"mode":"follow"', '"followGame":false,"mode":"fixed"').replace('"xmx":0', '"xmx":1').replace('"xmxXell":0', '"xmxXell":1')
+LOG = """[17:33:56.275] Backend module: S:\\steamapps\\common\\MSFS2024\\VERSION.dll, file 1.7.1.177, product "MFG Unlocker" 1.7.1
+[17:33:57.258] MFG_PROXY_UI state=active boundary=real-factory-return nativeTableWrites=0
+[17:33:58.088] D157 D3D12 adapter verification: luid=0x00000000000003F2 capability=8.9 verified=1
+[17:37:02.013] XMX runtime S:\\steamapps\\common\\MSFS2024\\RTXMFG-XeSS\\libxess_fg.dll and S:\\steamapps\\common\\MSFS2024\\RTXMFG-XeSS\\libxell.dll
+[17:37:02.217] XMX init 3840x2160 format 24 flags 1 frames 3 result 0
 """
 LOG_NO_CUDA = LOG.replace("capability=8.9 verified=1", "capability=0.0 verified=0")
 LOG_NO_MENU = LOG.replace("MFG_PROXY_UI state=active", "MFG_PROXY_UI factory gateway first call")
-SOURCE = bytes((index * 7 + 3) % 251 for index in range(1024))
-REPLACEMENTS = (
-    (0x10, "menu", b"\x90\x90"),
-    (0x100, "protection", b"\x08"),
-    (0x2F0, "shaders", b"abs(e)>=3e38"),
-    (0x3F0, "shaders", b"\x90" * 6),
-)
+LOG_NO_RUNTIME = LOG.replace("XMX runtime ", "XMX libraries ")
+PROXY_IMAGE = bytes((index * 7 + 3) % 251 for index in range(1024))
+XESS_FG_IMAGE = b"MZ the XeSS frame generation library"
+XELL_IMAGE = b"MZ the XeLL library"
+XESS_IMAGES = {"libxess_fg.dll": XESS_FG_IMAGE, "libxell.dll": XELL_IMAGE}
+XESS_FOLDER = "RTXMFG-XeSS"
 
 
 def load_module():
@@ -53,17 +57,6 @@ def load_module():
 
 
 mfg = load_module()
-
-
-def synthetic_table(image=SOURCE):
-    patches = {}
-    patched = bytearray(image)
-    for offset, name, replacement in REPLACEMENTS:
-        original = image[offset:offset + len(replacement)]
-        patched[offset:offset + len(original)] = replacement
-        patches.setdefault(name, []).append({"offset": hex(offset), "original": original.hex(), "patched": replacement.hex()})
-    table = {"release": "1.7.0", "input_sha256": sha256(image), "output_sha256": sha256(bytes(patched)), "patches": [{"name": name, "runs": runs} for name, runs in patches.items()]}
-    return table, bytes(patched)
 
 
 def localconfig(options):
@@ -81,103 +74,35 @@ def make_zip(path, members):
 class MfgShapeTest(unittest.TestCase):
     def test_the_manifest_says_what_the_add_on_needs(self):
         addon = addons.load(MFG)
-        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.0", "2026-11-05", True))
+        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.1", "2026-11-12", True))
         self.assertEqual(addon.needs, ["simulator-closed"])
         self.assertEqual(addon.installed, {"sim": ["version.dll"]})
-        self.assertEqual(addon.install, {"from": "https://github.com/dashdogy/MFG-Unlocker/releases", "kind": "native"})
+        self.assertEqual(addon.install, {"from": "https://github.com/brunofgmag/MFG-Unlocker/releases", "kind": "native"})
         self.assertTrue(addon.can_install)
         self.assertFalse(addon.install_needs_file)
 
-    def test_the_pinned_download_is_the_official_release_asset(self):
+    def test_the_pinned_downloads_are_the_forks_release_and_intels_sdk(self):
         text = (MFG / "install").read_text()
-        self.assertIn('MFG_VERSION="1.7.0"', text)
-        self.assertIn("https://github.com/dashdogy/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip", text)
+        self.assertIn('MFG_VERSION="1.7.1-xmx.1"', text)
+        self.assertIn("https://github.com/brunofgmag/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip", text)
         self.assertIn(f'MFG_SHA256="{ZIP_SHA256}"', text)
+        self.assertIn(f'XESS_URL="{SDK_URL}"', text)
+        self.assertIn(f'XESS_SHA256="{SDK_SHA256}"', text)
+
+    def test_the_helper_pins_the_release_dll_and_the_two_intel_files(self):
+        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.1")
+        self.assertEqual(mfg.PROXY_SHA256, DLL_SHA256)
+        self.assertEqual(mfg.XESS_FILES, {"libxess_fg.dll": XESS_FG_SHA256, "libxell.dll": XELL_SHA256})
+        self.assertEqual(mfg.XESS_FOLDER, XESS_FOLDER)
 
     def test_the_repository_ships_no_dll_and_no_zip(self):
         shipped = [path.name for path in MFG.rglob("*") if path.suffix.lower() in (".dll", ".zip")]
         self.assertEqual(shipped, [])
 
-
-class PatchTableTest(unittest.TestCase):
-    def setUp(self):
-        self.table = mfg.load_table()
-        self.runs = mfg.table_runs(self.table)
-
-    def test_it_names_the_release_and_both_hashes(self):
-        self.assertEqual((self.table["release"], self.table["input_sha256"], self.table["output_sha256"]), ("1.7.0", DLL_SHA256, PATCHED_SHA256))
-
-    def test_it_holds_the_seven_patches_in_eighteen_runs(self):
-        self.assertEqual(len(self.table["patches"]), 7)
-        self.assertEqual(len(self.runs), 18)
-
-    def test_the_runs_change_exactly_the_123_bytes_that_cmp_found(self):
-        changed = sum(1 for _, original, patched in self.runs for before, after in zip(original, patched) if before != after)
-        self.assertEqual(changed, 123)
-
-    def test_each_run_keeps_its_length_and_none_overlap(self):
-        spans = []
-        for offset, original, patched in self.runs:
-            self.assertEqual(len(original), len(patched), hex(offset))
-            spans.append((offset, offset + len(original)))
-        spans.sort()
-        for (_, end), (start, _) in zip(spans, spans[1:]):
-            self.assertLessEqual(end, start)
-
-    def test_the_loader_callout_import_becomes_the_shutdown_check(self):
-        by_offset = {offset: (original, patched) for offset, original, patched in self.runs}
-        original, patched = by_offset[0x40495B]
-        self.assertEqual(b"Rtl" + original, b"RtlIsThreadWithinLoaderCallout")
-        self.assertEqual(b"Rtl" + patched.rstrip(b"\0"), b"RtlDllShutdownInProgress")
-
-
-class PatchImageTest(unittest.TestCase):
-    def setUp(self):
-        self.table, self.patched = synthetic_table()
-
-    def test_it_writes_every_run_and_nothing_else(self):
-        result = mfg.patch_image(SOURCE, self.table)
-        self.assertEqual(result, self.patched)
-        changed = [index for index, (before, after) in enumerate(zip(SOURCE, result)) if before != after]
-        inside = {index for offset, original, _ in mfg.table_runs(self.table) for index in range(offset, offset + len(original))}
-        self.assertTrue(changed)
-        self.assertLessEqual(set(changed), inside)
-        self.assertEqual(len(result), len(SOURCE))
-
-    def test_each_run_is_checked_against_the_original_before_anything_is_written(self):
-        for index in range(len(REPLACEMENTS)):
-            with self.subTest(run=index):
-                table = json.loads(json.dumps(self.table))
-                runs = [run for patch in table["patches"] for run in patch["runs"]]
-                original = bytearray(bytes.fromhex(runs[index]["original"]))
-                original[0] ^= 0xFF
-                runs[index]["original"] = original.hex()
-                with self.assertRaises(mfg.PatchError) as raised:
-                    mfg.patch_image(SOURCE, table)
-                self.assertIn(f"{int(runs[index]['offset'], 16):#x}", str(raised.exception))
-
-    def test_a_file_with_another_hash_is_refused_even_when_every_run_matches(self):
-        other = bytearray(SOURCE)
-        other[0x200] ^= 0xFF
-        with self.assertRaises(mfg.PatchError) as raised:
-            mfg.patch_image(bytes(other), self.table)
-        self.assertIn(sha256(bytes(other)), str(raised.exception))
-
-    def test_a_table_whose_output_hash_is_wrong_is_refused(self):
-        self.table["output_sha256"] = "0" * 64
-        with self.assertRaises(mfg.PatchError) as raised:
-            mfg.patch_image(SOURCE, self.table)
-        self.assertIn("promises", str(raised.exception))
-
-    def test_a_run_past_the_end_of_the_file_is_refused(self):
-        table = json.loads(json.dumps(self.table))
-        table["patches"][0]["runs"][0]["offset"] = hex(len(SOURCE) - 1)
-        with self.assertRaises(mfg.PatchError):
-            mfg.patch_image(SOURCE, table)
-
-    def test_the_table_of_this_repository_refuses_a_file_that_is_not_the_release(self):
-        with self.assertRaises(mfg.PatchError):
-            mfg.patch_image(SOURCE, mfg.load_table())
+    def test_no_byte_patching_is_left(self):
+        self.assertFalse((MFG / "parts" / "patches.json").exists())
+        self.assertFalse(hasattr(mfg, "patch_image"))
+        self.assertFalse(hasattr(mfg, "load_table"))
 
 
 class MfgCase(SimulatorCase):
@@ -185,16 +110,27 @@ class MfgCase(SimulatorCase):
 
     def setUp(self):
         super().setUp()
-        self.table, self.patched = synthetic_table()
         self.steam = self.fake.steam
         self.backup_folder = self.backup("mfg-unlocker")
         self.config = self.sim / "RTXMFG-Universal.json"
         self.log = self.sim / "RTXMFG-flightsimulator2024-A2C6379C1634BF0A.log"
+        self.xess = self.sim / XESS_FOLDER
         self.gpus(NVIDIA_GPU)
-        patcher = mock.patch.dict(os.environ, {"PATH": f"{self.root / 'bin'}:{os.environ['PATH']}"})
+        self.patch_environment({"PATH": f"{self.root / 'bin'}:{os.environ['PATH']}"})
+        self.patch_release()
+        self.options(FULL_OPTIONS)
+
+    def patch_environment(self, values):
+        patcher = mock.patch.dict(os.environ, values)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.options(FULL_OPTIONS)
+
+    def patch_release(self):
+        files = {name: sha256(image) for name, image in XESS_IMAGES.items()}
+        for name, value in (("PROXY_SHA256", sha256(PROXY_IMAGE)), ("XESS_FILES", files)):
+            patcher = mock.patch.object(mfg, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def gpus(self, *gpus):
         stub(self.root / "bin" / "vulkaninfo", f"#!/bin/sh\ncat <<'EOF'\n{summary(*gpus)}EOF\n")
@@ -208,19 +144,25 @@ class MfgCase(SimulatorCase):
         return env
 
     def installed(self, data=None):
-        (self.sim / "version.dll").write_bytes(self.patched if data is None else data)
+        (self.sim / "version.dll").write_bytes(PROXY_IMAGE if data is None else data)
+
+    def runtime(self, **replacing):
+        self.xess.mkdir(exist_ok=True)
+        for name, image in {**XESS_IMAGES, **replacing}.items():
+            (self.xess / name).write_bytes(image)
 
     def configured(self, text=FIXED):
         self.config.write_bytes(text.encode())
 
     def fixed_machine(self):
         self.installed()
+        self.runtime()
         self.configured()
         self.log.write_text(LOG)
 
     def call(self, function, *args):
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(mfg, "load_table", return_value=self.table), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = function(*args)
         return code, out.getvalue(), err.getvalue()
 
@@ -234,66 +176,157 @@ class MfgCase(SimulatorCase):
     def undo(self):
         return self.call(mfg.undo, str(self.sim), str(self.backup_folder))
 
-    def install(self, archive, sha=None):
-        return self.call(mfg.install, str(archive), sha or sha256(Path(archive).read_bytes()), str(self.sim))
+    def install(self, archive, sdk=None, sha=None, sdk_sha=None):
+        sdk = sdk or self.sdk()
+        return self.call(mfg.install, str(archive), sha or sha256(Path(archive).read_bytes()), str(sdk), sdk_sha or sha256(Path(sdk).read_bytes()), str(self.sim))
+
+    def archive(self, members=None):
+        return make_zip(self.root / "release.zip", members if members is not None else {"MFGUnlocker.dll": PROXY_IMAGE})
+
+    def sdk(self, members=None):
+        default = {f"bin/{name}": image for name, image in XESS_IMAGES.items()}
+        return make_zip(self.root / "sdk.zip", members if members is not None else {**default, "include/xess/xess.h": b"header"})
+
+    def nothing_written(self):
+        self.assertFalse((self.sim / "version.dll").exists())
+        self.assertFalse(self.xess.exists())
+        self.assertEqual(sorted(path.name for path in self.sim.glob("*.part")), [])
 
 
 class MfgInstallTest(MfgCase):
-    def archive(self, members=None):
-        return make_zip(self.root / "release.zip", members if members is not None else {"MFGUnlocker.dll": SOURCE})
-
-    def test_it_installs_the_patched_dll_as_version_dll_and_leaves_no_part_file(self):
+    def test_it_installs_the_fork_as_version_dll_and_the_two_intel_files_and_leaves_no_part_file(self):
         code, out, err = self.install(self.archive())
         self.assertEqual(code, 0, err)
-        self.assertEqual((self.sim / "version.dll").read_bytes(), self.patched)
+        self.assertEqual((self.sim / "version.dll").read_bytes(), PROXY_IMAGE)
+        for name, image in XESS_IMAGES.items():
+            self.assertEqual((self.xess / name).read_bytes(), image)
         self.assertEqual(sorted(path.name for path in self.sim.glob("version.dll*")), ["version.dll"])
+        self.assertEqual(sorted(path.name for path in self.xess.iterdir()), sorted(XESS_IMAGES))
         self.assertIn("addon apply mfg-unlocker", out)
+
+    def test_it_takes_only_the_two_libraries_out_of_the_sdk(self):
+        self.install(self.archive(), self.sdk({**{f"bin/{name}": image for name, image in XESS_IMAGES.items()}, "bin/libxess.dll": b"MZ the upscaler", "bin/libxell.pdb": b"symbols"}))
+        self.assertEqual(sorted(path.name for path in self.xess.iterdir()), sorted(XESS_IMAGES))
 
     def test_a_zip_with_another_hash_than_the_one_given_is_refused_and_nothing_is_written(self):
         code, _, err = self.install(self.archive(), sha="0" * 64)
         self.assertEqual(code, 1)
         self.assertIn("not the release this add-on was tested with", err)
-        self.assertFalse((self.sim / "version.dll").exists())
+        self.nothing_written()
+
+    def test_an_sdk_zip_with_another_hash_than_the_one_given_is_refused_and_nothing_is_written(self):
+        code, _, err = self.install(self.archive(), sdk_sha="0" * 64)
+        self.assertEqual(code, 1)
+        self.assertIn("XeSS SDK", err)
+        self.assertIn("not the release this add-on was tested with", err)
+        self.nothing_written()
 
     def test_a_dll_that_is_not_the_release_is_refused_and_nothing_is_written(self):
-        code, _, err = self.install(self.archive({"MFGUnlocker.dll": SOURCE[:-1] + b"\xff"}))
+        code, _, err = self.install(self.archive({"MFGUnlocker.dll": PROXY_IMAGE[:-1] + b"\xff"}))
         self.assertEqual(code, 1)
-        self.assertIn("cannot be patched", err)
-        self.assertFalse((self.sim / "version.dll").exists())
+        self.assertIn("cannot be installed", err)
+        self.nothing_written()
 
     def test_a_zip_without_the_dll_is_refused(self):
         code, _, err = self.install(self.archive({"readme.txt": b"hello"}))
         self.assertEqual(code, 1)
-        self.assertIn("cannot be patched", err)
-        self.assertFalse((self.sim / "version.dll").exists())
+        self.assertIn("cannot be installed", err)
+        self.nothing_written()
+
+    def test_an_intel_library_that_is_not_the_one_tested_is_refused_and_not_even_the_dll_is_written(self):
+        for name in XESS_IMAGES:
+            with self.subTest(library=name):
+                members = {f"bin/{other}": image for other, image in XESS_IMAGES.items()}
+                members[f"bin/{name}"] = b"MZ another build"
+                code, _, err = self.install(self.archive(), self.sdk(members))
+                self.assertEqual(code, 1)
+                self.assertIn("cannot be installed", err)
+                self.assertIn(name, err)
+                self.nothing_written()
+
+    def test_an_sdk_without_one_of_the_libraries_is_refused_and_nothing_is_written(self):
+        code, _, err = self.install(self.archive(), self.sdk({"bin/libxell.dll": XELL_IMAGE}))
+        self.assertEqual(code, 1)
+        self.assertIn("libxess_fg.dll", err)
+        self.nothing_written()
 
     def test_a_file_that_is_not_a_zip_is_refused(self):
         junk = self.root / "junk.zip"
         junk.write_bytes(b"not a zip")
-        code, _, err = self.install(junk)
+        code, _, _ = self.install(junk)
         self.assertEqual(code, 1)
-        self.assertFalse((self.sim / "version.dll").exists())
+        self.nothing_written()
+
+    def test_an_sdk_that_is_not_a_zip_is_refused(self):
+        junk = self.root / "junk.zip"
+        junk.write_bytes(b"not a zip")
+        code, _, _ = self.install(self.archive(), junk)
+        self.assertEqual(code, 1)
+        self.nothing_written()
 
     def test_a_missing_file_is_refused_and_named(self):
         code, _, err = self.install(self.root / "missing.zip", sha="0" * 64)
         self.assertEqual(code, 1)
         self.assertIn("missing.zip", err)
 
-    def test_a_version_dll_that_is_not_ours_is_never_overwritten_and_is_named(self):
+    def test_a_missing_sdk_is_refused_and_named(self):
+        code, _, err = self.install(self.archive(), self.root / "missing-sdk.zip", sdk_sha="0" * 64)
+        self.assertEqual(code, 1)
+        self.assertIn("missing-sdk.zip", err)
+        self.nothing_written()
+
+    def test_a_version_dll_that_is_not_ours_is_never_overwritten_and_is_named_and_the_libraries_wait(self):
         self.installed(b"MZ another mod")
         code, _, err = self.install(self.archive())
         self.assertEqual(code, 1)
         self.assertEqual((self.sim / "version.dll").read_bytes(), b"MZ another mod")
         self.assertIn(str(self.sim / "version.dll"), err)
         self.assertIn(sha256(b"MZ another mod"), err)
+        self.assertFalse(self.xess.exists())
 
-    def test_the_patched_dll_already_there_is_left_alone(self):
+    def test_an_intel_file_that_is_not_ours_is_never_overwritten_and_is_named_and_the_dll_waits(self):
+        for name in XESS_IMAGES:
+            with self.subTest(library=name):
+                self.runtime(**{name: b"MZ somebody else's build"})
+                code, _, err = self.install(self.archive())
+                self.assertEqual(code, 1)
+                self.assertEqual((self.xess / name).read_bytes(), b"MZ somebody else's build")
+                self.assertIn(str(self.xess / name), err)
+                self.assertIn(sha256(b"MZ somebody else's build"), err)
+                self.assertFalse((self.sim / "version.dll").exists())
+
+    def test_everything_already_there_is_left_alone(self):
         self.installed()
-        before = (self.sim / "version.dll").stat().st_mtime_ns
+        self.runtime()
+        before = [path.stat().st_mtime_ns for path in (self.sim / "version.dll", *sorted(self.xess.iterdir()))]
         code, out, _ = self.install(self.archive())
         self.assertEqual(code, 0)
         self.assertIn("already in", out)
+        after = [path.stat().st_mtime_ns for path in (self.sim / "version.dll", *sorted(self.xess.iterdir()))]
+        self.assertEqual(after, before)
+
+    def test_the_dll_already_there_stays_and_only_the_libraries_are_added(self):
+        self.installed()
+        before = (self.sim / "version.dll").stat().st_mtime_ns
+        code, out, err = self.install(self.archive())
+        self.assertEqual(code, 0, err)
         self.assertEqual((self.sim / "version.dll").stat().st_mtime_ns, before)
+        self.assertEqual(sorted(path.name for path in self.xess.iterdir()), sorted(XESS_IMAGES))
+        self.assertNotIn("already in", out)
+
+    def test_the_libraries_already_there_stay_and_only_the_dll_is_added(self):
+        self.runtime()
+        before = [path.stat().st_mtime_ns for path in sorted(self.xess.iterdir())]
+        code, _, err = self.install(self.archive())
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.sim / "version.dll").read_bytes(), PROXY_IMAGE)
+        self.assertEqual([path.stat().st_mtime_ns for path in sorted(self.xess.iterdir())], before)
+
+    def test_a_folder_with_other_files_keeps_them(self):
+        self.xess.mkdir()
+        write(self.xess / "notes.txt", "mine")
+        self.install(self.archive())
+        self.assertEqual(read(self.xess / "notes.txt"), "mine")
 
     def test_without_reshade_it_notes_that_only_reshade_was_tested(self):
         (self.sim / "dxgi.dll").unlink(missing_ok=True)
@@ -324,22 +357,33 @@ class MfgInstallScriptTest(MfgCase):
         self.assertIn(ZIP_URL, self.curl_log.read_text())
         self.assertIn("--fail", self.curl_log.read_text())
         self.assertIn("not the file this add-on was tested with", result.stderr)
-        self.assertFalse((self.sim / "version.dll").exists())
+        self.nothing_written()
         self.assertEqual(list((self.root / "cache" / "downloads").iterdir()), [])
+
+    def test_the_sdk_is_not_downloaded_when_the_release_already_failed(self):
+        self.script("install")
+        self.assertNotIn(SDK_URL, self.curl_log.read_text())
 
     def test_a_file_given_by_hand_with_another_hash_is_refused_without_downloading(self):
         file = make_zip(self.root / "newer.zip", {"MFGUnlocker.dll": b"MZ a newer release"})
         result = self.script("install", FSOL_INSTALLER=str(file))
         self.assertEqual(result.returncode, 1)
         self.assertIn("not the release this add-on was tested with", result.stderr)
+        self.assertIn(str(file), result.stderr)
         self.assertFalse(self.curl_log.exists())
-        self.assertFalse((self.sim / "version.dll").exists())
+        self.nothing_written()
 
-    @unittest.skipUnless(os.environ.get("MFG_UNLOCKER_ZIP"), "set MFG_UNLOCKER_ZIP to the official MFGUnlocker-v1.7.0.zip to run the real patcher")
-    def test_the_real_release_patches_to_the_pinned_hash(self):
+    @unittest.skipUnless(os.environ.get("MFG_UNLOCKER_ZIP") and os.environ.get("XESS_SDK_ZIP"), "set MFG_UNLOCKER_ZIP and XESS_SDK_ZIP to the two real zips to run the real install")
+    def test_the_real_zips_install_the_pinned_files(self):
+        cache = self.root / "cache" / "downloads"
+        cache.mkdir(parents=True)
+        shutil.copy(os.environ["XESS_SDK_ZIP"], cache / "XeSS_SDK_3.0.2.zip")
         result = self.script("install", FSOL_INSTALLER=os.environ["MFG_UNLOCKER_ZIP"])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(sha256((self.sim / "version.dll").read_bytes()), PATCHED_SHA256)
+        self.assertFalse(self.curl_log.exists())
+        self.assertEqual(sha256((self.sim / "version.dll").read_bytes()), DLL_SHA256)
+        self.assertEqual(sha256((self.xess / "libxess_fg.dll").read_bytes()), XESS_FG_SHA256)
+        self.assertEqual(sha256((self.xess / "libxell.dll").read_bytes()), XELL_SHA256)
 
 
 class MfgDownloadTest(MfgCase):
@@ -388,6 +432,23 @@ class MfgDownloadTest(MfgCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.target.read_bytes(), self.asset)
 
+    def test_a_file_given_by_hand_with_the_right_hash_is_accepted_in_silence(self):
+        write(self.target, self.asset.decode())
+        result = self.bash(f'mfg_require "{self.target}" {self.sha}')
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_a_file_given_by_hand_with_another_hash_is_refused_and_named(self):
+        write(self.target, self.asset.decode())
+        result = self.bash(f'mfg_require "{self.target}" {"0" * 64}')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(str(self.target), result.stderr)
+        self.assertIn("not the release this add-on was tested with", result.stderr)
+
+    def test_a_file_given_by_hand_that_is_missing_is_refused_and_named(self):
+        result = self.bash(f'mfg_require "{self.root / "none.zip"}" {self.sha}')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("none.zip", result.stderr)
+
 
 class MfgCheckTest(MfgCase):
     def setUp(self):
@@ -401,16 +462,16 @@ class MfgCheckTest(MfgCase):
         self.assertEqual(code, 1, lines)
         self.assertEqual(len(self.failing(lines)), 1, lines)
 
-    def test_a_fixed_machine_passes_with_ten_ok_lines(self):
+    def test_a_fixed_machine_passes_with_fourteen_ok_lines(self):
         code, lines = self.check()
         self.assertEqual(code, 0, lines)
-        self.assertEqual([line.split()[0] for line in lines], ["ok"] * 10)
+        self.assertEqual([line.split()[0] for line in lines], ["ok"] * 14)
 
     def test_without_a_log_the_log_lines_are_left_out(self):
         self.log.unlink()
         code, lines = self.check()
         self.assertEqual(code, 0, lines)
-        self.assertEqual(len(lines), 8)
+        self.assertEqual(len(lines), 11)
 
     def test_the_gpu_line_names_the_card(self):
         _, lines = self.check()
@@ -470,6 +531,45 @@ class MfgCheckTest(MfgCase):
         self.assertIn(sha256(b"MZ another mod"), lines[1])
         self.assertIn("does not overwrite it", lines[1])
 
+    def test_the_dll_line_says_it_is_the_fork(self):
+        _, lines = self.check()
+        self.assertIn("1.7.1-xmx.1", lines[1])
+
+    def test_without_the_intel_folder_both_libraries_fail_and_say_to_install(self):
+        shutil.rmtree(self.xess)
+        code, lines = self.check()
+        self.assertEqual(code, 1, lines)
+        self.assertEqual(len(self.failing(lines)), 2, lines)
+        for line, name in zip(lines[2:4], XESS_IMAGES):
+            self.assertTrue(line.startswith("FAIL"), line)
+            self.assertIn(name, line)
+            self.assertIn("addon install mfg-unlocker", line)
+
+    def test_a_missing_library_fails_alone_and_is_named(self):
+        for index, name in enumerate(XESS_IMAGES):
+            with self.subTest(library=name):
+                self.runtime()
+                (self.xess / name).unlink()
+                code, lines = self.check()
+                self.only_failure(code, lines)
+                self.assertTrue(lines[2 + index].startswith("FAIL"), lines)
+                self.assertIn(name, lines[2 + index])
+
+    def test_a_library_that_is_not_the_one_tested_fails_alone_and_gives_its_hash(self):
+        for index, name in enumerate(XESS_IMAGES):
+            with self.subTest(library=name):
+                self.runtime(**{name: b"MZ another build"})
+                code, lines = self.check()
+                self.only_failure(code, lines)
+                self.assertTrue(lines[2 + index].startswith("FAIL"), lines)
+                self.assertIn(sha256(b"MZ another build"), lines[2 + index])
+                self.assertIn("does not overwrite it", lines[2 + index])
+
+    def test_the_library_lines_name_the_sdk_the_files_come_from(self):
+        _, lines = self.check()
+        for line in lines[2:4]:
+            self.assertIn("XeSS SDK 3.0.2", line)
+
     def option_failure(self, options, expected):
         self.options(options)
         code, lines = self.check()
@@ -500,20 +600,31 @@ class MfgCheckTest(MfgCase):
     def test_without_the_dlss_upgrade_it_fails_alone(self):
         self.option_failure(FULL_OPTIONS.replace("PROTON_DLSS_UPGRADE=1 ", ""), "PROTON_DLSS_UPGRADE=1")
 
-    def test_without_the_frame_generation_override_it_fails_alone(self):
-        self.option_failure(FULL_OPTIONS.replace("ngx_dlss_fg_override=on,", ""), "ngx_dlss_fg_override=on in DXVK_NVAPI_DRS_SETTINGS")
+    def test_the_frame_generation_override_is_not_needed_and_not_named_with_or_without_it(self):
+        code, without = self.check()
+        self.assertEqual(code, 0, without)
+        self.options(FULL_OPTIONS.replace("ngx_dlss_sr_override=on", "ngx_dlss_fg_override=on,ngx_dlss_sr_override=on"))
+        code, with_it = self.check()
+        self.assertEqual(code, 0, with_it)
+        self.assertNotIn("ngx_dlss_fg_override", "\n".join(without + with_it))
 
-    def test_the_override_set_off_fails(self):
-        self.option_failure(FULL_OPTIONS.replace("ngx_dlss_fg_override=on", "ngx_dlss_fg_override=off"), "ngx_dlss_fg_override=on in DXVK_NVAPI_DRS_SETTINGS")
+    def test_the_low_latency_extension_and_the_driver_key_are_not_needed_and_not_named_with_or_without_them(self):
+        code, without = self.check()
+        self.assertEqual(code, 0, without)
+        self.options(FULL_OPTIONS.replace(" %command%", " __GL_0xcfcfa1=0 VKD3D_DISABLE_EXTENSIONS=VK_NV_low_latency2 %command%"))
+        code, with_them = self.check()
+        self.assertEqual(code, 0, with_them)
+        for name in ("VK_NV_low_latency2", "0xcfcfa1"):
+            self.assertNotIn(name, "\n".join(without + with_them))
 
     def test_a_word_after_the_command_is_not_a_launch_option(self):
         self.option_failure(FULL_OPTIONS.replace('WINEDLLOVERRIDES="version=n,b" ', "") + " WINEDLLOVERRIDES=version=n,b", 'WINEDLLOVERRIDES="version=n,b"')
 
-    def test_no_launch_options_saved_fails_the_four_launch_lines_and_nothing_else(self):
+    def test_no_launch_options_saved_fails_the_three_launch_lines_and_nothing_else(self):
         self.options("")
         code, lines = self.check()
         self.assertEqual(code, 1)
-        self.assertEqual(len(self.failing(lines)), 4)
+        self.assertEqual(len(self.failing(lines)), 3)
         self.assertTrue(all("launch options" in line for line in self.failing(lines)))
 
     def test_options_held_by_any_steam_user_count(self):
@@ -563,6 +674,51 @@ class MfgCheckTest(MfgCase):
                 self.only_failure(code, lines)
                 self.assertIn(f'"mode" is "{mode}"', self.failing(lines)[0])
 
+    def test_the_xmx_key_left_off_fails_alone_and_says_what_it_does(self):
+        self.configured(FIXED.replace('"xmx":1', '"xmx":0'))
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn('"xmx" is 0', self.failing(lines)[0])
+        self.assertIn("NVIDIA's generator", self.failing(lines)[0])
+
+    def test_a_config_without_the_xmx_key_fails_alone(self):
+        self.configured(FIXED.replace('"xmx":1,', ""))
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn('"xmx" is null', self.failing(lines)[0])
+
+    def test_the_xmx_key_written_as_true_fails_because_the_mod_reads_only_the_number(self):
+        self.configured(FIXED.replace('"xmx":1', '"xmx":true'))
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn('"xmx" is true', self.failing(lines)[0])
+
+    def test_the_xell_key_left_off_fails_alone_and_says_what_it_does(self):
+        self.configured(FIXED.replace('"xmxXell":1', '"xmxXell":0'))
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn('"xmxXell" is 0', self.failing(lines)[0])
+        self.assertIn("XeLL", self.failing(lines)[0])
+
+    def test_a_config_without_the_xell_key_fails_alone(self):
+        self.configured(FIXED.replace(',"xmxXell":1', ""))
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn('"xmxXell" is null', self.failing(lines)[0])
+
+    def test_the_xell_key_written_as_true_fails_because_the_mod_reads_only_the_number(self):
+        self.configured(FIXED.replace('"xmxXell":1', '"xmxXell":true'))
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn('"xmxXell" is true', self.failing(lines)[0])
+
+    def test_the_stand_in_key_is_not_asked_for_either_way(self):
+        for text in (FIXED, FIXED.replace('"xmxXell":1', '"xmxXell":1,"xmxStandIn":0'), FIXED.replace('"xmxXell":1', '"xmxXell":1,"xmxStandIn":1')):
+            self.configured(text)
+            code, lines = self.check()
+            self.assertEqual(code, 0, lines)
+            self.assertNotIn("xmxStandIn", "\n".join(lines))
+
     def test_the_mode_line_gives_the_multiplier(self):
         self.configured(FIXED.replace('"multiplier":2', '"multiplier":4'))
         _, lines = self.check()
@@ -581,6 +737,13 @@ class MfgCheckTest(MfgCase):
         self.only_failure(code, lines)
         self.assertIn("MFG_PROXY_UI state=active", self.failing(lines)[0])
 
+    def test_a_log_without_the_runtime_line_fails_alone_and_names_the_folder(self):
+        self.log.write_text(LOG_NO_RUNTIME)
+        code, lines = self.check()
+        self.only_failure(code, lines)
+        self.assertIn("XMX runtime", self.failing(lines)[0])
+        self.assertIn(XESS_FOLDER, self.failing(lines)[0])
+
     def test_the_previous_logs_do_not_stand_in_for_the_current_one(self):
         self.log.write_text(LOG_NO_CUDA)
         (self.sim / "RTXMFG-flightsimulator2024-A2C6379C1634BF0A.previous.log").write_text(LOG)
@@ -592,7 +755,7 @@ class MfgCheckTest(MfgCase):
         self.log.unlink()
         (self.sim / "RTXMFG-flightsimulator2024-A2C6379C1634BF0A.previous.log").write_text(LOG_NO_CUDA)
         code, lines = self.check()
-        self.assertEqual((code, len(lines)), (0, 8))
+        self.assertEqual((code, len(lines)), (0, 11))
 
     def test_check_changes_nothing(self):
         before = tree(self.root)
@@ -604,13 +767,15 @@ class MfgApplyTest(MfgCase):
     def setUp(self):
         super().setUp()
         self.installed()
+        self.runtime()
 
-    def test_it_sets_the_two_keys_and_keeps_every_other_byte(self):
+    def test_it_sets_the_four_keys_and_keeps_every_other_byte(self):
         self.configured(FIRST_RUN)
         code, out, err = self.apply()
         self.assertEqual(code, 0, err)
         self.assertEqual(read(self.config), FIXED)
         self.assertIn("Backspace", out)
+        self.assertIn("next start of the simulator", out)
 
     def test_the_multiplier_the_reader_chose_stays(self):
         self.configured(FIRST_RUN.replace('"multiplier":2', '"multiplier":5'))
@@ -621,14 +786,29 @@ class MfgApplyTest(MfgCase):
         text = json.dumps(json.loads(FIRST_RUN), indent=2).replace("\n", "\r\n") + "\r\n"
         self.configured(text)
         self.apply()
-        expected = text.replace('"followGame": true', '"followGame": false').replace('"mode": "follow"', '"mode": "fixed"')
+        expected = text.replace('"followGame": true', '"followGame": false').replace('"mode": "follow"', '"mode": "fixed"').replace('"xmx": 0', '"xmx": 1').replace('"xmxXell": 0', '"xmxXell": 1')
         self.assertEqual(self.config.read_bytes(), expected.encode())
 
     def test_a_missing_key_is_added_and_the_others_stay(self):
         self.configured('{"multiplier":3,"version":13}')
         code, _, err = self.apply()
         self.assertEqual(code, 0, err)
-        self.assertEqual(json.loads(read(self.config)), {"multiplier": 3, "version": 13, "followGame": False, "mode": "fixed"})
+        self.assertEqual(json.loads(read(self.config)), {"multiplier": 3, "version": 13, "followGame": False, "mode": "fixed", "xmx": 1, "xmxXell": 1})
+
+    def test_the_two_xmx_keys_are_written_as_numbers_and_the_stand_in_the_reader_chose_stays(self):
+        self.configured(FIRST_RUN.replace('"xmxXell":0', '"xmxXell":0,"xmxStandIn":0'))
+        self.apply()
+        text = read(self.config)
+        self.assertIn('"xmx":1', text)
+        self.assertIn('"xmxXell":1', text)
+        self.assertIn('"xmxStandIn":0', text)
+        self.assertNotIn('"xmx":true', text)
+
+    def test_the_xmx_key_the_reader_turned_off_is_turned_on_and_the_original_is_kept(self):
+        self.configured(FIRST_RUN)
+        self.apply()
+        self.assertEqual(json.loads(read(self.backup_folder / "RTXMFG-Universal.json.orig"))["xmx"], 0)
+        self.assertEqual(json.loads(read(self.config))["xmx"], 1)
 
     def test_a_file_already_right_is_not_written_again(self):
         self.configured(FIXED)
@@ -669,13 +849,35 @@ class MfgApplyTest(MfgCase):
         self.assertIn("cannot be edited", err)
         self.assertFalse(self.backup_folder.exists())
 
-    def test_without_the_patched_dll_it_says_to_install_and_changes_nothing(self):
+    def test_without_the_dll_it_says_to_install_and_changes_nothing(self):
         (self.sim / "version.dll").unlink()
         self.configured(FIRST_RUN)
         code, _, err = self.apply()
         self.assertEqual(code, 1)
         self.assertIn("addon install mfg-unlocker", err)
         self.assertEqual(read(self.config), FIRST_RUN)
+        self.assertFalse(self.backup_folder.exists())
+
+    def test_without_the_intel_files_it_says_to_install_and_changes_nothing(self):
+        shutil.rmtree(self.xess)
+        self.configured(FIRST_RUN)
+        code, _, err = self.apply()
+        self.assertEqual(code, 1)
+        self.assertIn("addon install mfg-unlocker", err)
+        self.assertIn("libxess_fg.dll", err)
+        self.assertEqual(read(self.config), FIRST_RUN)
+        self.assertFalse(self.backup_folder.exists())
+
+    def test_an_intel_file_that_is_not_ours_stops_apply_and_is_named(self):
+        for name in XESS_IMAGES:
+            with self.subTest(library=name):
+                self.runtime(**{name: b"MZ another build"})
+                self.configured(FIRST_RUN)
+                code, _, err = self.apply()
+                self.assertEqual(code, 1)
+                self.assertIn(sha256(b"MZ another build"), err)
+                self.assertIn(name, err)
+                self.assertEqual(read(self.config), FIRST_RUN)
 
     def test_a_version_dll_that_is_not_ours_stops_apply_and_is_named(self):
         self.installed(b"MZ another mod")
@@ -691,8 +893,9 @@ class MfgApplyTest(MfgCase):
         before = tree(self.steam)
         code, out, _ = self.apply()
         self.assertEqual(code, 0)
-        for text in ('WINEDLLOVERRIDES="version=n,b"', "PROTON_NVIDIA_NVCUDA=1", "PROTON_DLSS_UPGRADE=1", "ngx_dlss_fg_override=on in DXVK_NVAPI_DRS_SETTINGS"):
+        for text in ('WINEDLLOVERRIDES="version=n,b"', "PROTON_NVIDIA_NVCUDA=1", "PROTON_DLSS_UPGRADE=1"):
             self.assertIn(text, out)
+        self.assertNotIn("ngx_dlss_fg_override", out)
         self.assertEqual(tree(self.steam), before)
 
     def test_it_names_only_what_is_missing(self):
@@ -728,17 +931,54 @@ class MfgApplyTest(MfgCase):
 
 
 class MfgUndoTest(MfgCase):
-    def test_it_removes_the_patched_dll_and_restores_the_config_byte_for_byte(self):
+    def test_it_removes_the_dll_and_the_intel_files_and_restores_the_config_byte_for_byte(self):
         self.installed()
+        self.runtime()
         self.configured(FIRST_RUN)
         self.apply()
         self.assertNotEqual(read(self.config), FIRST_RUN)
         code, out, _ = self.undo()
         self.assertEqual(code, 0)
         self.assertFalse((self.sim / "version.dll").exists())
+        self.assertFalse(self.xess.exists())
         self.assertEqual(read(self.config), FIRST_RUN)
         self.assertFalse((self.backup_folder / "RTXMFG-Universal.json.orig").exists())
         self.assertIn("as it was before apply", out)
+        self.assertIn("libxess_fg.dll", out)
+
+    def test_an_intel_file_that_is_not_ours_stays_with_its_folder_and_is_named(self):
+        for name in XESS_IMAGES:
+            with self.subTest(library=name):
+                self.runtime(**{name: b"MZ somebody else's build"})
+                _, out, _ = self.undo()
+                self.assertEqual((self.xess / name).read_bytes(), b"MZ somebody else's build")
+                self.assertIn(sha256(b"MZ somebody else's build"), out)
+                self.assertIn("so it stays", out)
+                others = [other for other in XESS_IMAGES if other != name]
+                self.assertEqual([other for other in others if (self.xess / other).exists()], [])
+
+    def test_a_file_the_reader_keeps_in_the_intel_folder_stays_and_so_does_the_folder(self):
+        self.runtime()
+        write(self.xess / "notes.txt", "mine")
+        self.undo()
+        self.assertEqual(read(self.xess / "notes.txt"), "mine")
+        self.assertEqual([path.name for path in self.xess.iterdir()], ["notes.txt"])
+
+    def test_the_intel_folder_that_stays_is_not_listed_among_the_mod_files_to_delete(self):
+        self.configured()
+        self.runtime()
+        write(self.xess / "notes.txt", "mine")
+        _, out, _ = self.undo()
+        listing = out.split("delete them if you want them gone: ")[1].splitlines()[0]
+        self.assertIn("RTXMFG-Universal.json", listing)
+        self.assertNotIn(XESS_FOLDER, listing)
+
+    def test_without_the_intel_folder_it_says_so_and_goes_on(self):
+        self.installed()
+        code, out, _ = self.undo()
+        self.assertEqual(code, 0)
+        self.assertIn("is not in the simulator folder", out)
+        self.assertFalse((self.sim / "version.dll").exists())
 
     def test_a_version_dll_that_is_not_ours_stays_and_is_named(self):
         self.installed(b"MZ another mod")
@@ -770,6 +1010,7 @@ class MfgUndoTest(MfgCase):
 
     def test_undo_twice_is_harmless(self):
         self.installed()
+        self.runtime()
         self.configured(FIRST_RUN)
         self.apply()
         self.undo()
@@ -791,13 +1032,20 @@ class MfgScriptsTest(MfgCase):
         result = self.script("check")
         lines = result.stdout.splitlines()
         self.assertEqual(result.returncode, 1)
-        self.assertEqual([line.split()[0] for line in lines], ["ok", "FAIL"] + ["ok"] * 8)
+        self.assertEqual([line.split()[0] for line in lines], ["ok", "FAIL", "FAIL", "FAIL"] + ["ok"] * 10)
         self.assertIn("addon install mfg-unlocker", lines[1])
 
     def test_check_without_a_simulator_folder_fails_with_the_next_step(self):
         result = self.script("check", FSOL_SIM_INSTALL="")
         self.assertEqual(result.returncode, 1)
         self.assertIn("FAIL no simulator install folder found", result.stdout)
+
+    def test_undo_leaves_foreign_intel_files_and_their_folder_where_they_are(self):
+        self.runtime()
+        result = self.script("undo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual({path.name: path.read_bytes() for path in self.xess.iterdir()}, XESS_IMAGES)
+        self.assertIn("so it stays", result.stdout)
 
     def test_apply_without_the_dll_stops_and_says_to_install(self):
         self.configured(FIRST_RUN)
@@ -825,35 +1073,55 @@ class MfgPageTest(unittest.TestCase):
     def test_it_follows_the_template(self):
         self.assertEqual(page_problems("mfg-unlocker"), [])
 
-    def test_it_gives_the_pinned_download_and_the_three_hashes(self):
-        for needed in (ZIP_URL, ZIP_SHA256, DLL_SHA256, PATCHED_SHA256):
+    def test_it_gives_the_pinned_downloads_and_every_hash(self):
+        for needed in (ZIP_URL, ZIP_SHA256, DLL_SHA256, SDK_URL, SDK_SHA256, XESS_FG_SHA256, XELL_SHA256, "1.3.1.78", "RTXMFG-XeSS"):
             self.assertIn(needed, self.text)
 
-    def test_it_says_the_check_prints_ten_lines_and_eight_before_the_first_run(self):
-        self.assertIn("ten lines", self.text)
-        self.assertIn("eight", self.text)
+    def test_it_says_the_check_prints_fourteen_lines_and_eleven_before_the_first_run(self):
+        self.assertIn("fourteen lines", self.text)
+        self.assertIn("eleven", self.text)
 
-    def test_it_gives_the_launch_options_the_check_looks_for(self):
-        for needed in ('WINEDLLOVERRIDES="version=n,b"', "PROTON_NVIDIA_NVCUDA=1", "PROTON_DLSS_UPGRADE=1", "ngx_dlss_fg_override=on", "DXVK_NVAPI_DRS_SETTINGS"):
+    def launch_line(self):
+        return re.search(r"<pre><code>(WINEDLLOVERRIDES=.*?)</code></pre>", self.text).group(1)
+
+    def test_it_gives_the_three_launch_options_the_check_looks_for_and_no_more(self):
+        line = self.launch_line()
+        for needed in ('WINEDLLOVERRIDES="version=n,b"', "PROTON_NVIDIA_NVCUDA=1", "PROTON_DLSS_UPGRADE=1"):
+            self.assertIn(needed, line)
+        for gone in ("DXVK_NVAPI_DRS_SETTINGS", "ngx_dlss_fg_override", "VKD3D_SWAPCHAIN", "__GL_", "VK_NV_low_latency2"):
+            self.assertNotIn(gone, line)
+
+    def test_it_names_the_optional_options_outside_the_launch_line(self):
+        for needed in ("__GL_0xcfcfa1=0", "620.70.06", "VKD3D_SWAPCHAIN_LATENCY_FRAMES=2", "8.3 ms", "launch-options.html"):
             self.assertIn(needed, self.text)
+
+    def test_it_says_the_low_latency_extension_is_not_needed_with_xell_sleep(self):
+        self.assertIn("you don't need <code>VKD3D_DISABLE_EXTENSIONS=VK_NV_low_latency2</code>", self.text)
+        self.assertIn("42.8 ms to 33.3 ms", self.text)
 
     def test_it_names_the_config_keys_the_menu_key_and_the_other_add_on(self):
-        for needed in ("RTXMFG-Universal.json", "followGame", "fixed", "Backspace", "dlss5-nr.html", "glass-cockpit-dlss-fix.html", "reshade.html"):
+        for needed in ("RTXMFG-Universal.json", "followGame", "fixed", '"xmx"', '"xmxXell"', '"xmxStandIn"', "Backspace", "dlss5-nr.html", "glass-cockpit-dlss-fix.html", "reshade.html"):
             self.assertIn(needed, self.text)
 
-    def test_it_says_which_patch_is_for_which_log_line(self):
-        for needed in ("RtlIsThreadWithinLoaderCallout", "isfinite", "PAGE_WRITECOPY", "application graphics import publication unavailable", "DLSS 5 inputs refused", "123"):
+    def test_it_says_what_the_fork_is_and_where_it_lives(self):
+        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.1", "dashdogy", "mavismmg", "XMX", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
             self.assertIn(needed, self.text)
+
+    def test_it_says_how_to_go_back_to_upstream(self):
+        section = self.text.split("<h2>Go back to upstream</h2>")[1]
+        for needed in ("addon undo mfg-unlocker", "version.dll", "dashdogy", "patches.json"):
+            self.assertIn(needed, section)
 
     def tearing_item(self):
-        return next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if MAILBOX in item)
+        return next(item for item in re.findall(r"<li>(.*?)</li>", self.text) if MAILBOX in item and "top and bottom" in item)
 
-    def test_it_offers_mailbox_for_tearing_outside_the_four_launch_options(self):
-        self.assertIn("the four launch options", self.text)
-        launch_line = re.search(r"<pre><code>(WINEDLLOVERRIDES=.*?)</code></pre>", self.text).group(1)
-        self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", launch_line)
+    def test_it_offers_mailbox_for_tearing_outside_the_launch_line(self):
+        self.assertNotIn("VKD3D_SWAPCHAIN_PRESENT_MODE", self.launch_line())
         for needed in ("optional", "top and bottom", f"<code>{MAILBOX}</code> before <code>%command%</code>", "V-Sync to Off in the mod's menu has no effect"):
             self.assertIn(needed, self.tearing_item())
+
+    def test_it_says_the_tearing_was_seen_with_the_upstream_release(self):
+        self.assertIn("upstream 1.7.0", self.tearing_item())
 
     def test_it_says_fifo_holds_the_game_and_the_frame_rate_fell_with_it(self):
         for needed in ("<code>FIFO</code>", "holds the game until the screen refreshes", "frame rate fell", "Steam performance monitor turned red"):
@@ -874,9 +1142,10 @@ class MfgPageTest(unittest.TestCase):
     def test_it_says_the_repository_ships_no_dll(self):
         self.assertIn("ships no DLL", self.text)
 
-    def test_its_numbers_match_the_patch_table(self):
-        self.assertEqual(len(mfg.load_table()["patches"]), 7)
-        self.assertIn("seven patches", self.text)
+    def test_it_no_longer_describes_byte_patches_as_something_the_install_does(self):
+        for gone in ("123 bytes", "seven patches", "The seven patches", "patched at install", "RtlIsThreadWithinLoaderCallout"):
+            self.assertNotIn(gone, self.text)
+        self.assertIn("patches nothing any more", self.text)
 
 
 if __name__ == "__main__":

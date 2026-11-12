@@ -1,0 +1,101 @@
+title: Launch options
+description: What each Steam launch option for Microsoft Flight Simulator 2024 under Proton does, which ones suit which machine (NVIDIA, HDR, Wayland, two GPUs or an X3D CPU, MFG Unlocker), and one copy-paste line for each.
+---
+<h1>Launch options</h1>
+<p class="lead">The launch options of the simulator are a line of settings that Steam puts in front of the game. This page says what each option does, where the reason comes from, and which machines need it. It separates what a problem calls for, what suits a kind of machine and what is only a choice. Measurements are from one machine: an RTX 4080 with an AMD iGPU and a Ryzen 9 9950X3D, on KDE Plasma under Wayland, in October and November 2026.</p>
+
+<h2>Where they go</h2>
+<p>In Steam, right-click Microsoft Flight Simulator 2024, choose Properties and use the <em>Launch Options</em> box. The line has three parts, in this order: settings written as <code>NAME=value</code>, then the word <code>%command%</code>, which Steam replaces with the game's own command, then any arguments for the game. Everything before <code>%command%</code> is an environment variable for the game. A program that goes before <code>%command%</code>, such as <code>game</code> below, runs the game for you.</p>
+<p>Steam keeps the line in <code>localconfig.vdf</code> and rewrites that file when it closes, so nothing in this project edits it. <code>bin/flightsim-on-linux machine --json</code> prints the line you have now, in <code>launch_options</code>, and <code>bin/flightsim-on-linux doctor</code> reads it too.</p>
+<p>Proton FS2024 is not an option in this line. You pick it in the Compatibility tab, as <a href="start.html">Start here</a> says.</p>
+
+<h2>Needed by everyone</h2>
+<p>Nothing. No option below is needed on every machine, and the setup in <a href="start.html">Start here</a> sets none. Each one answers a problem or suits a kind of machine, and the next sections say which.</p>
+
+<h2>When you see the problem</h2>
+<h3><code>PROTON_NO_NTSYNC=1</code></h3>
+<p>Proton uses ntsync, a Linux kernel driver for Windows-style synchronization, whenever the kernel has <code>/dev/ntsync</code>. With plain Proton-CachyOS in July 2026, the test machine froze in the main menu or while loading an aircraft, and turning ntsync off fixed it. Add this option if your simulator freezes there. <code>PROTON_USE_NTSYNC=0</code> looks like it does the same, but Proton ignores it. <a href="rules.html">The ground rules</a> have the whole story, and <code>doctor</code> says whether ntsync is on.</p>
+
+<h3><code>WAYLANDDRV_FOCUS_LOSS=0</code></h3>
+<p>When the simulator window loses focus, the simulator turns its frame generation off and shows only the frames it renders itself. Under Wine's Wayland driver, this option keeps the simulator from losing focus in a multi-monitor setup, when you use another window on another monitor. On 3 November 2026, with DLSS frame generation on, the simulator dropped to its rendered frame rate as soon as another window took the focus, and with the option set frame generation stayed on. Alt+Tab still makes the simulator window lose focus with the option set. It does nothing under the X11 driver. <a href="proton-fs2024.html">The Proton FS2024 page</a> says what still takes the foreground away.</p>
+
+<h3><code>STEAM_COMPAT_LIBRARY_PATHS=/path/to/your/steam/library</code></h3>
+<p>Only the ChasePlane bridge needs it. Without it, Proton maps drive S: to the <code>steamapps</code> folder itself, the simulator's path has no <code>steamapps\common</code> in it, and the bridge doesn't recognise the installation. The value is the Steam library that holds the simulator, the folder with <code>steamapps</code> inside. <code>bin/flightsim-on-linux machine --json</code> prints it as <code>sim_library</code>. <a href="chaseplane.html">The ChasePlane guide</a> has the rest.</p>
+
+<h2>By machine</h2>
+<h3>An NVIDIA GPU</h3>
+<p><code>PROTON_DLSS_UPGRADE=1</code> makes Proton download the newest DLSS from its own manifest and put it in the prefix. The upgraded frame generation file, <code>nvngx_dlssg.dll</code> 310.9.16, goes to <code>system32/umu</code>. It is also one of the three options the <a href="mfg-unlocker.html">MFG Unlocker</a> check looks for.</p>
+<p>A second option, <code>DXVK_NVAPI_DRS_SETTINGS</code>, picks the DLSS Super Resolution preset. It is in the preferences below.</p>
+
+<h3>An HDR monitor</h3>
+<p><code>PROTON_ENABLE_HDR=1</code> asks Proton for HDR. Use it only with an HDR monitor, and with the Wayland driver below: KWin doesn't manage colour for XWayland windows, so under the X11 driver the desktop gives the simulator no HDR. The simulator reads the screen once, when it starts, and after a start on the wrong monitor its HDR10 option stayed locked. Start it on the screen you play on. The NVIDIA driver matters too. On 25 October 2026 the driver 580.178.04 offered no HDR on its Wayland surface, so the simulator started in SDR and the option did nothing, and 615.78.08 offers HDR10 and scRGB there.</p>
+
+<h3>A Wayland session</h3>
+<p><code>PROTON_ENABLE_WAYLAND=1</code> makes Wine draw the simulator's windows with its Wayland driver. Without it Proton uses the X11 driver, which runs through XWayland. HDR needs the Wayland driver. The price is the tray: under the Wayland driver, the tray icons of GSX, ChasePlane and Volanta show up in a small window of Wine's own <code>explorer.exe</code> and not in the KDE tray. <a href="rules.html">The ground rules</a> explain both drivers. With the Wayland driver, <code>WAYLANDDRV_FOCUS_LOSS=0</code> above also applies.</p>
+
+<h3>Two GPUs, or an X3D CPU with two chiplets</h3>
+<p>On a machine with an integrated GPU and an NVIDIA card, the simulator can end up rendering on the wrong GPU. On a Ryzen X3D CPU with two chiplets, only one has the 3D V-Cache, and a game can land on the other. The test machine solves both with a small script named <code>game</code>, put before <code>%command%</code> in the launch options. This is an example for that machine, not a requirement, and its CPU numbers and GPU names are the test machine's. Change them for yours.</p>
+<pre><code>#!/bin/sh
+[ $# -gt 0 ] || { echo "usage: game &lt;command&gt; [args]" &gt;&amp;2; exit 2; }
+
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export __VK_LAYER_NV_optimus=NVIDIA_only
+export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json:/usr/share/vulkan/icd.d/radeon_icd.json
+export DXVK_FILTER_DEVICE_NAME=NVIDIA
+export VKD3D_FILTER_DEVICE_NAME=NVIDIA
+unset DRI_PRIME __EGL_VENDOR_LIBRARY_FILENAMES
+
+exec env -u LD_LIBRARY_PATH -u LD_PRELOAD \
+  systemd-run --user --scope --quiet --collect --slice=games.slice -- \
+  env LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}" LD_PRELOAD="${LD_PRELOAD-}" "$@"</code></pre>
+<p>Save it as <code>~/.local/bin/game</code> or in another folder of your <code>PATH</code>, and make it executable. It does two things.</p>
+<ul>
+  <li>It points the game at the NVIDIA GPU: the three PRIME offload variables, the Vulkan driver list, and the device name filters of DXVK and vkd3d-proton.</li>
+  <li>It runs the game in a systemd user slice, <code>games.slice</code>. On the test machine that slice has <code>AllowedCPUs=0-7,16-23</code>, the CPUs of the chiplet with the 3D V-Cache, and everything that isn't a game is kept on the other one, <code>8-15,24-31</code>. You have to make the slice yourself, with the CPUs of your own CPU. This page doesn't claim a gain from it.</li>
+</ul>
+<p>The last three lines clear the Steam runtime's library variables for <code>systemd-run</code>, which runs without those libraries, and give them back to the game. The script then runs <code>env</code> with what is left of the line, which is why <code>NAME=value</code> options written after <code>game</code> still apply. Options before it apply as well. Steam also passes the game's command to it, so keep <code>game</code> right before <code>%command%</code>.</p>
+<p>If you write the three PRIME variables again in the launch options, nothing changes: the script exports the same ones.</p>
+<p>One trap, from 11 November 2026. A Steam client update put each game in a systemd scope of its own, <code>app-steam-app&lt;id&gt;-&lt;pid&gt;.scope</code>, in <code>app.slice</code>, and the game left <code>games.slice</code>. Twenty-two starts of the simulator ran without the V-Cache until it was found. A drop-in at <code>~/.config/systemd/user/app-steam-.scope.d/slice.conf</code> with these two lines fixed it:</p>
+<pre><code>[Scope]
+Slice=games.slice</code></pre>
+<p>Check it with the simulator open: <code>grep Cpus_allowed_list /proc/&lt;pid of the simulator&gt;/status</code> must show the CPUs you chose. A machine with two GPUs has a second cost: the GPU that composes the desktop. <a href="rules.html">The ground rules</a> have the measurement.</p>
+
+<h3>MFG Unlocker with XMX</h3>
+<p>The <a href="mfg-unlocker.html">MFG Unlocker guide</a> has the full text. The options, in short:</p>
+<ul>
+  <li><code>WINEDLLOVERRIDES="version=n,b"</code>: Wine would load its own <code>version.dll</code> and never the mod's. If your line has <code>WINEDLLOVERRIDES</code> already, add <code>version=n,b</code> to it.</li>
+  <li><code>PROTON_NVIDIA_NVCUDA=1</code>: the mod takes its GPU route only when CUDA answers, and Proton leaves CUDA off without this. Without it the mod's log says <code>capability=0.0 verified=0</code>.</li>
+  <li><code>PROTON_DLSS_UPGRADE=1</code>, as above.</li>
+  <li><code>__GL_0xcfcfa1=0</code>, optional: an internal setting of NVIDIA driver 620.70.06 that turns off the driver's background shader compile threads. With XMX, the simulator's video memory budget otherwise fell from about 15 GB to 13.7 to 14.4 GB. With it, the budget stayed near 15 GB in a flight on 12 November 2026. It is specific to that driver version. What it costs the rest of the simulator wasn't measured beyond the frame pace.</li>
+  <li><code>VKD3D_SWAPCHAIN_LATENCY_FRAMES=2</code>, optional: with XeLL sleep on, the mod holds vkd3d-proton's low latency mode off, so vkd3d-proton's own limiter holds the swap chain queue at 3 frames by default, on every <code>Present</code>, generated frames included. 2 removes one frame, 8.3 ms at 4x on a 120 Hz screen. It felt better in a flight on 11 November 2026. vkd3d-proton's own comment warns that a short queue can make the GPU clock drop in some games, and with 1 the output left 120 on the test machine.</li>
+  <li><code>VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX</code>, only if the picture tears with V-Sync on. It needs a Wayland window and a driver that offers MAILBOX for it.</li>
+</ul>
+<p>With XeLL sleep on, you don't need <code>VKD3D_DISABLE_EXTENSIONS=VK_NV_low_latency2</code> any more.</p>
+
+<h2>Preferences</h2>
+<p>These are choices of the test machine's owner. They aren't needed, and they cost something or haven't been measured against the alternative.</p>
+<h3>DLSS Super Resolution preset M, recommended on NVIDIA</h3>
+<pre><code>PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m</code></pre>
+<p>The simulator's DLSS goes through dxvk-nvapi, which reads driver settings from <code>DXVK_NVAPI_DRS_SETTINGS</code>. This pair forces preset M. The owner prefers it and recommends it on NVIDIA GPUs. On 15 October 2026 the DLSS indicator showed <code>Render Preset: M</code>, DLSS 310.9.16 marked <code>nvapp_override</code>, and Quality at 2560x1440 for a 3840x2160 screen, and the owner saw jagged edges and ghosting on the panels improve a lot.</p>
+<ul>
+  <li>Write the value in full, <code>render_preset_m</code>. With plain <code>m</code>, the override turns on and the preset is dropped without a warning. <code>default</code> sets 0x0.</li>
+  <li>With <code>PROTON_DLSS_UPGRADE=1</code> Proton fills this variable with the preset <code>default</code>, but yours wins.</li>
+  <li>The variable takes a comma-separated list. If your line has it already, add these two settings to its list.</li>
+  <li>The simulator's own <code>nvngx_dlss.dll</code> is version 310.6.0.0, and whether it has preset M wasn't checked. The upgrade guarantees a file that has it.</li>
+  <li>Some setups also force a DLSS frame generation preset here, <code>ngx_dlss_fg_override=on,ngx_dlss_fg_override_render_preset_selection=render_preset_c</code>. This page doesn't recommend it. The owner decided on 12 November 2026 to take it out. The drop in frame rate with presets A and B came from the Reflex sleep under <code>VK_NV_low_latency2</code>, not from the preset: without the extension the output held 120 in every preset. And under XMX the mod doesn't use NVIDIA's generator preset.</li>
+</ul>
+
+<h2>One line for each profile</h2>
+<p>Copy the one that fits, and add your own <code>STEAM_COMPAT_LIBRARY_PATHS</code> if you use ChasePlane. Each line stands alone.</p>
+<h3>An NVIDIA GPU, X11 driver</h3>
+<pre><code>PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m %command%</code></pre>
+<h3>An NVIDIA GPU, Wayland session, HDR monitor</h3>
+<pre><code>PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 WAYLANDDRV_FOCUS_LOSS=0 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m %command%</code></pre>
+<h3>The same, with the <code>game</code> script for two GPUs or an X3D CPU</h3>
+<pre><code>PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 WAYLANDDRV_FOCUS_LOSS=0 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m game %command%</code></pre>
+<h3>MFG Unlocker with XMX</h3>
+<pre><code>WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_DLSS_UPGRADE=1 __GL_0xcfcfa1=0 VKD3D_SWAPCHAIN_LATENCY_FRAMES=2 %command%</code></pre>
+<h3>All of it together, for a machine like the test machine</h3>
+<pre><code>__GL_0xcfcfa1=0 VKD3D_SWAPCHAIN_LATENCY_FRAMES=2 WINEDLLOVERRIDES="version=n,b" PROTON_NVIDIA_NVCUDA=1 PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 PROTON_DLSS_UPGRADE=1 DXVK_NVAPI_DRS_SETTINGS=ngx_dlss_sr_override=on,ngx_dlss_sr_override_render_preset_selection=render_preset_m VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX WAYLANDDRV_FOCUS_LOSS=0 game %command%</code></pre>
+<p>Drop what doesn't fit your machine: <code>__GL_0xcfcfa1=0</code> if your driver isn't 620.70.06, <code>PROTON_ENABLE_HDR=1</code> without an HDR monitor, <code>game</code> without the script, and <code>VKD3D_SWAPCHAIN_PRESENT_MODE=MAILBOX</code> if nothing tears.</p>

@@ -6,7 +6,6 @@ import json
 import os
 import re
 import shutil
-import stat
 import subprocess
 import tempfile
 import time
@@ -33,12 +32,8 @@ IDS = (
     "fss-e-jets",
     "fss-727",
     "aerosoft-a346-pro",
-    "a340-performance-tool",
     "fsrealistic-plus",
 )
-SIM_PATTERN = re.search(r"A340_SIM_PATTERN='([^']*)'", (ADDONS / "a340-performance-tool" / "parts" / "common.sh").read_text()).group(1)
-SIM_ARGV0 = "Q:\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe"
-WORK = "WASM/MSFS2024/aerosoft-aircraft-a346-pro/work"
 PREFIX_USER = "drive_c/users/steamuser/AppData"
 PAGE_SECTIONS = ("Get it", "Install it", "Make it run", "Start it", "Check it", "Known problems", "Undo")
 BANNED = ("seamless", "robust", "leverage", "simply", "\u2014", "&mdash;")
@@ -54,7 +49,6 @@ EXPECTED = {
     "fss-e-jets": {"version": "1.0.2", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "shortcuts": []},
     "fss-727": {"version": "1.1.7", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "shortcuts": []},
     "aerosoft-a346-pro": {"version": "1.0.5", "on": "2026-10-15", "needs": [], "touches": False, "kind": "store", "shortcuts": []},
-    "a340-performance-tool": {"version": "1.1.0", "on": "2026-10-28", "needs": ["simulator-closed"], "touches": True, "kind": None, "shortcuts": ["A340 Performance Tool"]},
     "fsrealistic-plus": {"version": "1.1.9", "on": "2026-10-14", "needs": ["simulator-closed"], "touches": False, "kind": "installer", "shortcuts": []},
 }
 INSTALLED = {
@@ -65,7 +59,6 @@ INSTALLED = {
     "fss-e-jets": ("community", "fss-aircraft-e19xfreighter/manifest.json"),
     "fss-727": ("community", "fss-aircraft-boeing-727-200re/manifest.json"),
     "aerosoft-a346-pro": ("community", "aerosoft-aircraft-a346-pro/manifest.json"),
-    "a340-performance-tool": ("community", "aerosoft-aircraft-a346-pro/manifest.json"),
     "fsrealistic-plus": ("community", "rkapps-fsrealistic/manifest.json"),
 }
 
@@ -283,18 +276,6 @@ class ShapeTest(unittest.TestCase):
                     result = subprocess.run(["desktop-file-validate", str(written[0])], capture_output=True, text=True)
                     self.assertEqual((result.returncode, result.stdout + result.stderr), (0, ""))
 
-    def test_the_simulation_pattern_of_the_a340_tool_matches_the_steam_install_under_any_drive_mapping_and_nothing_else(self):
-        pattern = re.compile(SIM_PATTERN, re.I)
-        self.assertTrue(pattern.search(SIM_ARGV0 + " 60"))
-        self.assertTrue(pattern.search("D:\\SteamLibrary\\SteamApps\\Common\\MSFS2024\\FlightSimulator2024.exe"))
-        self.assertTrue(pattern.search("S:\\common\\MSFS2024\\FlightSimulator2024.exe"))
-        self.assertTrue(pattern.search("S:\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe"))
-        self.assertTrue(pattern.search("Z:\\home\\pilot\\.local\\share\\Steam\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe"))
-        self.assertFalse(pattern.search("Z:\\home\\pilot\\sentinel\\FlightSimulator2024.exe"))
-        self.assertFalse(pattern.search("python3 proton waitforexitandrun S:\\steamapps\\common\\MSFS2024\\FlightSimulator2024.exe"))
-        self.assertFalse(pattern.search("C:\\Program Files\\Other\\Other.exe"))
-
-
 class StoreCliTest(unittest.TestCase):
     def run_cli(self, *args):
         with tempfile.TemporaryDirectory() as folder:
@@ -323,10 +304,13 @@ class StoreCliTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("has no install script", err)
 
-    def test_an_add_on_with_no_download_says_it_has_nothing_to_install(self):
-        code, _, err = self.run_cli("addon", "install", "a340-performance-tool")
-        self.assertEqual(code, 2)
-        self.assertIn("has nothing to install", err)
+    def test_the_a340_performance_tool_is_gone_from_the_add_ons_and_the_site(self):
+        self.assertFalse((ADDONS / "a340-performance-tool").exists())
+        self.assertFalse((PAGES / "a340-performance-tool.html").exists())
+        for page in (*PAGES.glob("*.html"), ROOT / "site" / "llms.txt"):
+            text = page.read_text()
+            self.assertNotIn("a340-performance-tool", text, page.name)
+            self.assertNotIn("A340 Performance Tool", text, page.name)
 
     def test_the_windows_installers_name_the_vendor_account_and_ask_for_the_file(self):
         code, out, _ = self.run_cli("addon", "install", "ifly-737-max8")
@@ -1122,178 +1106,6 @@ class TfdiTest(AircraftCase):
         self.assertEqual((result.returncode, result.stdout.startswith("already nothing to apply")), (0, True))
         self.assertIn("addon launch tfdi-md-11 fix-navdata", result.stdout)
         self.assertEqual((self.package / "layout.json").read_bytes(), before)
-
-
-class A340Test(AircraftCase):
-    ID = "a340-performance-tool"
-
-    def setUp(self):
-        super().setUp()
-        self.work = self.found.base / WORK
-        self.prevlog = self.work / "ToLissPrevLog.txt"
-        write(self.prevlog, "previous flight")
-        self.prevlog.chmod(0o644)
-        self.state = self.found.compatdata / "flightsim-on-linux-backup" / "a340-performance-tool"
-        self.fast = {"A340_POLL": "0.1"}
-
-    def mode(self):
-        return stat.S_IMODE(self.prevlog.stat().st_mode)
-
-    def on(self, **extra):
-        return self.script("on", **{**self.fast, **extra})
-
-    def session_gone(self):
-        return not (self.state / "session").exists()
-
-    def test_on_makes_the_log_read_only_starts_a_watcher_and_says_so(self):
-        result = self.on()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.mode(), 0o444)
-        self.assertIn("On: ToLissPrevLog.txt is read-only", result.stdout)
-        session = (self.state / "session").read_text()
-        self.assertRegex(session, r"id=[0-9a-f-]{36}\nmode=644\nactivated=\d{4}-")
-        state = self.script("state").stdout
-        self.assertIn("ON since", state)
-        self.assertIn("Watcher running", state)
-        self.assertIn("-r--r--r--", state)
-
-    def test_the_log_is_writable_again_after_the_simulator_ran_and_closed(self):
-        self.on()
-        self.assertEqual(self.mode(), 0o444)
-        simulator = self.stand_in(SIM_ARGV0)
-        time.sleep(0.5)
-        self.assertEqual(self.mode(), 0o444)
-        simulator.kill()
-        simulator.wait()
-        self.assertTrue(self.wait_for(self.session_gone))
-        self.assertEqual(self.mode(), 0o644)
-        self.assertIn("Restored automatically after MSFS 2024 closed.", (self.state / "last_event.txt").read_text())
-        self.assertTrue(self.wait_for(lambda: not list(self.state.glob("watch_*.pid"))))
-
-    def test_the_log_stays_read_only_while_the_simulator_keeps_running(self):
-        self.on()
-        self.stand_in(SIM_ARGV0)
-        time.sleep(1.0)
-        self.assertEqual((self.mode(), (self.state / "session").exists()), (0o444, True))
-
-    def test_when_the_simulator_never_opens_the_log_is_given_back_after_the_limit(self):
-        self.on(A340_IDLE_LIMIT="1")
-        self.assertTrue(self.wait_for(self.session_gone, 6))
-        self.assertEqual(self.mode(), 0o644)
-        self.assertIn("did not open within 3 hours", (self.state / "last_event.txt").read_text())
-
-    def test_the_default_limit_is_three_hours_and_the_default_poll_is_three_seconds(self):
-        common = (ADDONS / self.ID / "parts" / "common.sh").read_text()
-        self.assertIn('A340_IDLE_LIMIT="${A340_IDLE_LIMIT:-10800}"', common)
-        self.assertIn('A340_POLL="${A340_POLL:-3}"', common)
-
-    def test_with_the_simulator_open_on_refuses_and_changes_nothing(self):
-        result = self.script("on", FSOL_SIM_RUNNING="1")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("MSFS 2024 is open", result.stdout)
-        self.assertEqual((self.mode(), self.state.exists()), (0o644, False))
-
-    def test_with_the_simulator_open_off_refuses_and_leaves_the_log_read_only(self):
-        self.on()
-        result = self.script("off", FSOL_SIM_RUNNING="1")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("MSFS 2024 is open", result.stdout)
-        self.assertEqual((self.mode(), (self.state / "session").exists()), (0o444, True))
-
-    def test_off_gives_the_write_access_back_and_stops_the_watcher(self):
-        self.on()
-        result = self.script("off")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.mode(), 0o644)
-        self.assertTrue(self.session_gone())
-        self.assertTrue(self.wait_for(lambda: not list(self.state.glob("watch_*.pid"))))
-        self.assertIn("OFF.", self.script("state").stdout)
-
-    def test_off_without_a_session_changes_nothing(self):
-        result = self.script("off")
-        self.assertEqual((result.returncode, self.mode()), (0, 0o644))
-        self.assertIn("No session is active", result.stdout)
-
-    def test_a_second_on_is_refused_while_the_watcher_waits(self):
-        self.on()
-        session = (self.state / "session").read_text()
-        result = self.on()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("already on", result.stdout)
-        self.assertEqual((self.state / "session").read_text(), session)
-
-    def test_a_session_left_without_a_watcher_is_recovered_by_the_next_on(self):
-        self.on()
-        for pid_file in self.state.glob("watch_*.pid"):
-            os.kill(int(pid_file.read_text()), 9)
-        for ready in self.state.glob("watch_*.ready"):
-            ready.unlink()
-        result = self.on()
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(self.mode(), 0o444)
-
-    def test_the_original_mode_of_the_log_is_the_one_that_comes_back(self):
-        self.prevlog.chmod(0o664)
-        self.on()
-        self.script("off")
-        self.assertEqual(self.mode(), 0o664)
-
-    def test_on_refuses_without_the_log_a_work_link_or_a_log_already_protected(self):
-        self.prevlog.chmod(0o444)
-        self.assertIn("already protected", self.on().stdout)
-        self.prevlog.unlink()
-        self.assertIn("Fly the A340 once", self.on().stdout)
-        shutil.move(self.work, self.root / "moved")
-        os.symlink(self.root / "moved", self.work)
-        self.assertIn("does not exist or is a link", self.on().stdout)
-        self.assertFalse(self.state.exists())
-
-    def test_on_refuses_when_the_current_log_is_protected(self):
-        write(self.work / "ToLissLog.txt", "now")
-        (self.work / "ToLissLog.txt").chmod(0o444)
-        result = self.on()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("ToLissLog.txt is protected", result.stdout)
-        self.assertEqual(self.mode(), 0o644)
-
-    def test_undo_is_off_and_apply_points_at_on(self):
-        self.on()
-        self.assertEqual(self.script("undo").returncode, 0)
-        self.assertEqual(self.mode(), 0o644)
-        self.assertIn("addon launch a340-performance-tool on", self.script("apply").stdout)
-
-    def test_the_check_passes_when_the_tool_is_off_and_when_it_is_on(self):
-        off = self.script("check")
-        self.assertEqual((off.returncode, off.stdout.splitlines()), (0, ["ok the A340 work folder is a real folder", "ok the tool is off and ToLissPrevLog.txt is writable"]))
-        self.on()
-        on = self.script("check")
-        self.assertEqual((on.returncode, on.stdout.splitlines()[-1]), (0, "ok the tool is on: ToLissPrevLog.txt is read-only and the watcher is waiting for the simulator"))
-
-    def test_a_session_whose_log_is_writable_fails_the_check(self):
-        self.on()
-        self.prevlog.chmod(0o644)
-        self.assert_only_failure(self.script("check"), "a session is on but ToLissPrevLog.txt is writable", lines=2)
-
-    def test_a_session_whose_watcher_is_gone_fails_the_check(self):
-        self.on()
-        for pid_file in self.state.glob("watch_*.pid"):
-            os.kill(int(pid_file.read_text()), 9)
-        self.assertTrue(self.wait_for(lambda: self.script("check").returncode == 1))
-        self.assert_only_failure(self.script("check"), "its watcher is gone", lines=2)
-
-    def test_a_log_left_read_only_with_no_session_fails_the_check(self):
-        self.prevlog.chmod(0o444)
-        self.assert_only_failure(self.script("check"), "no session of this tool is on", lines=2)
-
-    def test_a_missing_log_or_work_folder_fails_the_check(self):
-        self.prevlog.unlink()
-        self.assert_only_failure(self.script("check"), "ToLissPrevLog.txt does not exist", lines=2)
-        shutil.rmtree(self.work)
-        self.assert_only_failure(self.script("check"), "work folder", lines=1)
-
-    def test_the_menu_entry_turns_the_tool_on(self):
-        shortcut = addons.load(ADDONS / self.ID).shortcuts[0]
-        self.assertEqual((shortcut["script"], "close" in shortcut), ("on", False))
 
 
 class PageTest(unittest.TestCase):

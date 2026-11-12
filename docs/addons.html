@@ -16,6 +16,7 @@
         <a href="index.html">Home</a>
         <a href="start.html">Start here</a>
         <a href="proton-fs2024.html">Proton FS2024</a>
+        <a href="launch-options.html">Launch options</a>
         <a href="rules.html">Ground rules</a>
         <a href="addons.html" aria-current="page">Add-ons</a>
         <a href="installers.html">Installing add-ons</a>
@@ -28,6 +29,7 @@
 <h1>Add-ons</h1>
 <p class="lead">Each add-on below ran on the test machine in October 2026, at the version shown, unless its guide says otherwise. Its guide says how it was installed, what it needs to run, and what wasn't seen working.</p>
 <p>The scripts in this project were generalised from what ran on the test machine, so the dated results in the guides come from that machine's own earlier scripts unless a guide says otherwise. The checks ran there, read-only, and some of them fail there because it still holds the older files. <code>apply</code>, <code>install</code> and <code>undo</code> were tested on throwaway copies, not on a full prefix. The <code>launch</code> scripts, watchers and menu entries passed their tests against a fake simulator and have not been through a real flight yet. Read a guide before you run its commands, and start with <a href="installers.html">Installing add-ons</a> and <a href="rules.html">the ground rules</a>. <a href="shortcuts-and-watchers.html">Shortcuts and watchers</a> covers menu entries and starting programs with the simulator. The add-ons with hard problems need <a href="proton-fs2024.html">Proton FS2024</a>.</p>
+<p>The Steam launch options of the simulator itself have a guide of their own: <a href="launch-options.html">Launch options</a>.</p>
 <p><span class="tag warn">touches add-on files</span> marks a fix that edits or replaces a file belonging to the add-on, or that sits close to its licensing. Its guide says exactly what changes and how to undo it.</p>
 
 <h2>Aircraft</h2>
@@ -47,7 +49,6 @@
   <tr><td>FSS E-Jets (1.0.2)</td><td>Through Contrail. Navdata comes from the aircraft's EFB; the bundled updater crashes and isn't needed.</td><td><a href="fss-e-jets.html">guide</a></td></tr>
   <tr><td>FSS 727 (1.1.7)</td><td>Through Aerosoft One.</td><td><a href="fss-727.html">guide</a></td></tr>
   <tr><td>Aerosoft A346 Pro (1.0.5)</td><td>Through Aerosoft One.</td><td><a href="aerosoft-a346-pro.html">guide</a></td></tr>
-  <tr><td>A340 Performance Tool (1.1.0)</td><td>Its PowerShell script can't run in the prefix, so a Linux command does the same job. Its effect on stutters wasn't measured.</td><td><a href="a340-performance-tool.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
 </table>
 </div>
 
@@ -82,7 +83,7 @@
   <tr><td>AtmosphereMod (0.7.2)</td><td>ReShade, and the mod's own installer run in the add-ons prefix, with its signature check and its Community link handled, and with <code>--renodx</code> when RenoDX is installed. Run the install again after every simulator update.</td><td><a href="atmospheremod.html">guide</a></td></tr>
   <tr><td>RenoDX HDR for MSFS 2024 (version 1)</td><td>ReShade, HDR on, and the file from Nexus Mods. Next to AtmosphereMod it needs AtmosphereMod 0.7.0 or later installed after it, with <code>--renodx</code>; an older AtmosphereMod needs <code>InjectGraphicsRootSignature=0</code>, which costs its ground haze.</td><td><a href="renodx-hdr.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
   <tr><td>DLSS 5 Neural Rendering (fork of addon-dlssnr-linux, <code>5d493c9</code>)</td><td>ReShade, an add-on you build from source, NVIDIA's model downloaded by hand, and an RTX 40 or 50 card. No <code>addon</code> command.</td><td><a href="dlss5-nr.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
-  <tr><td>MFG Unlocker (1.7.0)</td><td>An RTX 40 card, ReShade, the official zip patched at install (seven patches for Wine), four launch options and the mod's fixed mode. This repository ships no DLL.</td><td><a href="mfg-unlocker.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
+  <tr><td>MFG Unlocker (fork 1.7.1-xmx.1)</td><td>An RTX 40 card, ReShade, the fork's zip and two Intel XeSS libraries for XMX mode, both downloaded and checked at install, three launch options and four config keys. This repository ships no DLL.</td><td><a href="mfg-unlocker.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
   <tr><td>MSFS 2024 LongWorker priority (1.9.21.0)</td><td>A service that gives the simulator's background decoding threads only spare CPU time, against the large stutters a minute or so apart.</td><td><a href="simulator-longworker-priority.html">guide</a></td></tr>
   <tr><td>MSFS 2024 GPU memory warning (1.9.21.0)</td><td>Removes the warning about GPU memory from the simulator's interface.</td><td><a href="simulator-gpu-memory-warning.html">guide</a> <span class="tag warn">touches add-on files</span></td></tr>
 </table>
