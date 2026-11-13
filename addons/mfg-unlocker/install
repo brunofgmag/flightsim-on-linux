@@ -4,9 +4,9 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=/dev/null
 . "$HERE/parts/download.sh"
-MFG_VERSION="1.7.1-xmx.1"
+MFG_VERSION="1.7.1-xmx.2"
 MFG_URL="https://github.com/brunofgmag/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip"
-MFG_SHA256="ca5719cbe73a7053422bf1a7794e1951f782865d5fd4f12721e9f1aa78605dea"
+MFG_SHA256="2d5d36960df058037f596075b6509935624aaaacefd658c4ebe7970061f73944"
 XESS_URL="https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip"
 XESS_SHA256="88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
 

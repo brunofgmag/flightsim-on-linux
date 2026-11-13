@@ -17,9 +17,9 @@ ROOT = PARTS.parents[2]
 sys.path.insert(0, str(ROOT))
 machine = importlib.import_module("fsol.machine")
 
-RELEASE = "1.7.1-xmx.1"
+RELEASE = "1.7.1-xmx.2"
 PROXY = "version.dll"
-PROXY_SHA256 = "6a606ef333ad5764b5b379b1486ef10ecf81654d1139a5267812a2ae3af1d001"
+PROXY_SHA256 = "8606cc4a76df92a31cc4d751177134f7ec447921e756a35608cdd24436a52e32"
 ARCHIVE_MEMBER = "MFGUnlocker.dll"
 XESS_FOLDER = "RTXMFG-XeSS"
 XESS_SDK = "XeSS SDK 3.0.2"
