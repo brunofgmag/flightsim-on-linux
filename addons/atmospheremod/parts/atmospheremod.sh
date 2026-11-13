@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-ATMOSPHEREMOD_VERSION="0.7.2"
+ATMOSPHEREMOD_VERSION="0.7.3"
 ATMOSPHEREMOD_URL="https://github.com/tomwhoca/AtmosphereMod/releases/download/v$ATMOSPHEREMOD_VERSION/AtmosphereMod-$ATMOSPHEREMOD_VERSION.zip"
-ATMOSPHEREMOD_SHA256="6d916cab5c7331708911b63286547452991ed0456d70883d7ef249efa937a118"
+ATMOSPHEREMOD_SHA256="266b358eb546b99340c6b25a0c3c5c784dfc348d0f6d42630daa34fa3aed0eb0"
 ATMOSPHEREMOD_WINDOWS_DATA='C:\users\steamuser\AppData\Local\AtmosphereMod'
 ATMOSPHEREMOD_EFB="atmospheremod-weather"
 
@@ -85,8 +85,8 @@ atmospheremod_release_folder() {
 }
 
 atmospheremod_install_arguments() {
-  local installer="$1" community="$2"
-  ATMOSPHEREMOD_ARGUMENTS=(--data "$ATMOSPHEREMOD_WINDOWS_DATA" --yes --sim "$(addon_windows_path "$(atmospheremod_sim)")" --community "$(addon_windows_path "$community")" --dxc "$installer\\dxc\\bin\\x64")
+  local community="$2"
+  ATMOSPHEREMOD_ARGUMENTS=(--data "$ATMOSPHEREMOD_WINDOWS_DATA" --yes --sim "$(addon_windows_path "$(atmospheremod_sim)")" --community "$(addon_windows_path "$community")")
   if atmospheremod_beside_renodx; then
     echo "RenoDX is in the simulator folder, so the installer runs with --renodx and puts AtmosphereMod's parameters in register space 51, away from RenoDX's"
     ATMOSPHEREMOD_ARGUMENTS+=(--renodx)
