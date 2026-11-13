@@ -4,9 +4,9 @@ set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 # shellcheck source=/dev/null
 . "$HERE/parts/download.sh"
-GLASS_VERSION="1.0.2"
+GLASS_VERSION="1.1.0"
 GLASS_URL="https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases/download/v$GLASS_VERSION/glass-cockpit-dlss-fix.addon64"
-GLASS_SHA256="9474b66e2e22bc005233463574fc9ba9c107d4bfa8364e5c3478588f0e8f2036"
+GLASS_SHA256="411cfa6f51f8418860d85c8e9a6a10cfbc30b361d8c3115eb0c896dddfb31547"
 
 sim="${FSOL_SIM_INSTALL:?no simulator install folder found; run: flightsim-on-linux machine}"
 cache="${FSOL_CACHE:?FSOL_CACHE is not set}/downloads"

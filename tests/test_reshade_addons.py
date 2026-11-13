@@ -317,7 +317,7 @@ class ReShadeApplyAndUndoTest(SimulatorCase):
 class GlassShapeTest(unittest.TestCase):
     def test_the_manifest_says_what_the_add_on_needs(self):
         addon = addons.load(GLASS)
-        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("glass-cockpit-dlss-fix", "1.0.2", "2026-10-20", True))
+        self.assertEqual((addon.id, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("glass-cockpit-dlss-fix", "1.1.0", "2026-11-13", True))
         self.assertEqual(sorted(addon.needs), ["proton-fs2024", "simulator-closed"])
         self.assertEqual(addon.installed, {"sim": ["glass-cockpit-dlss-fix.addon64"]})
         self.assertEqual(addon.install["kind"], "native")
@@ -326,9 +326,9 @@ class GlassShapeTest(unittest.TestCase):
 
     def test_the_pinned_download_is_the_public_release_asset(self):
         text = (GLASS / "install").read_text()
-        self.assertIn('GLASS_VERSION="1.0.2"', text)
+        self.assertIn('GLASS_VERSION="1.1.0"', text)
         self.assertIn("https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases/download/v$GLASS_VERSION/glass-cockpit-dlss-fix.addon64", text)
-        self.assertIn('GLASS_SHA256="9474b66e2e22bc005233463574fc9ba9c107d4bfa8364e5c3478588f0e8f2036"', text)
+        self.assertIn('GLASS_SHA256="411cfa6f51f8418860d85c8e9a6a10cfbc30b361d8c3115eb0c896dddfb31547"', text)
 
     def test_the_vkd3d_patches_it_checks_exist_in_this_repository(self):
         for patch in VKD3D_PATCHES:
@@ -686,7 +686,7 @@ class GlassInstallScriptTest(GlassCase):
     def test_it_downloads_the_pinned_url_and_installs_nothing_when_the_hash_differs(self):
         result = self.script("install")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases/download/v1.0.2/glass-cockpit-dlss-fix.addon64", self.log.read_text())
+        self.assertIn("https://github.com/IFreemz/msfs2024-glass-cockpit-dlss-fix/releases/download/v1.1.0/glass-cockpit-dlss-fix.addon64", self.log.read_text())
         self.assertFalse((self.sim / "glass-cockpit-dlss-fix.addon64").exists())
         self.assertEqual(list((self.root / "cache" / "downloads").iterdir()), [])
 
