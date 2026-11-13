@@ -1,7 +1,7 @@
 {
   "name": "Glass Cockpit DLSS Fix",
-  "tested_version": "1.0.2",
-  "tested_on": "2026-10-20",
+  "tested_version": "1.1.0",
+  "tested_on": "2026-11-13",
   "needs": ["proton-fs2024", "simulator-closed"],
   "touches_addon_files": true,
   "installed": {
