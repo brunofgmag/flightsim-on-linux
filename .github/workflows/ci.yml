@@ -20,7 +20,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Unit tests
-        run: python3 -m unittest discover -s tests -t . -v
+        run: python3 tools/run_tests.py -v
 
   shellcheck:
     runs-on: ubuntu-24.04
