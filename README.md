@@ -38,12 +38,12 @@ Once Proton FS2024 is in place, each add-on goes in with `addon install <id> <in
 ## Working on it
 
 ```
-python3 -m unittest discover -s tests -t .
+python3 tools/run_tests.py
 python3 tools/build_site.py
 python3 -m http.server -d docs 8000
 ```
 
-The last command serves the site at http://127.0.0.1:8000/.
+The first command runs each test module in a process of its own, as many at a time as the machine has CPUs, and prints the full output of the modules that fail. Name modules to run only those, as in `python3 tools/run_tests.py test_watcher`. The last command serves the site at http://127.0.0.1:8000/.
 
 Fixes were found and measured on one machine: CachyOS, KDE Plasma on Wayland, an NVIDIA RTX 4080, October 2026. If you try it on another machine, open an issue with the output of `bin/flightsim-on-linux doctor`, after removing licence keys and account names.
 
