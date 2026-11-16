@@ -17,9 +17,9 @@ ROOT = PARTS.parents[2]
 sys.path.insert(0, str(ROOT))
 machine = importlib.import_module("fsol.machine")
 
-RELEASE = "1.7.1-xmx.3"
+RELEASE = "1.7.1-xmx.4"
 PROXY = "version.dll"
-PROXY_SHA256 = "85fc6f09dd4b3a2cb19ccaed8cbc6e78d125ec45749338df064cab653bd59774"
+PROXY_SHA256 = "dbc19741fb4eea8841f86212e0c79f4f319636fdea07eb4de90bf4882188a7ee"
 ARCHIVE_MEMBER = "MFGUnlocker.dll"
 XESS_FOLDER = "RTXMFG-XeSS"
 XESS_SDK = "XeSS SDK 3.0.2"
@@ -37,7 +37,7 @@ LOG_GLOB = "RTXMFG-*.log"
 LOG_PROOFS = (
     ("capability=8.9 verified=1", "the mod found the RTX 40 GPU through CUDA", "the mod did not find the RTX 40 GPU through CUDA; check that PROTON_NVIDIA_NVCUDA=1 is in the launch options and start the simulator again"),
     ("MFG_PROXY_UI state=active", "the mod's menu installed", "the mod's menu did not install; the fork's version.dll has to be the one that loaded, and the simulator has to have started since it was installed"),
-    ("XMX runtime ", f"the mod loaded Intel's two libraries from {XESS_FOLDER}", f"the mod did not load Intel's two libraries from {XESS_FOLDER}; check that both files are there and start the simulator again"),
+    ("XeMFG DLSS-G runtime ", f"the mod loaded Intel's two libraries from {XESS_FOLDER}", f"the mod did not load Intel's two libraries from {XESS_FOLDER}; check that both files are there and start the simulator again"),
 )
 GENERATED = ("RTXMFG-*", "RTX40MFG-UI*.ini")
 APPLY = "flightsim-on-linux addon apply mfg-unlocker"

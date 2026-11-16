@@ -22,9 +22,9 @@ PAGE = ROOT / "site" / "pages" / "mfg-unlocker.html"
 RTX_5080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 5080", "0x10de", "0x2c02")
 RTX_4090_LAPTOP = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 4090 Laptop GPU", "0x10de", "0x2757")
 GTX_1080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce GTX 1080", "0x10de", "0x1b80")
-ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.3/MFGUnlocker-v1.7.1-xmx.3.zip"
-ZIP_SHA256 = "0ad3d12f3f1c49b81586356c18b43bda40dd42ac682ef50a5aceadf896a15a77"
-DLL_SHA256 = "85fc6f09dd4b3a2cb19ccaed8cbc6e78d125ec45749338df064cab653bd59774"
+ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.4/MFGUnlocker-v1.7.1-xmx.4.zip"
+ZIP_SHA256 = "49ba1a69dd43281effd033f3f49207c9520edaae71dd63545aa1bfcd6d6c6146"
+DLL_SHA256 = "dbc19741fb4eea8841f86212e0c79f4f319636fdea07eb4de90bf4882188a7ee"
 SDK_URL = "https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip"
 SDK_SHA256 = "88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
 XESS_FG_SHA256 = "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
@@ -36,12 +36,12 @@ FIXED = FIRST_RUN.replace('"followGame":true,"mode":"follow"', '"followGame":fal
 LOG = """[17:33:56.275] Backend module: S:\\steamapps\\common\\MSFS2024\\VERSION.dll, file 1.7.1.177, product "MFG Unlocker" 1.7.1
 [17:33:57.258] MFG_PROXY_UI state=active boundary=real-factory-return nativeTableWrites=0
 [17:33:58.088] D157 D3D12 adapter verification: luid=0x00000000000003F2 capability=8.9 verified=1
-[17:37:02.013] XMX runtime S:\\steamapps\\common\\MSFS2024\\RTXMFG-XeSS\\libxess_fg.dll and S:\\steamapps\\common\\MSFS2024\\RTXMFG-XeSS\\libxell.dll
-[17:37:02.217] XMX init 3840x2160 format 24 flags 1 frames 3 result 0
+[17:37:02.013] XeMFG DLSS-G runtime S:\\steamapps\\common\\MSFS2024\\RTXMFG-XeSS\\libxess_fg.dll and S:\\steamapps\\common\\MSFS2024\\RTXMFG-XeSS\\libxell.dll
+[17:37:02.217] XeMFG DLSS-G init 3840x2160 format 24 flags 1 frames 3 result 0
 """
 LOG_NO_CUDA = LOG.replace("capability=8.9 verified=1", "capability=0.0 verified=0")
 LOG_NO_MENU = LOG.replace("MFG_PROXY_UI state=active", "MFG_PROXY_UI factory gateway first call")
-LOG_NO_RUNTIME = LOG.replace("XMX runtime ", "XMX libraries ")
+LOG_NO_RUNTIME = LOG.replace("XeMFG DLSS-G runtime ", "XeMFG DLSS-G libraries ")
 PROXY_IMAGE = bytes((index * 7 + 3) % 251 for index in range(1024))
 XESS_FG_IMAGE = b"MZ the XeSS frame generation library"
 XELL_IMAGE = b"MZ the XeLL library"
@@ -74,7 +74,7 @@ def make_zip(path, members):
 class MfgShapeTest(unittest.TestCase):
     def test_the_manifest_says_what_the_add_on_needs(self):
         addon = addons.load(MFG)
-        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.3", "2026-11-15", True))
+        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.4", "2026-11-16", True))
         self.assertEqual(addon.needs, ["simulator-closed"])
         self.assertEqual(addon.installed, {"sim": ["version.dll"]})
         self.assertEqual(addon.install, {"from": "https://github.com/brunofgmag/MFG-Unlocker/releases", "kind": "native"})
@@ -83,14 +83,14 @@ class MfgShapeTest(unittest.TestCase):
 
     def test_the_pinned_downloads_are_the_forks_release_and_intels_sdk(self):
         text = (MFG / "install").read_text()
-        self.assertIn('MFG_VERSION="1.7.1-xmx.3"', text)
+        self.assertIn('MFG_VERSION="1.7.1-xmx.4"', text)
         self.assertIn("https://github.com/brunofgmag/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip", text)
         self.assertIn(f'MFG_SHA256="{ZIP_SHA256}"', text)
         self.assertIn(f'XESS_URL="{SDK_URL}"', text)
         self.assertIn(f'XESS_SHA256="{SDK_SHA256}"', text)
 
     def test_the_helper_pins_the_release_dll_and_the_two_intel_files(self):
-        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.3")
+        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.4")
         self.assertEqual(mfg.PROXY_SHA256, DLL_SHA256)
         self.assertEqual(mfg.XESS_FILES, {"libxess_fg.dll": XESS_FG_SHA256, "libxell.dll": XELL_SHA256})
         self.assertEqual(mfg.XESS_FOLDER, XESS_FOLDER)
@@ -533,7 +533,7 @@ class MfgCheckTest(MfgCase):
 
     def test_the_dll_line_says_it_is_the_fork(self):
         _, lines = self.check()
-        self.assertIn("1.7.1-xmx.3", lines[1])
+        self.assertIn("1.7.1-xmx.4", lines[1])
 
     def test_without_the_intel_folder_both_libraries_fail_and_say_to_install(self):
         shutil.rmtree(self.xess)
@@ -741,7 +741,7 @@ class MfgCheckTest(MfgCase):
         self.log.write_text(LOG_NO_RUNTIME)
         code, lines = self.check()
         self.only_failure(code, lines)
-        self.assertIn("XMX runtime", self.failing(lines)[0])
+        self.assertIn("XeMFG DLSS-G runtime", self.failing(lines)[0])
         self.assertIn(XESS_FOLDER, self.failing(lines)[0])
 
     def test_the_previous_logs_do_not_stand_in_for_the_current_one(self):
@@ -1104,7 +1104,7 @@ class MfgPageTest(unittest.TestCase):
             self.assertIn(needed, self.text)
 
     def test_it_says_what_the_fork_is_and_where_it_lives(self):
-        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.3", "dashdogy", "mavismmg", "XMX", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
+        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.4", "dashdogy", "mavismmg", "XeMFG DLSS-G", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
             self.assertIn(needed, self.text)
 
     def test_it_says_how_to_go_back_to_upstream(self):
@@ -1136,8 +1136,13 @@ class MfgPageTest(unittest.TestCase):
             self.assertIn(needed, self.tearing_item())
 
     def test_it_no_longer_offers_fifo_or_a_frame_limit_below_the_refresh_rate(self):
-        for gone in ("VKD3D_SWAPCHAIN_PRESENT_MODE=FIFO", "below the refresh rate", "Reflex FPS limit"):
+        for gone in ("VKD3D_SWAPCHAIN_PRESENT_MODE=FIFO", "below the refresh rate"):
             self.assertNotIn(gone, self.text)
+        self.assertNotIn("Reflex FPS limit", self.tearing_item())
+
+    def test_it_says_xell_applies_the_reflex_fps_limit_counted_on_screen(self):
+        for needed in ("The Reflex FPS limit with XeLL sleep", "XeLL now applies it", "the frame rate on screen", "a 120 FPS limit holds the game to 30 FPS", "pauses while Dynamic MFG is on"):
+            self.assertIn(needed, self.text)
 
     def test_it_says_the_repository_ships_no_dll(self):
         self.assertIn("ships no DLL", self.text)
