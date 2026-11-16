@@ -1,7 +1,7 @@
 {
   "name": "MFG Unlocker",
-  "tested_version": "1.7.1-xmx.2",
-  "tested_on": "2026-11-12",
+  "tested_version": "1.7.1-xmx.3",
+  "tested_on": "2026-11-15",
   "needs": ["simulator-closed"],
   "touches_addon_files": true,
   "installed": {
