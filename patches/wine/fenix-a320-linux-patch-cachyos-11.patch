@@ -1,0 +1,2077 @@
+SPDX-License-Identifier: LGPL-2.1-or-later
+Wine patch of the fenix-a320-linux-patch project, carried unchanged from https://github.com/marselnenaj/fenix-a320-linux-patch, tag v0.1.0-preview.7, path patches/proton/cachyos-11.patch, upstream sha256 0992d4c491f37f041490743612b81dd5b2f79ddd618c5c57f91dc03e518373e2. Everything after the blank line below is that file, byte for byte.
+Copyright (c) 2026 Fenix A320 Linux Patch contributors, MIT licence for the project; its Wine patches are LGPL-2.1-or-later.
+The hunks for dlls/win32u/cursoricon.c (cursors shared across processes) are GloriousEggroll's patch from GE-Proton.
+Applies to wine-cachyos of the cachyos-11 releases with: patch -p1 --forward --fuzz=0 -i <this file>
+
+--- a/dlls/crypt32/msg.c
++++ b/dlls/crypt32/msg.c
+@@ -2438,6 +2438,14 @@
+     return CRYPT_ConstructBlob(&msg->u.enveloped_data.content, content);
+ }
+ 
++static BOOL CDecodeMsg_IsOctetStringContent(const char *oid)
++{
++    /* RFC 3161 TSTInfo uses CMS EncapsulatedContentInfo: eContent is an
++     * OCTET STRING containing DER TSTInfo. Hash and return its octets, as
++     * for id-data, rather than including the OCTET STRING wrapper. */
++    return !strcmp(oid, szOID_RSA_data) || !strcmp(oid, "1.2.840.113549.1.9.16.1.4");
++}
++
+ static BOOL CDecodeMsg_FinalizeSignedContent(CDecodeMsg *msg,
+  CRYPT_DER_BLOB *blob)
+ {
+@@ -2463,12 +2471,11 @@
+             content = &msg->u.signed_data.info->content.Content;
+         if (content->cbData)
+         {
+-            /* If the message is not detached, have to decode the message's
+-             * content if the type is szOID_RSA_data.
++            /* Decode encapsulated OCTET STRING content for non-detached
++             * id-data and RFC 3161 timestamp messages.
+              */
+             if (!(msg->base.open_flags & CMSG_DETACHED_FLAG) &&
+-             !strcmp(msg->u.signed_data.info->content.pszObjId,
+-             szOID_RSA_data))
++             CDecodeMsg_IsOctetStringContent(msg->u.signed_data.info->content.pszObjId))
+             {
+                 CRYPT_DATA_BLOB *rsa_blob;
+ 
+@@ -3080,8 +3087,7 @@
+     case CMSG_CONTENT_PARAM:
+         if (msg->u.signed_data.info)
+         {
+-            if (!strcmp(msg->u.signed_data.info->content.pszObjId,
+-             szOID_RSA_data))
++            if (CDecodeMsg_IsOctetStringContent(msg->u.signed_data.info->content.pszObjId))
+             {
+                 CRYPT_DATA_BLOB *blob;
+                 DWORD size;
+--- a/dlls/d2d1/d2d1_private.h
++++ b/dlls/d2d1/d2d1_private.h
+@@ -170,6 +170,8 @@
+     size_t count;
+ };
+ 
++BOOL d2d_display_effect_enabled(void);
++
+ struct d2d_device_context
+ {
+     ID2D1DeviceContext6 ID2D1DeviceContext6_iface;
+@@ -206,6 +208,12 @@
+     ID3D11Buffer *vb;
+     ID3D11RasterizerState *rs;
+     ID3D11BlendState *bs;
++    /* Optional compositor for the Blend(Overlay)/Scale display effect graph. */
++    ID3D11VertexShader *display_effect_vs;
++    ID3D11PixelShader *display_effect_ps;
++    ID3D11Buffer *display_effect_cb;
++    ID3D11RasterizerState *display_effect_rs;
++    ID3D11SamplerState *display_effect_sampler;
+     ID3D11SamplerState *sampler_states
+             [D2D_SAMPLER_INTERPOLATION_MODE_COUNT]
+             [D2D_SAMPLER_EXTEND_MODE_COUNT]
+@@ -219,6 +227,7 @@
+     D2D1_RENDER_TARGET_PROPERTIES desc;
+     D2D1_SIZE_U pixel_size;
+     struct d2d_clip_stack clip_stack;
++    struct d2d_display_layer *display_layers;
+ 
+     struct d2d_indexed_objects vertex_buffers;
+ };
+@@ -654,6 +663,8 @@
+ HRESULT d2d_geometry_group_init(struct d2d_geometry *geometry, ID2D1Factory *factory,
+         D2D1_FILL_MODE fill_mode, ID2D1Geometry **src_geometries, unsigned int geometry_count);
+ struct d2d_geometry *unsafe_impl_from_ID2D1Geometry(ID2D1Geometry *iface);
++HRESULT d2d_geometry_provider_stroke_outline(ID2D1Geometry *source, float width,
++        ID2D1StrokeStyle *style, float tolerance, ID2D1PathGeometry **result);
+ 
+ struct d2d_geometry_realization
+ {
+--- a/dlls/d2d1/device.c
++++ b/dlls/d2d1/device.c
+@@ -23,6 +23,9 @@
+ 
+ #define INITIAL_CLIP_STACK_SIZE 4
+ 
++static void d2d_display_effect_cleanup(struct d2d_device_context *context);
++static void d2d_display_layer_cleanup(struct d2d_device_context *context);
++
+ static const D2D1_MATRIX_3X2_F identity =
+ {{{
+     1.0f, 0.0f,
+@@ -271,6 +274,8 @@
+         unsigned int i, j, k;
+ 
+         d2d_clip_stack_cleanup(&context->clip_stack);
++        d2d_display_layer_cleanup(context);
++        d2d_display_effect_cleanup(context);
+         IDWriteRenderingParams_Release(context->default_text_rendering_params);
+         if (context->text_rendering_params)
+             IDWriteRenderingParams_Release(context->text_rendering_params);
+@@ -979,6 +984,7 @@
+     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+     struct d2d_brush *brush_impl = unsafe_impl_from_ID2D1Brush(brush);
+     struct d2d_stroke_style *stroke_style_impl = unsafe_impl_from_ID2D1StrokeStyle(stroke_style);
++    ID2D1PathGeometry *outline;
+ 
+     TRACE("iface %p, geometry %p, brush %p, stroke_width %.8e, stroke_style %p.\n",
+             iface, geometry, brush, stroke_width, stroke_style);
+@@ -999,15 +1005,23 @@
+         return;
+     }
+ 
+-    if (stroke_style)
+-        FIXME("Ignoring stroke style %p.\n", stroke_style);
+-
+     if (stroke_style_impl)
+     {
+         if (stroke_style_impl->desc.transformType == D2D1_STROKE_TRANSFORM_TYPE_FIXED)
+             stroke_width /= context->drawing_state.transform.m11;
+     }
+ 
++    if (stroke_style_impl && stroke_style_impl->desc.transformType == D2D1_STROKE_TRANSFORM_TYPE_NORMAL
++            && SUCCEEDED(d2d_geometry_provider_stroke_outline(geometry, stroke_width,
++            stroke_style, D2D1_DEFAULT_FLATTENING_TOLERANCE, &outline)))
++    {
++        ID2D1DeviceContext6_FillGeometry(iface, (ID2D1Geometry *)outline, brush, NULL);
++        ID2D1PathGeometry_Release(outline);
++        return;
++    }
++    if (stroke_style)
++        FIXME("Ignoring stroke style %p.\n", stroke_style);
++
+     d2d_device_context_draw_geometry(context, geometry_impl, brush_impl, stroke_width);
+ }
+ 
+@@ -1839,6 +1853,8 @@
+     *tag2 = render_target->drawing_state.tag2;
+ }
+ 
++#include "display-layers.c.inc"
++
+ static void STDMETHODCALLTYPE d2d_device_context_PushLayer(ID2D1DeviceContext6 *iface,
+         const D2D1_LAYER_PARAMETERS *layer_parameters, ID2D1Layer *layer)
+ {
+@@ -1854,6 +1870,14 @@
+         parameters.layerOptions = D2D1_LAYER_OPTIONS1_NONE;
+         d2d_command_list_push_layer(context->target.command_list, context, &parameters);
+     }
++    else if (d2d_display_effect_enabled() && SUCCEEDED(context->error.code))
++    {
++        D2D1_LAYER_PARAMETERS1 parameters;
++        HRESULT hr;
++        memcpy(&parameters, layer_parameters, sizeof(parameters));
++        parameters.layerOptions = D2D1_LAYER_OPTIONS1_NONE;
++        if (FAILED(hr = d2d_display_layer_push(context, &parameters))) d2d_device_context_set_error(context, hr);
++    }
+ }
+ 
+ static void STDMETHODCALLTYPE d2d_device_context_PopLayer(ID2D1DeviceContext6 *iface)
+@@ -1864,6 +1888,11 @@
+ 
+     if (context->target.type == D2D_TARGET_COMMAND_LIST)
+         d2d_command_list_pop_layer(context->target.command_list);
++    else if (d2d_display_effect_enabled() && SUCCEEDED(context->error.code))
++    {
++        HRESULT hr = d2d_display_layer_pop(context);
++        if (FAILED(hr)) d2d_device_context_set_error(context, hr);
++    }
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_device_context_Flush(ID2D1DeviceContext6 *iface, D2D1_TAG *tag1, D2D1_TAG *tag2)
+@@ -2722,6 +2751,8 @@
+     d2d_device_context_draw_glyph_run(context, baseline_origin, glyph_run, glyph_run_desc, brush, measuring_mode);
+ }
+ 
++#include "display-effects.c.inc"
++
+ static void STDMETHODCALLTYPE d2d_device_context_DrawImage(ID2D1DeviceContext6 *iface, ID2D1Image *image,
+         const D2D1_POINT_2F *target_offset, const D2D1_RECT_F *image_rect, D2D1_INTERPOLATION_MODE interpolation_mode,
+         D2D1_COMPOSITE_MODE composite_mode)
+@@ -2760,6 +2791,22 @@
+         return;
+     }
+ 
++    if (composite_mode == D2D1_COMPOSITE_MODE_SOURCE_OVER && d2d_display_effect_enabled())
++    {
++        struct d2d_bitmap *result;
++        HRESULT hr = d2d_display_effect_render(context, image, &result);
++
++        if (SUCCEEDED(hr))
++        {
++            d2d_device_context_draw_bitmap(context, (ID2D1Bitmap *)&result->ID2D1Bitmap1_iface,
++                    NULL, 1.0f, interpolation_mode, image_rect, target_offset, NULL);
++            ID2D1Bitmap1_Release(&result->ID2D1Bitmap1_iface);
++            return;
++        }
++        if (hr != E_NOTIMPL)
++            d2d_device_context_set_error(context, hr);
++    }
++
+     FIXME("Unhandled image %p.\n", image);
+ }
+ 
+@@ -2811,6 +2858,11 @@
+ 
+     if (context->target.type == D2D_TARGET_COMMAND_LIST)
+         d2d_command_list_push_layer(context->target.command_list, context, layer_parameters);
++    else if (d2d_display_effect_enabled() && SUCCEEDED(context->error.code))
++    {
++        HRESULT hr = d2d_display_layer_push(context, layer_parameters);
++        if (FAILED(hr)) d2d_device_context_set_error(context, hr);
++    }
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_device_context_InvalidateEffectInputRectangle(ID2D1DeviceContext6 *iface,
+@@ -2902,6 +2954,8 @@
+ {
+     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+     struct d2d_geometry_realization *object;
++    struct d2d_stroke_style *style = unsafe_impl_from_ID2D1StrokeStyle(stroke_style);
++    ID2D1PathGeometry *outline = NULL;
+     HRESULT hr;
+ 
+     TRACE("iface %p, geometry %p, tolerance %.8e, stroke_width %.8e, stroke_style %p, realization %p.\n",
+@@ -2910,14 +2964,22 @@
+     if (!(object = calloc(1, sizeof(*object))))
+         return E_OUTOFMEMORY;
+ 
+-    if (FAILED(hr = d2d_geometry_realization_init(object, context->factory, geometry)))
++    /* Realizations retain this contour, so route joins are widened once when
++     * the route changes rather than recomputed for every rendered frame. */
++    if (style && style->desc.transformType == D2D1_STROKE_TRANSFORM_TYPE_NORMAL)
++        d2d_geometry_provider_stroke_outline(geometry, stroke_width, stroke_style, tolerance, &outline);
++    hr = d2d_geometry_realization_init(object, context->factory,
++            outline ? (ID2D1Geometry *)outline : geometry);
++    if (outline) ID2D1PathGeometry_Release(outline);
++    if (FAILED(hr))
+     {
+         WARN("Failed to initialise geometry realization, hr %#lx.\n", hr);
+         free(object);
+         return hr;
+     }
+-    object->stroke_width = stroke_width;
+-    object->stroke_style = stroke_style;
++    object->filled = !!outline;
++    object->stroke_width = outline ? 0.0f : stroke_width;
++    object->stroke_style = outline ? NULL : stroke_style;
+     if (object->stroke_style)
+         ID2D1StrokeStyle_AddRef(object->stroke_style);
+ 
+@@ -2933,7 +2995,7 @@
+     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+     struct d2d_geometry_realization *r = unsafe_impl_from_ID2D1GeometryRealization(realization);
+ 
+-    FIXME("iface %p, realization %p, brush %p semi-stub!\n", iface, realization, brush);
++    TRACE("iface %p, realization %p, brush %p.\n", iface, realization, brush);
+ 
+     if (context->target.type == D2D_TARGET_COMMAND_LIST)
+     {
+@@ -2948,6 +3010,13 @@
+         }
+         return;
+     }
++    if (d2d_display_effect_enabled())
++    {
++        if (r->filled)
++            ID2D1DeviceContext6_FillGeometry(iface, r->geometry, brush, NULL);
++        else
++            ID2D1DeviceContext6_DrawGeometry(iface, r->geometry, brush, r->stroke_width, r->stroke_style);
++    }
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateInk(ID2D1DeviceContext6 *iface,
+--- a/dlls/d2d1/display-effects.c.inc
++++ b/dlls/d2d1/display-effects.c.inc
+@@ -0,0 +1,222 @@
++/* Opt-in support for Fenix's Blend(Overlay, bitmap, Scale(bitmap)) graph.
++ * The vendor application is unchanged. Unsupported graphs retain Wine's
++ * existing behavior. Scaling and premultiplied-alpha blending run on the GPU.
++ */
++#include "d2d1effects.h"
++
++static INIT_ONCE display_effect_once = INIT_ONCE_STATIC_INIT;
++static BOOL display_effect_enabled;
++
++static BOOL CALLBACK d2d_display_effect_init_scope(INIT_ONCE *once, void *parameter, void **result)
++{
++    WCHAR scope[512], path[MAX_PATH], *base, *name, *end;
++    DWORD length = GetEnvironmentVariableW(L"WINE_D2D1_DISPLAY_EFFECTS", scope, ARRAY_SIZE(scope));
++
++    if (!length || length >= ARRAY_SIZE(scope)) return TRUE;
++    if (!wcscmp(scope, L"1")) { display_effect_enabled = TRUE; return TRUE; }
++    if (!GetModuleFileNameW(NULL, path, ARRAY_SIZE(path))) return TRUE;
++    base = wcsrchr(path, L'\\'); base = base ? base + 1 : path;
++    for (name = scope; name && *name; name = end)
++    {
++        if ((end = wcschr(name, L';'))) *end++ = 0;
++        if (!wcsicmp(name, base)) { display_effect_enabled = TRUE; break; }
++    }
++    return TRUE;
++}
++
++BOOL d2d_display_effect_enabled(void)
++{
++    InitOnceExecuteOnce(&display_effect_once, d2d_display_effect_init_scope, NULL, NULL);
++    return display_effect_enabled;
++}
++
++static void d2d_display_effect_cleanup(struct d2d_device_context *context)
++{
++    if (context->display_effect_vs) ID3D11VertexShader_Release(context->display_effect_vs);
++    if (context->display_effect_ps) ID3D11PixelShader_Release(context->display_effect_ps);
++    if (context->display_effect_cb) ID3D11Buffer_Release(context->display_effect_cb);
++    if (context->display_effect_rs) ID3D11RasterizerState_Release(context->display_effect_rs);
++    if (context->display_effect_sampler) ID3D11SamplerState_Release(context->display_effect_sampler);
++    context->display_effect_vs = NULL;
++    context->display_effect_ps = NULL;
++    context->display_effect_cb = NULL;
++    context->display_effect_rs = NULL;
++    context->display_effect_sampler = NULL;
++}
++
++static HRESULT d2d_display_effect_init_gpu(struct d2d_device_context *context)
++{
++    static const char vs[] =
++        "float4 main(uint id : SV_VertexID) : SV_Position {"
++        " float2 p = float2((id << 1) & 2, id & 2);"
++        " return float4(p * float2(2,-2) + float2(-1,1),0,1); }";
++    static const char ps[] =
++        "Texture2D background : register(t0); Texture2D foreground : register(t1);"
++        "SamplerState image_sampler : register(s0);"
++        "cbuffer Params : register(b0) { float4 sizes; float4 alpha_flags; };"
++        "float4 main(float4 p : SV_Position) : SV_Target {"
++        " float2 ub = p.xy / sizes.xy, uf = p.xy / sizes.zw;"
++        " float4 b = background.Sample(image_sampler,ub);"
++        " float4 f = foreground.Sample(image_sampler,uf);"
++        " if(alpha_flags.x > 0.5) b.a=1; if(alpha_flags.y > 0.5) f.a=1;"
++        " if(any(ub<0)||any(ub>1)) b=0; if(any(uf<0)||any(uf>1)) f=0;"
++        " float3 bc=b.a>0 ? b.rgb/b.a : 0; float3 fc=f.a>0 ? f.rgb/f.a : 0;"
++        " float3 low=2*bc*fc, high=1-2*(1-bc)*(1-fc);"
++        " float3 blended=float3(bc.r<=0.5?low.r:high.r,bc.g<=0.5?low.g:high.g,bc.b<=0.5?low.b:high.b);"
++        " return saturate(float4(blended*b.a*f.a + f.rgb*(1-b.a) + b.rgb*(1-f.a),f.a+b.a-f.a*b.a)); }";
++    ID3D10Blob *compiled = NULL, *errors = NULL;
++    D3D11_BUFFER_DESC buffer = {0};
++    D3D11_RASTERIZER_DESC rasterizer = {0};
++    D3D11_SAMPLER_DESC sampler = {0};
++    HRESULT hr;
++
++    if (context->display_effect_ps) return S_OK;
++    if (FAILED(hr = D3DCompile(vs, sizeof(vs)-1, "display effect vs", NULL, NULL,
++            "main", "vs_4_0", 0, 0, &compiled, &errors))) goto failed;
++    hr = ID3D11Device1_CreateVertexShader(context->d3d_device, ID3D10Blob_GetBufferPointer(compiled),
++            ID3D10Blob_GetBufferSize(compiled), NULL, &context->display_effect_vs);
++    ID3D10Blob_Release(compiled); compiled = NULL;
++    if (errors) { ID3D10Blob_Release(errors); errors = NULL; }
++    if (FAILED(hr)) goto failed;
++    if (FAILED(hr = D3DCompile(ps, sizeof(ps)-1, "display effect ps", NULL, NULL,
++            "main", "ps_4_0", 0, 0, &compiled, &errors))) goto failed;
++    hr = ID3D11Device1_CreatePixelShader(context->d3d_device, ID3D10Blob_GetBufferPointer(compiled),
++            ID3D10Blob_GetBufferSize(compiled), NULL, &context->display_effect_ps);
++    ID3D10Blob_Release(compiled); compiled = NULL;
++    if (FAILED(hr)) goto failed;
++    if (errors) { ID3D10Blob_Release(errors); errors = NULL; }
++    buffer.ByteWidth = 32; buffer.Usage = D3D11_USAGE_DEFAULT; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
++    if (FAILED(hr = ID3D11Device1_CreateBuffer(context->d3d_device, &buffer, NULL, &context->display_effect_cb))) goto failed;
++    rasterizer.FillMode = D3D11_FILL_SOLID; rasterizer.CullMode = D3D11_CULL_NONE; rasterizer.DepthClipEnable = TRUE;
++    if (FAILED(hr = ID3D11Device1_CreateRasterizerState(context->d3d_device, &rasterizer, &context->display_effect_rs))) goto failed;
++    sampler.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
++    sampler.AddressU = sampler.AddressV = sampler.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
++    sampler.MaxLOD = D3D11_FLOAT32_MAX;
++    if (FAILED(hr = ID3D11Device1_CreateSamplerState(context->d3d_device, &sampler, &context->display_effect_sampler))) goto failed;
++    return S_OK;
++failed:
++    WARN("Display effect shader setup failed, hr %#lx%s%s.\n", hr, errors ? ": " : "",
++            errors ? (char *)ID3D10Blob_GetBufferPointer(errors) : "");
++    if (errors) ID3D10Blob_Release(errors);
++    if (compiled) ID3D10Blob_Release(compiled);
++    d2d_display_effect_cleanup(context);
++    return hr;
++}
++
++struct display_effect_input
++{
++    ID2D1Bitmap *iface;
++    struct d2d_bitmap *bitmap;
++    float width, height;
++};
++
++static HRESULT d2d_display_effect_input(ID2D1Image *image, struct display_effect_input *out, unsigned int depth)
++{
++    ID2D1Effect *effect = NULL;
++    ID2D1Image *input = NULL;
++    D2D1_VECTOR_2F scale, center;
++    UINT32 interpolation, border;
++    CLSID clsid;
++    HRESULT hr;
++
++    if (!image || depth > 4) return E_NOTIMPL;
++    if (SUCCEEDED(ID2D1Image_QueryInterface(image, &IID_ID2D1Bitmap, (void **)&out->iface)))
++    {
++        out->bitmap = unsafe_impl_from_ID2D1Bitmap(out->iface);
++        if (!out->bitmap->srv || out->bitmap->dpi_x != 96.0f || out->bitmap->dpi_y != 96.0f)
++        { ID2D1Bitmap_Release(out->iface); out->iface = NULL; return E_NOTIMPL; }
++        out->width = out->bitmap->pixel_size.width; out->height = out->bitmap->pixel_size.height;
++        return S_OK;
++    }
++    if (FAILED(ID2D1Image_QueryInterface(image, &IID_ID2D1Effect, (void **)&effect))) return E_NOTIMPL;
++    hr = E_NOTIMPL;
++    if (FAILED(ID2D1Effect_GetValue(effect, D2D1_PROPERTY_CLSID, D2D1_PROPERTY_TYPE_CLSID, (BYTE *)&clsid, sizeof(clsid)))
++            || !IsEqualGUID(&clsid, &CLSID_D2D1Scale)) goto done;
++    if (FAILED(ID2D1Effect_GetValue(effect, D2D1_SCALE_PROP_SCALE, D2D1_PROPERTY_TYPE_VECTOR2, (BYTE *)&scale, sizeof(scale)))
++            || FAILED(ID2D1Effect_GetValue(effect, D2D1_SCALE_PROP_CENTER_POINT, D2D1_PROPERTY_TYPE_VECTOR2, (BYTE *)&center, sizeof(center)))
++            || FAILED(ID2D1Effect_GetValue(effect, D2D1_SCALE_PROP_INTERPOLATION_MODE, D2D1_PROPERTY_TYPE_ENUM, (BYTE *)&interpolation, sizeof(interpolation)))
++            || FAILED(ID2D1Effect_GetValue(effect, D2D1_SCALE_PROP_BORDER_MODE, D2D1_PROPERTY_TYPE_ENUM, (BYTE *)&border, sizeof(border)))) goto done;
++    if (center.x || center.y || scale.x <= 0 || scale.y <= 0
++            || interpolation != D2D1_SCALE_INTERPOLATION_MODE_LINEAR || border != D2D1_BORDER_MODE_SOFT) goto done;
++    ID2D1Effect_GetInput(effect, 0, &input);
++    if (SUCCEEDED(hr = d2d_display_effect_input(input, out, depth + 1)))
++    { out->width *= scale.x; out->height *= scale.y; }
++done:
++    if (input) ID2D1Image_Release(input);
++    ID2D1Effect_Release(effect);
++    return hr;
++}
++
++static HRESULT d2d_display_effect_render(struct d2d_device_context *context, ID2D1Image *image, struct d2d_bitmap **result)
++{
++    struct display_effect_input inputs[2] = {{0}};
++    ID2D1Effect *effect = NULL;
++    ID2D1Image *input = NULL;
++    ID3D11DeviceContext1 *gpu;
++    ID3DDeviceContextState *previous;
++    ID3D11ShaderResourceView *views[2];
++    D2D1_BITMAP_PROPERTIES1 properties = {0};
++    D2D1_SIZE_U size;
++    D3D11_VIEWPORT viewport = {0};
++    float constants[8] = {0};
++    UINT32 mode;
++    CLSID clsid;
++    HRESULT hr = E_NOTIMPL;
++    unsigned int i;
++
++    *result = NULL;
++    if (FAILED(ID2D1Image_QueryInterface(image, &IID_ID2D1Effect, (void **)&effect))) return E_NOTIMPL;
++    if (FAILED(ID2D1Effect_GetValue(effect, D2D1_PROPERTY_CLSID, D2D1_PROPERTY_TYPE_CLSID, (BYTE *)&clsid, sizeof(clsid)))
++            || !IsEqualGUID(&clsid, &CLSID_D2D1Blend)
++            || FAILED(ID2D1Effect_GetValue(effect, D2D1_BLEND_PROP_MODE, D2D1_PROPERTY_TYPE_ENUM, (BYTE *)&mode, sizeof(mode)))
++            || mode != D2D1_BLEND_MODE_OVERLAY) goto done;
++    for (i = 0; i < 2; ++i)
++    {
++        ID2D1Effect_GetInput(effect, i, &input);
++        hr = d2d_display_effect_input(input, &inputs[i], 0);
++        if (input) ID2D1Image_Release(input);
++        if (FAILED(hr)) goto done;
++        constants[2*i] = inputs[i].width; constants[2*i+1] = inputs[i].height;
++        constants[4+i] = inputs[i].bitmap->format.alphaMode == D2D1_ALPHA_MODE_IGNORE;
++        views[i] = inputs[i].bitmap->srv;
++    }
++    hr = E_NOTIMPL;
++    if (!(constants[0] > 0 && constants[1] > 0 && constants[2] > 0 && constants[3] > 0)
++            || !isfinite(constants[0]) || !isfinite(constants[1]) || !isfinite(constants[2]) || !isfinite(constants[3])) goto done;
++    if (fmaxf(constants[0], constants[2]) > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION
++            || fmaxf(constants[1], constants[3]) > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION) goto done;
++    size.width = ceilf(fmaxf(constants[0], constants[2])); size.height = ceilf(fmaxf(constants[1], constants[3]));
++    if (FAILED(hr = d2d_display_effect_init_gpu(context))) goto done;
++    properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
++    properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
++    properties.dpiX = properties.dpiY = 96.0f;
++    properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
++    if (FAILED(hr = d2d_bitmap_create(context, size, NULL, 0, &properties, result))) goto done;
++    viewport.Width = size.width; viewport.Height = size.height; viewport.MaxDepth = 1.0f;
++    if (context->cs) EnterCriticalSection(context->cs);
++    ID3D11Device1_GetImmediateContext1(context->d3d_device, &gpu);
++    ID3D11DeviceContext1_SwapDeviceContextState(gpu, context->d3d_state, &previous);
++    ID3D11DeviceContext1_UpdateSubresource(gpu, (ID3D11Resource *)context->display_effect_cb, 0, NULL, constants, 0, 0);
++    ID3D11DeviceContext1_OMSetRenderTargets(gpu, 1, &(*result)->rtv, NULL);
++    ID3D11DeviceContext1_OMSetBlendState(gpu, NULL, NULL, ~0u);
++    ID3D11DeviceContext1_OMSetDepthStencilState(gpu, NULL, 0);
++    ID3D11DeviceContext1_IASetInputLayout(gpu, NULL);
++    ID3D11DeviceContext1_IASetPrimitiveTopology(gpu, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
++    ID3D11DeviceContext1_VSSetShader(gpu, context->display_effect_vs, NULL, 0);
++    ID3D11DeviceContext1_GSSetShader(gpu, NULL, NULL, 0);
++    ID3D11DeviceContext1_PSSetShader(gpu, context->display_effect_ps, NULL, 0);
++    ID3D11DeviceContext1_PSSetConstantBuffers(gpu, 0, 1, &context->display_effect_cb);
++    ID3D11DeviceContext1_PSSetShaderResources(gpu, 0, 2, views);
++    ID3D11DeviceContext1_PSSetSamplers(gpu, 0, 1, &context->display_effect_sampler);
++    ID3D11DeviceContext1_RSSetState(gpu, context->display_effect_rs);
++    ID3D11DeviceContext1_RSSetViewports(gpu, 1, &viewport);
++    ID3D11DeviceContext1_Draw(gpu, 3, 0);
++    ID3D11DeviceContext1_SwapDeviceContextState(gpu, previous, NULL);
++    if (previous) ID3DDeviceContextState_Release(previous);
++    ID3D11DeviceContext1_Release(gpu);
++    if (context->cs) LeaveCriticalSection(context->cs);
++done:
++    for (i = 0; i < 2; ++i) if (inputs[i].iface) ID2D1Bitmap_Release(inputs[i].iface);
++    ID2D1Effect_Release(effect);
++    return hr;
++}
+--- a/dlls/d2d1/display-layers.c.inc
++++ b/dlls/d2d1/display-layers.c.inc
+@@ -0,0 +1,154 @@
++/* Offscreen layers for the scoped display renderer. Each layer retains its
++ * original target, mask and push-time transform until compositing on PopLayer. */
++struct d2d_display_layer
++{
++    struct d2d_display_layer *previous;
++    ID2D1Image *target;
++    struct d2d_bitmap *bitmap;
++    ID2D1Geometry *mask;
++    ID2D1Brush *opacity_brush;
++    D2D1_MATRIX_3X2_F transform, mask_transform;
++    D2D1_RECT_F bounds;
++    D2D1_ANTIALIAS_MODE antialias;
++    float opacity;
++    size_t clip_count;
++};
++
++static void d2d_display_layer_free(struct d2d_display_layer *layer)
++{
++    if (layer->target) ID2D1Image_Release(layer->target);
++    if (layer->bitmap) ID2D1Bitmap1_Release(&layer->bitmap->ID2D1Bitmap1_iface);
++    if (layer->mask) ID2D1Geometry_Release(layer->mask);
++    if (layer->opacity_brush) ID2D1Brush_Release(layer->opacity_brush);
++    free(layer);
++}
++
++static void d2d_display_layer_cleanup(struct d2d_device_context *context)
++{
++    struct d2d_display_layer *layer;
++    while ((layer = context->display_layers))
++    {
++        context->display_layers = layer->previous;
++        d2d_display_layer_free(layer);
++    }
++}
++
++static HRESULT d2d_display_layer_push(struct d2d_device_context *context, const D2D1_LAYER_PARAMETERS1 *params)
++{
++    ID2D1DeviceContext6 *iface = &context->ID2D1DeviceContext6_iface;
++    struct d2d_display_layer *layer;
++    D2D1_BITMAP_PROPERTIES1 properties = {0};
++    ID3D11DeviceContext1 *gpu;
++    const float transparent[4] = {0};
++    HRESULT hr;
++
++    if (context->target.type != D2D_TARGET_BITMAP) return D2DERR_WRONG_STATE;
++    if (params->layerOptions & ~(D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND | D2D1_LAYER_OPTIONS1_IGNORE_ALPHA))
++        return E_INVALIDARG;
++    if (!(layer = calloc(1, sizeof(*layer)))) return E_OUTOFMEMORY;
++    properties.pixelFormat = context->desc.pixelFormat;
++    properties.pixelFormat.alphaMode = (params->layerOptions & D2D1_LAYER_OPTIONS1_IGNORE_ALPHA)
++            ? D2D1_ALPHA_MODE_IGNORE : D2D1_ALPHA_MODE_PREMULTIPLIED;
++    properties.dpiX = context->desc.dpiX; properties.dpiY = context->desc.dpiY;
++    properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
++    if (FAILED(hr = d2d_bitmap_create(context, context->pixel_size, NULL, 0, &properties, &layer->bitmap)))
++    { free(layer); return hr; }
++    ID2D1DeviceContext6_GetTarget(iface, &layer->target);
++    layer->transform = context->drawing_state.transform;
++    layer->mask_transform = params->maskTransform;
++    layer->bounds = params->contentBounds;
++    layer->antialias = params->maskAntialiasMode;
++    layer->opacity = params->opacity;
++    layer->clip_count = context->clip_stack.count;
++    if ((layer->mask = params->geometricMask)) ID2D1Geometry_AddRef(layer->mask);
++    if ((layer->opacity_brush = params->opacityBrush)) ID2D1Brush_AddRef(layer->opacity_brush);
++    if (context->cs) EnterCriticalSection(context->cs);
++    ID3D11Device1_GetImmediateContext1(context->d3d_device, &gpu);
++    if (params->layerOptions & D2D1_LAYER_OPTIONS1_INITIALIZE_FROM_BACKGROUND)
++        ID3D11DeviceContext1_CopyResource(gpu, layer->bitmap->resource, context->target.bitmap->resource);
++    else
++        ID3D11DeviceContext1_ClearRenderTargetView(gpu, layer->bitmap->rtv, transparent);
++    ID3D11DeviceContext1_Release(gpu);
++    if (context->cs) LeaveCriticalSection(context->cs);
++    ID2D1DeviceContext6_SetTarget(iface, (ID2D1Image *)&layer->bitmap->ID2D1Bitmap1_iface);
++    layer->previous = context->display_layers;
++    context->display_layers = layer;
++    return S_OK;
++}
++
++static HRESULT d2d_display_layer_pop(struct d2d_device_context *context)
++{
++    ID2D1DeviceContext6 *iface = &context->ID2D1DeviceContext6_iface;
++    struct d2d_display_layer *layer = context->display_layers;
++    D2D1_DRAWING_STATE_DESCRIPTION1 state = context->drawing_state;
++    D2D1_BITMAP_BRUSH_PROPERTIES1 bitmap_properties = {D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP, D2D1_INTERPOLATION_MODE_LINEAR};
++    D2D1_BRUSH_PROPERTIES brush_properties = {1.0f, {{{1,0,0,1,0,0}}}};
++    ID2D1BitmapBrush1 *brush = NULL;
++    ID2D1Geometry *mask = NULL;
++    D2D1_MATRIX_3X2_F transform, opacity_transform;
++    D2D1_RECT_F bounds, full;
++    HRESULT hr;
++
++    if (!layer || context->clip_stack.count != layer->clip_count) return D2DERR_PUSH_POP_UNBALANCED;
++    context->display_layers = layer->previous;
++    ID2D1DeviceContext6_SetTarget(iface, layer->target);
++    full.left = full.top = 0;
++    full.right = context->pixel_size.width * 96.0f / context->desc.dpiX;
++    full.bottom = context->pixel_size.height * 96.0f / context->desc.dpiY;
++    brush_properties.opacity = layer->opacity;
++    hr = ID2D1DeviceContext6_CreateBitmapBrush(iface, (ID2D1Bitmap *)&layer->bitmap->ID2D1Bitmap1_iface,
++            &bitmap_properties, &brush_properties, &brush);
++    if (SUCCEEDED(hr))
++    {
++        if (layer->mask)
++        {
++            transform = layer->mask_transform;
++            d2d_matrix_multiply(&transform, &layer->transform);
++            hr = ID2D1Factory_CreateTransformedGeometry(context->factory, layer->mask, &transform,
++                    (ID2D1TransformedGeometry **)&mask);
++        }
++        else hr = ID2D1Factory_CreateRectangleGeometry(context->factory, &full, (ID2D1RectangleGeometry **)&mask);
++    }
++    if (SUCCEEDED(hr))
++    {
++        /* Transform bounds before clamping so InfiniteRect cannot overflow
++         * the integer scissor rectangle used by Wine's drawing backend. */
++        bounds = layer->bounds;
++        if (bounds.left <= -1e20f && bounds.top <= -1e20f && bounds.right >= 1e20f && bounds.bottom >= 1e20f)
++            bounds = full;
++        else
++        {
++            D2D1_POINT_2F points[4] = {{bounds.left, bounds.top}, {bounds.right, bounds.top},
++                    {bounds.left, bounds.bottom}, {bounds.right, bounds.bottom}};
++            unsigned int i;
++            for (i = 0; i < 4; ++i) d2d_point_transform(&points[i], &layer->transform, points[i].x, points[i].y);
++            bounds.left = bounds.right = points[0].x; bounds.top = bounds.bottom = points[0].y;
++            for (i = 1; i < 4; ++i)
++            {
++                bounds.left = fminf(bounds.left, points[i].x); bounds.right = fmaxf(bounds.right, points[i].x);
++                bounds.top = fminf(bounds.top, points[i].y); bounds.bottom = fmaxf(bounds.bottom, points[i].y);
++            }
++        }
++        d2d_rect_intersect(&bounds, &full);
++        ID2D1DeviceContext6_SetTransform(iface, &identity);
++        ID2D1DeviceContext6_SetAntialiasMode(iface, layer->antialias);
++        ID2D1DeviceContext6_PushAxisAlignedClip(iface, &bounds, D2D1_ANTIALIAS_MODE_ALIASED);
++        if (context->cs) EnterCriticalSection(context->cs);
++        if (layer->opacity_brush)
++        {
++            ID2D1Brush_GetTransform(layer->opacity_brush, &opacity_transform);
++            transform = opacity_transform;
++            d2d_matrix_multiply(&transform, &layer->transform);
++            ID2D1Brush_SetTransform(layer->opacity_brush, &transform);
++        }
++        ID2D1DeviceContext6_FillGeometry(iface, mask, (ID2D1Brush *)brush, layer->opacity_brush);
++        if (layer->opacity_brush) ID2D1Brush_SetTransform(layer->opacity_brush, &opacity_transform);
++        if (context->cs) LeaveCriticalSection(context->cs);
++        ID2D1DeviceContext6_PopAxisAlignedClip(iface);
++        context->drawing_state = state;
++    }
++    if (mask) ID2D1Geometry_Release(mask);
++    if (brush) ID2D1BitmapBrush1_Release(brush);
++    d2d_display_layer_free(layer);
++    return hr;
++}
+--- a/dlls/d2d1/geometry.c
++++ b/dlls/d2d1/geometry.c
+@@ -21,6 +21,260 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(d2d);
+ 
++/* Optional geometry-only interoperability with a separately installed native
++ * Direct2D implementation. Rendering and all public objects stay in Wine.
++ * WINE_D2D1_GEOMETRY_PROVIDER accepts one executable basename or 1 for tests. */
++static INIT_ONCE geometry_provider_once = INIT_ONCE_STATIC_INIT;
++static ID2D1Factory *geometry_provider_factory;
++
++static BOOL CALLBACK d2d_geometry_provider_init(INIT_ONCE *once, void *parameter, void **context)
++{
++    HRESULT (WINAPI *create_factory)(D2D1_FACTORY_TYPE, REFIID, const D2D1_FACTORY_OPTIONS *, void **);
++    WCHAR enabled[MAX_PATH], executable[MAX_PATH], *basename;
++    DWORD length;
++    HMODULE module;
++    HRESULT hr;
++
++    length = GetEnvironmentVariableW(L"WINE_D2D1_GEOMETRY_PROVIDER", enabled, ARRAY_SIZE(enabled));
++    if (!length || length >= ARRAY_SIZE(enabled)) return TRUE;
++    if (lstrcmpW(enabled, L"1"))
++    {
++        length = GetModuleFileNameW(NULL, executable, ARRAY_SIZE(executable));
++        if (!length || length >= ARRAY_SIZE(executable)) return TRUE;
++        basename = wcsrchr(executable, '\\');
++        if (lstrcmpiW(enabled, basename ? basename + 1 : executable)) return TRUE;
++    }
++
++    if (!(module = LoadLibraryExW(L"d2d1_geometry.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32)))
++        return TRUE;
++    if (!(create_factory = (void *)GetProcAddress(module, "D2D1CreateFactory")))
++    {
++        FreeLibrary(module);
++        return TRUE;
++    }
++    hr = create_factory(D2D1_FACTORY_TYPE_MULTI_THREADED, &IID_ID2D1Factory, NULL,
++            (void **)&geometry_provider_factory);
++    if (FAILED(hr))
++    {
++        geometry_provider_factory = NULL;
++        FreeLibrary(module);
++    }
++    /* The shared factory and its module live for this process's lifetime. */
++    return TRUE;
++}
++
++static HRESULT d2d_geometry_provider_copy(ID2D1Geometry *source, ID2D1Geometry **result)
++{
++    ID2D1RectangleGeometry *rectangle;
++    ID2D1RoundedRectangleGeometry *rounded;
++    ID2D1EllipseGeometry *ellipse;
++    ID2D1TransformedGeometry *transformed;
++    ID2D1GeometryGroup *group;
++    ID2D1PathGeometry *path;
++    ID2D1GeometrySink *sink;
++    HRESULT hr, close_hr;
++
++    *result = NULL;
++    if (SUCCEEDED(ID2D1Geometry_QueryInterface(source, &IID_ID2D1RectangleGeometry, (void **)&rectangle)))
++    {
++        D2D1_RECT_F rect;
++        ID2D1RectangleGeometry_GetRect(rectangle, &rect);
++        ID2D1RectangleGeometry_Release(rectangle);
++        return ID2D1Factory_CreateRectangleGeometry(geometry_provider_factory, &rect,
++                (ID2D1RectangleGeometry **)result);
++    }
++    if (SUCCEEDED(ID2D1Geometry_QueryInterface(source, &IID_ID2D1RoundedRectangleGeometry, (void **)&rounded)))
++    {
++        D2D1_ROUNDED_RECT rect;
++        ID2D1RoundedRectangleGeometry_GetRoundedRect(rounded, &rect);
++        ID2D1RoundedRectangleGeometry_Release(rounded);
++        return ID2D1Factory_CreateRoundedRectangleGeometry(geometry_provider_factory, &rect,
++                (ID2D1RoundedRectangleGeometry **)result);
++    }
++    if (SUCCEEDED(ID2D1Geometry_QueryInterface(source, &IID_ID2D1EllipseGeometry, (void **)&ellipse)))
++    {
++        D2D1_ELLIPSE shape;
++        ID2D1EllipseGeometry_GetEllipse(ellipse, &shape);
++        ID2D1EllipseGeometry_Release(ellipse);
++        return ID2D1Factory_CreateEllipseGeometry(geometry_provider_factory, &shape,
++                (ID2D1EllipseGeometry **)result);
++    }
++    if (SUCCEEDED(ID2D1Geometry_QueryInterface(source, &IID_ID2D1TransformedGeometry, (void **)&transformed)))
++    {
++        ID2D1Geometry *original, *copy;
++        D2D1_MATRIX_3X2_F transform;
++        ID2D1TransformedGeometry_GetSourceGeometry(transformed, &original);
++        ID2D1TransformedGeometry_GetTransform(transformed, &transform);
++        ID2D1TransformedGeometry_Release(transformed);
++        hr = d2d_geometry_provider_copy(original, &copy);
++        ID2D1Geometry_Release(original);
++        if (FAILED(hr)) return hr;
++        hr = ID2D1Factory_CreateTransformedGeometry(geometry_provider_factory, copy, &transform,
++                (ID2D1TransformedGeometry **)result);
++        ID2D1Geometry_Release(copy);
++        return hr;
++    }
++    if (SUCCEEDED(ID2D1Geometry_QueryInterface(source, &IID_ID2D1GeometryGroup, (void **)&group)))
++    {
++        UINT32 i, count = ID2D1GeometryGroup_GetSourceGeometryCount(group);
++        ID2D1Geometry **originals = calloc(count ? count : 1, sizeof(*originals));
++        ID2D1Geometry **copies = calloc(count ? count : 1, sizeof(*copies));
++        if (!originals || !copies)
++            hr = E_OUTOFMEMORY;
++        else
++        {
++            ID2D1GeometryGroup_GetSourceGeometries(group, originals, count);
++            hr = S_OK;
++            for (i = 0; i < count && SUCCEEDED(hr); ++i)
++                hr = d2d_geometry_provider_copy(originals[i], &copies[i]);
++            if (SUCCEEDED(hr))
++                hr = ID2D1Factory_CreateGeometryGroup(geometry_provider_factory,
++                        ID2D1GeometryGroup_GetFillMode(group), copies, count, (ID2D1GeometryGroup **)result);
++            for (i = 0; i < count; ++i)
++            {
++                ID2D1Geometry_Release(originals[i]);
++                if (copies[i]) ID2D1Geometry_Release(copies[i]);
++            }
++        }
++        free(originals);
++        free(copies);
++        ID2D1GeometryGroup_Release(group);
++        return hr;
++    }
++    if (FAILED(hr = ID2D1Factory_CreatePathGeometry(geometry_provider_factory, &path)))
++        return hr;
++    if (SUCCEEDED(hr = ID2D1PathGeometry_Open(path, &sink)))
++    {
++        ID2D1PathGeometry *original;
++        /* Preserve exact arc segments; CachyOS implements Stream but its
++         * Simplify path changes rotated elliptical arcs. */
++        if (SUCCEEDED(ID2D1Geometry_QueryInterface(source, &IID_ID2D1PathGeometry, (void **)&original)))
++        {
++            hr = ID2D1PathGeometry_Stream(original, sink);
++            ID2D1PathGeometry_Release(original);
++        }
++        else
++            hr = ID2D1Geometry_Simplify(source, D2D1_GEOMETRY_SIMPLIFICATION_OPTION_CUBICS_AND_LINES,
++                    NULL, D2D1_DEFAULT_FLATTENING_TOLERANCE, (ID2D1SimplifiedGeometrySink *)sink);
++        close_hr = ID2D1GeometrySink_Close(sink);
++        ID2D1GeometrySink_Release(sink);
++        if (SUCCEEDED(hr)) hr = close_hr;
++    }
++    if (FAILED(hr)) ID2D1PathGeometry_Release(path);
++    else *result = (ID2D1Geometry *)path;
++    return hr;
++}
++
++static HRESULT d2d_geometry_provider_combine(ID2D1Geometry *source, ID2D1Geometry *input,
++        D2D1_COMBINE_MODE mode, const D2D1_MATRIX_3X2_F *transform, float tolerance,
++        ID2D1SimplifiedGeometrySink *sink)
++{
++    ID2D1Geometry *source_copy, *input_copy;
++    HRESULT hr;
++
++    if (!input || !sink) return E_INVALIDARG;
++    InitOnceExecuteOnce(&geometry_provider_once, d2d_geometry_provider_init, NULL, NULL);
++    if (!geometry_provider_factory) return E_NOTIMPL;
++    if (FAILED(hr = d2d_geometry_provider_copy(source, &source_copy))) return hr;
++    if (SUCCEEDED(hr = d2d_geometry_provider_copy(input, &input_copy)))
++    {
++        hr = ID2D1Geometry_CombineWithGeometry(source_copy, input_copy, mode, transform, tolerance, sink);
++        ID2D1Geometry_Release(input_copy);
++    }
++    ID2D1Geometry_Release(source_copy);
++    return hr;
++}
++
++/* Preserve native distance, endpoint and tangent semantics, including curved
++ * and transformed paths. The same opt-in process scope as CombineWithGeometry
++ * applies; applications without the provider retain the original E_NOTIMPL. */
++static HRESULT d2d_geometry_provider_compute_length(ID2D1Geometry *source,
++        const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
++{
++    ID2D1Geometry *copy;
++    HRESULT hr;
++
++    InitOnceExecuteOnce(&geometry_provider_once, d2d_geometry_provider_init, NULL, NULL);
++    if (!geometry_provider_factory) return E_NOTIMPL;
++    if (FAILED(hr = d2d_geometry_provider_copy(source, &copy))) return hr;
++    hr = ID2D1Geometry_ComputeLength(copy, transform, tolerance, length);
++    ID2D1Geometry_Release(copy);
++    return hr;
++}
++
++static HRESULT d2d_geometry_provider_compute_point(ID2D1Geometry *source, float length,
++        const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_POINT_2F *point, D2D1_POINT_2F *tangent)
++{
++    ID2D1Geometry *copy;
++    HRESULT hr;
++
++    InitOnceExecuteOnce(&geometry_provider_once, d2d_geometry_provider_init, NULL, NULL);
++    if (!geometry_provider_factory) return E_NOTIMPL;
++    if (FAILED(hr = d2d_geometry_provider_copy(source, &copy))) return hr;
++    hr = ID2D1Geometry_ComputePointAtLength(copy, length, transform, tolerance, point, tangent);
++    ID2D1Geometry_Release(copy);
++    return hr;
++}
++
++/* Wine's outline shader does not implement stroke joins, caps or dashes. Use
++ * the opt-in geometry provider to construct their actual filled contour,
++ * preserving the caller's style (including native zero-miter-limit handling).
++ * Only geometry computation crosses the provider boundary; rendering and the
++ * returned path remain in this Wine factory. */
++HRESULT d2d_geometry_provider_stroke_outline(ID2D1Geometry *source, float width,
++        ID2D1StrokeStyle *style, float tolerance, ID2D1PathGeometry **result)
++{
++    D2D1_STROKE_STYLE_PROPERTIES properties;
++    ID2D1StrokeStyle *native_style = NULL;
++    ID2D1Geometry *copy = NULL;
++    ID2D1Factory *factory = NULL;
++    ID2D1PathGeometry *path = NULL;
++    ID2D1GeometrySink *sink = NULL;
++    float *dashes = NULL;
++    UINT32 count = 0;
++    HRESULT hr, close_hr;
++
++    *result = NULL;
++    InitOnceExecuteOnce(&geometry_provider_once, d2d_geometry_provider_init, NULL, NULL);
++    if (!geometry_provider_factory) return E_NOTIMPL;
++    if (FAILED(hr = d2d_geometry_provider_copy(source, &copy))) return hr;
++
++    if (style)
++    {
++        properties.startCap = ID2D1StrokeStyle_GetStartCap(style);
++        properties.endCap = ID2D1StrokeStyle_GetEndCap(style);
++        properties.dashCap = ID2D1StrokeStyle_GetDashCap(style);
++        properties.lineJoin = ID2D1StrokeStyle_GetLineJoin(style);
++        properties.miterLimit = ID2D1StrokeStyle_GetMiterLimit(style);
++        properties.dashStyle = ID2D1StrokeStyle_GetDashStyle(style);
++        properties.dashOffset = ID2D1StrokeStyle_GetDashOffset(style);
++        if (properties.dashStyle == D2D1_DASH_STYLE_CUSTOM && (count = ID2D1StrokeStyle_GetDashesCount(style)))
++        {
++            if (!(dashes = calloc(count, sizeof(*dashes))))
++            { hr = E_OUTOFMEMORY; goto done; }
++            ID2D1StrokeStyle_GetDashes(style, dashes, count);
++        }
++        if (FAILED(hr = ID2D1Factory_CreateStrokeStyle(geometry_provider_factory,
++                &properties, dashes, count, &native_style))) goto done;
++    }
++    ID2D1Geometry_GetFactory(source, &factory);
++    if (FAILED(hr = ID2D1Factory_CreatePathGeometry(factory, &path))) goto done;
++    if (FAILED(hr = ID2D1PathGeometry_Open(path, &sink))) goto done;
++    hr = ID2D1Geometry_Widen(copy, width, native_style, NULL, tolerance,
++            (ID2D1SimplifiedGeometrySink *)sink);
++    close_hr = ID2D1GeometrySink_Close(sink);
++    if (SUCCEEDED(hr)) hr = close_hr;
++    if (SUCCEEDED(hr)) { *result = path; path = NULL; }
++done:
++    if (sink) ID2D1GeometrySink_Release(sink);
++    if (path) ID2D1PathGeometry_Release(path);
++    if (factory) ID2D1Factory_Release(factory);
++    if (native_style) ID2D1StrokeStyle_Release(native_style);
++    ID2D1Geometry_Release(copy);
++    free(dashes);
++    return hr;
++}
++
+ #define D2D_FIGURE_FLAG_CLOSED          0x00000001u
+ #define D2D_FIGURE_FLAG_HOLLOW          0x00000002u
+ 
+@@ -4409,10 +4663,10 @@
+         ID2D1Geometry *geometry, D2D1_COMBINE_MODE combine_mode, const D2D1_MATRIX_3X2_F *transform,
+         float tolerance, ID2D1SimplifiedGeometrySink *sink)
+ {
+-    FIXME("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p stub!\n",
++    TRACE("iface %p, geometry %p, mode %#x, transform %p, tolerance %.8e, sink %p.\n",
+             iface, geometry, combine_mode, transform, tolerance, sink);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_combine((ID2D1Geometry *)iface, geometry, combine_mode, transform, tolerance, sink);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_Outline(ID2D1PathGeometry1 *iface,
+@@ -4436,18 +4690,18 @@
+ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_ComputeLength(ID2D1PathGeometry1 *iface,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
+ {
+-    FIXME("iface %p, transform %p, tolerance %.8e, length %p stub!\n", iface, transform, tolerance, length);
++    TRACE("iface %p, transform %p, tolerance %.8e, length %p.\n", iface, transform, tolerance, length);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_length((ID2D1Geometry *)iface, transform, tolerance, length);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_ComputePointAtLength(ID2D1PathGeometry1 *iface, float length,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_POINT_2F *point, D2D1_POINT_2F *tangent)
+ {
+-    FIXME("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p stub!\n",
++    TRACE("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p.\n",
+             iface, length, transform, tolerance, point, tangent);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_point((ID2D1Geometry *)iface, length, transform, tolerance, point, tangent);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_Widen(ID2D1PathGeometry1 *iface, float stroke_width,
+@@ -4924,10 +5178,10 @@
+         ID2D1Geometry *geometry, D2D1_COMBINE_MODE combine_mode, const D2D1_MATRIX_3X2_F *transform,
+         float tolerance, ID2D1SimplifiedGeometrySink *sink)
+ {
+-    FIXME("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p stub!\n",
++    TRACE("iface %p, geometry %p, mode %#x, transform %p, tolerance %.8e, sink %p.\n",
+             iface, geometry, combine_mode, transform, tolerance, sink);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_combine((ID2D1Geometry *)iface, geometry, combine_mode, transform, tolerance, sink);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_ellipse_geometry_Outline(ID2D1EllipseGeometry *iface,
+@@ -4951,19 +5205,19 @@
+ static HRESULT STDMETHODCALLTYPE d2d_ellipse_geometry_ComputeLength(ID2D1EllipseGeometry *iface,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
+ {
+-    FIXME("iface %p, transform %p, tolerance %.8e, length %p stub!\n", iface, transform, tolerance, length);
++    TRACE("iface %p, transform %p, tolerance %.8e, length %p.\n", iface, transform, tolerance, length);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_length((ID2D1Geometry *)iface, transform, tolerance, length);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_ellipse_geometry_ComputePointAtLength(ID2D1EllipseGeometry *iface,
+         float length, const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_POINT_2F *point,
+         D2D1_POINT_2F *tangent)
+ {
+-    FIXME("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p stub!\n",
++    TRACE("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p.\n",
+             iface, length, transform, tolerance, point, tangent);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_point((ID2D1Geometry *)iface, length, transform, tolerance, point, tangent);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_ellipse_geometry_Widen(ID2D1EllipseGeometry *iface, float stroke_width,
+@@ -5375,10 +5629,10 @@
+         ID2D1Geometry *geometry, D2D1_COMBINE_MODE combine_mode, const D2D1_MATRIX_3X2_F *transform,
+         float tolerance, ID2D1SimplifiedGeometrySink *sink)
+ {
+-    FIXME("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p stub!\n",
++    TRACE("iface %p, geometry %p, mode %#x, transform %p, tolerance %.8e, sink %p.\n",
+             iface, geometry, combine_mode, transform, tolerance, sink);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_combine((ID2D1Geometry *)iface, geometry, combine_mode, transform, tolerance, sink);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_rectangle_geometry_Outline(ID2D1RectangleGeometry *iface,
+@@ -5421,19 +5675,19 @@
+ static HRESULT STDMETHODCALLTYPE d2d_rectangle_geometry_ComputeLength(ID2D1RectangleGeometry *iface,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
+ {
+-    FIXME("iface %p, transform %p, tolerance %.8e, length %p stub!\n", iface, transform, tolerance, length);
++    TRACE("iface %p, transform %p, tolerance %.8e, length %p.\n", iface, transform, tolerance, length);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_length((ID2D1Geometry *)iface, transform, tolerance, length);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_rectangle_geometry_ComputePointAtLength(ID2D1RectangleGeometry *iface,
+         float length, const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_POINT_2F *point,
+         D2D1_POINT_2F *tangent)
+ {
+-    FIXME("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p stub!\n",
++    TRACE("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p.\n",
+             iface, length, transform, tolerance, point, tangent);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_point((ID2D1Geometry *)iface, length, transform, tolerance, point, tangent);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_rectangle_geometry_Widen(ID2D1RectangleGeometry *iface, float stroke_width,
+@@ -5777,10 +6031,10 @@
+         ID2D1RoundedRectangleGeometry *iface, ID2D1Geometry *geometry, D2D1_COMBINE_MODE combine_mode,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, ID2D1SimplifiedGeometrySink *sink)
+ {
+-    FIXME("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p stub!\n",
++    TRACE("iface %p, geometry %p, mode %#x, transform %p, tolerance %.8e, sink %p.\n",
+             iface, geometry, combine_mode, transform, tolerance, sink);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_combine((ID2D1Geometry *)iface, geometry, combine_mode, transform, tolerance, sink);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_rounded_rectangle_geometry_Outline(ID2D1RoundedRectangleGeometry *iface,
+@@ -5804,19 +6058,19 @@
+ static HRESULT STDMETHODCALLTYPE d2d_rounded_rectangle_geometry_ComputeLength(ID2D1RoundedRectangleGeometry *iface,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
+ {
+-    FIXME("iface %p, transform %p, tolerance %.8e, length %p stub!\n", iface, transform, tolerance, length);
++    TRACE("iface %p, transform %p, tolerance %.8e, length %p.\n", iface, transform, tolerance, length);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_length((ID2D1Geometry *)iface, transform, tolerance, length);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_rounded_rectangle_geometry_ComputePointAtLength(
+         ID2D1RoundedRectangleGeometry *iface, float length, const D2D1_MATRIX_3X2_F *transform,
+         float tolerance, D2D1_POINT_2F *point, D2D1_POINT_2F *tangent)
+ {
+-    FIXME("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p stub!\n",
++    TRACE("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p.\n",
+             iface, length, transform, tolerance, point, tangent);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_point((ID2D1Geometry *)iface, length, transform, tolerance, point, tangent);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_rounded_rectangle_geometry_Widen(ID2D1RoundedRectangleGeometry *iface,
+@@ -6179,10 +6433,10 @@
+         ID2D1Geometry *geometry, D2D1_COMBINE_MODE combine_mode, const D2D1_MATRIX_3X2_F *transform,
+         float tolerance, ID2D1SimplifiedGeometrySink *sink)
+ {
+-    FIXME("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p stub!\n",
++    TRACE("iface %p, geometry %p, mode %#x, transform %p, tolerance %.8e, sink %p.\n",
+             iface, geometry, combine_mode, transform, tolerance, sink);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_combine((ID2D1Geometry *)iface, geometry, combine_mode, transform, tolerance, sink);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_transformed_geometry_Outline(ID2D1TransformedGeometry *iface,
+@@ -6211,19 +6465,19 @@
+ static HRESULT STDMETHODCALLTYPE d2d_transformed_geometry_ComputeLength(ID2D1TransformedGeometry *iface,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
+ {
+-    FIXME("iface %p, transform %p, tolerance %.8e, length %p stub!\n", iface, transform, tolerance, length);
++    TRACE("iface %p, transform %p, tolerance %.8e, length %p.\n", iface, transform, tolerance, length);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_length((ID2D1Geometry *)iface, transform, tolerance, length);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_transformed_geometry_ComputePointAtLength(ID2D1TransformedGeometry *iface,
+         float length, const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_POINT_2F *point,
+         D2D1_POINT_2F *tangent)
+ {
+-    FIXME("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p stub!\n",
++    TRACE("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p.\n",
+             iface, length, transform, tolerance, point, tangent);
+ 
+-    return E_NOTIMPL;
++    return d2d_geometry_provider_compute_point((ID2D1Geometry *)iface, length, transform, tolerance, point, tangent);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_transformed_geometry_Widen(ID2D1TransformedGeometry *iface, float stroke_width,
+@@ -6402,13 +6656,10 @@
+         float stroke_width, ID2D1StrokeStyle *stroke_style, const D2D1_MATRIX_3X2_F *transform,
+         float tolerance, D2D1_RECT_F *bounds)
+ {
+-    struct d2d_geometry *geometry = impl_from_ID2D1GeometryGroup(iface);
+-
+-    TRACE("iface %p, stroke_width %.8e, stroke_style %p, transform %p, tolerance %.8e, bounds %p.\n",
++    FIXME("iface %p, stroke_width %.8e, stroke_style %p, transform %p, tolerance %.8e, bounds %p stub!\n",
+             iface, stroke_width, stroke_style, transform, tolerance, bounds);
+ 
+-    return ID2D1PathGeometry_GetWidenedBounds(geometry->u.group.path, stroke_width, stroke_style, transform,
+-            tolerance, bounds);
++    return E_NOTIMPL;
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_geometry_group_StrokeContainsPoint(ID2D1GeometryGroup *iface,
+@@ -6504,24 +6755,19 @@
+ static HRESULT STDMETHODCALLTYPE d2d_geometry_group_ComputeLength(ID2D1GeometryGroup *iface,
+         const D2D1_MATRIX_3X2_F *transform, float tolerance, float *length)
+ {
+-    struct d2d_geometry *geometry = impl_from_ID2D1GeometryGroup(iface);
+-
+     TRACE("iface %p, transform %p, tolerance %.8e, length %p.\n", iface, transform, tolerance, length);
+ 
+-    return ID2D1PathGeometry_ComputeLength(geometry->u.group.path, transform, tolerance, length);
++    return d2d_geometry_provider_compute_length((ID2D1Geometry *)iface, transform, tolerance, length);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_geometry_group_ComputePointAtLength(ID2D1GeometryGroup *iface,
+         float length, const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_POINT_2F *point,
+         D2D1_POINT_2F *tangent)
+ {
+-    struct d2d_geometry *geometry = impl_from_ID2D1GeometryGroup(iface);
+-
+     TRACE("iface %p, length %.8e, transform %p, tolerance %.8e, point %p, tangent %p.\n",
+             iface, length, transform, tolerance, point, tangent);
+ 
+-    return ID2D1PathGeometry_ComputePointAtLength(geometry->u.group.path, length, transform, tolerance,
+-            point, tangent);
++    return d2d_geometry_provider_compute_point((ID2D1Geometry *)iface, length, transform, tolerance, point, tangent);
+ }
+ 
+ static HRESULT STDMETHODCALLTYPE d2d_geometry_group_Widen(ID2D1GeometryGroup *iface, float stroke_width,
+--- a/dlls/dwrite/font.c
++++ b/dlls/dwrite/font.c
+@@ -1093,6 +1093,26 @@
+     dst->y = src->y + offset->y;
+ }
+ 
++static INIT_ONCE outline_scope_once = INIT_ONCE_STATIC_INIT;
++static BOOL unhinted_outlines;
++
++static BOOL CALLBACK init_outline_scope(INIT_ONCE *once, void *parameter, void **result)
++{
++    WCHAR scope[512], path[MAX_PATH], *base, *name, *end;
++    DWORD length = GetEnvironmentVariableW(L"WINE_DWRITE_UNHINTED_OUTLINES", scope, ARRAY_SIZE(scope));
++
++    if (!length || length >= ARRAY_SIZE(scope)) return TRUE;
++    if (!wcscmp(scope, L"1")) { unhinted_outlines = TRUE; return TRUE; }
++    if (!GetModuleFileNameW(NULL, path, ARRAY_SIZE(path))) return TRUE;
++    base = wcsrchr(path, L'\\'); base = base ? base + 1 : path;
++    for (name = scope; name && *name; name = end)
++    {
++        if ((end = wcschr(name, L';'))) *end++ = 0;
++        if (!wcsicmp(name, base)) { unhinted_outlines = TRUE; break; }
++    }
++    return TRUE;
++}
++
+ static HRESULT WINAPI dwritefontface_GetGlyphRunOutline(IDWriteFontFace5 *iface, FLOAT emSize,
+     UINT16 const *glyphs, FLOAT const* advances, DWRITE_GLYPH_OFFSET const *offsets,
+     UINT32 count, BOOL is_sideways, BOOL is_rtl, IDWriteGeometrySink *sink)
+@@ -1142,6 +1162,8 @@
+ 
+     params.object = fontface->get_font_object(fontface);
+     params.simulations = fontface->simulations;
++    InitOnceExecuteOnce(&outline_scope_once, init_outline_scope, NULL, NULL);
++    if (unhinted_outlines) params.simulations |= DWRITE_OUTLINE_NO_HINTING;
+     params.emsize = emSize;
+ 
+     for (i = 0; i < count; ++i)
+--- a/dlls/dwrite/freetype.c
++++ b/dlls/dwrite/freetype.c
+@@ -445,11 +445,13 @@
+     struct get_glyph_outline_params *params = args;
+     FT_Face face = FaceFromObject(params->object);
+     FT_Size size;
++    FT_Int32 flags = FT_LOAD_NO_BITMAP;
+ 
+     if (!(size = freetype_set_face_size(face, params->emsize)))
+         return STATUS_UNSUCCESSFUL;
+ 
+-    if (!pFT_Load_Glyph(face, params->glyph, FT_LOAD_NO_BITMAP))
++    if (params->simulations & DWRITE_OUTLINE_NO_HINTING) flags |= FT_LOAD_NO_HINTING | FT_LOAD_NO_AUTOHINT;
++    if (!pFT_Load_Glyph(face, params->glyph, flags))
+     {
+         FT_Outline *ft_outline = &face->glyph->outline;
+         FT_Matrix m;
+--- a/dlls/dwrite/unixlib.h
++++ b/dlls/dwrite/unixlib.h
+@@ -36,6 +36,9 @@
+     UINT64 object;
+ };
+ 
++/* Internal outline-only flag; keeps the existing PE/Unix and WoW64 layouts. */
++#define DWRITE_OUTLINE_NO_HINTING 0x80000000u
++
+ struct get_glyph_outline_params
+ {
+     UINT64 object;
+--- a/dlls/kernelbase/thread.c
++++ b/dlls/kernelbase/thread.c
+@@ -90,7 +90,7 @@
+ {
+     ULONG_PTR buffer[offsetof( PS_ATTRIBUTE_LIST, Attributes[3] ) / sizeof(ULONG_PTR)];
+     PS_ATTRIBUTE_LIST *attr_list = (PS_ATTRIBUTE_LIST *)buffer;
+-    struct _ACTIVATION_CONTEXT *actctx;
++    struct _ACTIVATION_CONTEXT *actctx = NULL;
+     HANDLE handle;
+     CLIENT_ID client_id;
+     TEB *teb;
+@@ -140,7 +140,9 @@
+     InitializeObjectAttributes( &attr, NULL, 0, NULL, sa ? sa->lpSecurityDescriptor : NULL );
+     if (sa && sa->bInheritHandle) attr.Attributes |= OBJ_INHERIT;
+ 
+-    RtlGetActiveActivationContext( &actctx );
++    /* Activation contexts and TEB addresses belong to their process. A remote
++     * thread uses its target process context, not the caller's context. */
++    if (RtlIsCurrentProcess( process )) RtlGetActiveActivationContext( &actctx );
+ 
+     if (!set_ntstatus( NtCreateThreadEx( &handle, THREAD_ALL_ACCESS, &attr, process,
+                                          (PRTL_THREAD_START_ROUTINE)start, param,
+--- a/dlls/mmdevapi/audiosessionmanager.c
++++ b/dlls/mmdevapi/audiosessionmanager.c
+@@ -48,10 +48,102 @@
+     LeaveCriticalSection(&g_sessions_lock);
+ }
+ 
++struct session_mgr
++{
++    IAudioSessionManager2 IAudioSessionManager2_iface;
++    IMMDevice *device;
++    LONG ref;
++    struct list entry, notifications;
++    BOOL notifications_enabled;
++};
++
++struct session_notification
++{
++    struct list entry;
++    IAudioSessionNotification *callback;
++    LONG ref;
++    BOOL registered;
++};
++
++static struct list session_managers = LIST_INIT(session_managers);
++
++static void release_notification(struct session_notification *notification)
++{
++    if (!InterlockedDecrement(&notification->ref))
++    {
++        IAudioSessionNotification_Release(notification->callback);
++        free(notification);
++    }
++}
++
++struct session_notification_work
++{
++    struct session_mgr *manager;
++    struct session_notification *notification;
++    IAudioSessionControl *control;
++};
++
++static DWORD WINAPI deliver_session_notification(void *arg)
++{
++    struct session_notification_work *work = arg;
++    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
++    BOOL registered;
++
++    sessions_lock();
++    registered = work->notification->registered;
++    sessions_unlock();
++    if (SUCCEEDED(hr) && registered)
++        IAudioSessionNotification_OnSessionCreated(work->notification->callback, work->control);
++    IAudioSessionControl_Release(work->control);
++    release_notification(work->notification);
++    IAudioSessionManager2_Release(&work->manager->IAudioSessionManager2_iface);
++    free(work);
++    if (SUCCEEDED(hr)) CoUninitialize();
++    return 0;
++}
++
++void notify_audio_session_created(struct audio_session *session)
++{
++    struct session_mgr *manager;
++    struct session_notification *notification;
++
++    sessions_lock();
++    LIST_FOR_EACH_ENTRY(manager, &session_managers, struct session_mgr, entry)
++    {
++        if (manager->device != session->device || !manager->notifications_enabled) continue;
++        LIST_FOR_EACH_ENTRY(notification, &manager->notifications, struct session_notification, entry)
++        {
++            struct session_notification_work *work;
++            struct audio_session_wrapper *wrapper;
++            if (!(work = malloc(sizeof(*work)))) continue;
++            if (!(wrapper = session_wrapper_create(NULL)))
++            {
++                free(work);
++                continue;
++            }
++            wrapper->session = session;
++            work->manager = manager;
++            work->notification = notification;
++            work->control = (IAudioSessionControl *)&wrapper->IAudioSessionControl2_iface;
++            IAudioSessionManager2_AddRef(&manager->IAudioSessionManager2_iface);
++            InterlockedIncrement(&notification->ref);
++            if (!QueueUserWorkItem(deliver_session_notification, work, WT_EXECUTEDEFAULT))
++            {
++                IAudioSessionControl_Release(work->control);
++                release_notification(notification);
++                IAudioSessionManager2_Release(&manager->IAudioSessionManager2_iface);
++                free(work);
++            }
++        }
++    }
++    sessions_unlock();
++}
++
+ struct session_enum
+ {
+     IAudioSessionEnumerator IAudioSessionEnumerator_iface;
+     IMMDevice *device;
++    struct session_mgr *manager;
+     GUID *sessions;
+     int session_count;
+     LONG ref;
+@@ -101,6 +193,7 @@
+ 
+     if (!ref)
+     {
++        IAudioSessionManager2_Release(&enumerator->manager->IAudioSessionManager2_iface);
+         IMMDevice_Release(enumerator->device);
+         free(enumerator->sessions);
+         free(enumerator);
+@@ -117,6 +210,9 @@
+ 
+     if (!count) return E_POINTER;
+     *count = enumerator->session_count;
++    sessions_lock();
++    enumerator->manager->notifications_enabled = TRUE;
++    sessions_unlock();
+     return S_OK;
+ }
+ 
+@@ -151,11 +247,14 @@
+     enumerator_GetSession,
+ };
+ 
+-static HRESULT create_session_enumerator(IMMDevice *device, IAudioSessionEnumerator **ppv)
++static HRESULT create_session_enumerator(struct session_mgr *manager, IAudioSessionEnumerator **ppv)
+ {
+     struct session_enum *enumerator;
++    IMMDevice *device = manager->device;
+     HRESULT hr;
+ 
++    if (!ppv) return E_POINTER;
++    *ppv = NULL;
+     if (!(enumerator = calloc(1, sizeof(*enumerator))))
+         return E_OUTOFMEMORY;
+ 
+@@ -170,18 +269,13 @@
+     enumerator->IAudioSessionEnumerator_iface.lpVtbl = &IAudioSessionEnumerator_vtbl;
+     IMMDevice_AddRef(device);
+     enumerator->device = device;
++    IAudioSessionManager2_AddRef(&manager->IAudioSessionManager2_iface);
++    enumerator->manager = manager;
+     enumerator->ref = 1;
+     *ppv = &enumerator->IAudioSessionEnumerator_iface;
+     return S_OK;
+ }
+ 
+-struct session_mgr
+-{
+-    IAudioSessionManager2 IAudioSessionManager2_iface;
+-    IMMDevice *device;
+-    LONG ref;
+-};
+-
+ static inline struct session_mgr *impl_from_IAudioSessionManager2(IAudioSessionManager2 *iface)
+ {
+     return CONTAINING_RECORD(iface, struct session_mgr, IAudioSessionManager2_iface);
+@@ -220,11 +314,32 @@
+ static ULONG WINAPI ASM_Release(IAudioSessionManager2 *iface)
+ {
+     struct session_mgr *This = impl_from_IAudioSessionManager2(iface);
+-    ULONG ref = InterlockedDecrement(&This->ref);
+-    TRACE("(%p) new ref %lu\n", This, ref);
++    struct session_notification *notification, *next;
++    struct list notifications;
++    ULONG ref;
+ 
++    list_init(&notifications);
++    sessions_lock();
++    ref = InterlockedDecrement(&This->ref);
++    TRACE("(%p) new ref %lu\n", This, ref);
+     if (!ref)
++    {
++        list_remove(&This->entry);
++        LIST_FOR_EACH_ENTRY(notification, &This->notifications, struct session_notification, entry)
++            notification->registered = FALSE;
++        list_move_tail(&notifications, &This->notifications);
++    }
++    sessions_unlock();
++    if (!ref)
++    {
++        LIST_FOR_EACH_ENTRY_SAFE(notification, next, &notifications, struct session_notification, entry)
++        {
++            list_remove(&notification->entry);
++            release_notification(notification);
++        }
++        IMMDevice_Release(This->device);
+         free(This);
++    }
+ 
+     return ref;
+ }
+@@ -239,7 +354,10 @@
+ 
+     TRACE("(%p)->(%s, %lx, %p)\n", This, debugstr_guid(guid), flags, out);
+ 
++    if (!out) return E_POINTER;
++    sessions_lock();
+     hr = get_audio_session_wrapper(guid, This->device, &wrapper);
++    sessions_unlock();
+     if (FAILED(hr))
+         return hr;
+ 
+@@ -258,7 +376,10 @@
+ 
+     TRACE("(%p)->(%s, %lx, %p)\n", This, debugstr_guid(guid), flags, out);
+ 
++    if (!out) return E_POINTER;
++    sessions_lock();
+     hr = get_audio_session_wrapper(guid, This->device, &wrapper);
++    sessions_unlock();
+     if (FAILED(hr))
+         return hr;
+ 
+@@ -274,23 +395,60 @@
+ 
+     TRACE("(%p)->(%p).\n", This, out);
+ 
+-    return create_session_enumerator(This->device, out);
++    return create_session_enumerator(This, out);
+ }
+ 
+ static HRESULT WINAPI ASM_RegisterSessionNotification(IAudioSessionManager2 *iface,
+                                                       IAudioSessionNotification *notification)
+ {
+     struct session_mgr *This = impl_from_IAudioSessionManager2(iface);
+-    FIXME("(%p)->(%p) - stub\n", This, notification);
+-    return E_NOTIMPL;
++    struct session_notification *entry;
++    TRACE("(%p)->(%p)\n", This, notification);
++    if (!notification) return E_POINTER;
++    sessions_lock();
++    LIST_FOR_EACH_ENTRY(entry, &This->notifications, struct session_notification, entry)
++    {
++        if (entry->callback == notification)
++        {
++            sessions_unlock();
++            return S_OK;
++        }
++    }
++    if (!(entry = malloc(sizeof(*entry))))
++    {
++        sessions_unlock();
++        return E_OUTOFMEMORY;
++    }
++    entry->callback = notification;
++    entry->ref = 1;
++    entry->registered = TRUE;
++    IAudioSessionNotification_AddRef(notification);
++    list_add_tail(&This->notifications, &entry->entry);
++    sessions_unlock();
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI ASM_UnregisterSessionNotification(IAudioSessionManager2 *iface,
+                                                         IAudioSessionNotification *notification)
+ {
+     struct session_mgr *This = impl_from_IAudioSessionManager2(iface);
+-    FIXME("(%p)->(%p) - stub\n", This, notification);
+-    return E_NOTIMPL;
++    struct session_notification *entry;
++    TRACE("(%p)->(%p)\n", This, notification);
++    if (!notification) return E_POINTER;
++    sessions_lock();
++    LIST_FOR_EACH_ENTRY(entry, &This->notifications, struct session_notification, entry)
++    {
++        if (entry->callback == notification)
++        {
++            entry->registered = FALSE;
++            list_remove(&entry->entry);
++            sessions_unlock();
++            release_notification(entry);
++            return S_OK;
++        }
++    }
++    sessions_unlock();
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI ASM_RegisterDuckNotification(IAudioSessionManager2 *iface,
+@@ -334,7 +492,12 @@
+ 
+     This->IAudioSessionManager2_iface.lpVtbl = &AudioSessionManager2_Vtbl;
+     This->device = device;
++    IMMDevice_AddRef(device);
+     This->ref = 1;
++    list_init(&This->notifications);
++    sessions_lock();
++    list_add_tail(&session_managers, &This->entry);
++    sessions_unlock();
+ 
+     *ppv = &This->IAudioSessionManager2_iface;
+ 
+--- a/dlls/mmdevapi/mmdevapi_private.h
++++ b/dlls/mmdevapi/mmdevapi_private.h
+@@ -130,3 +130,5 @@
+ extern const WCHAR drv_keyW[];
+ 
+ extern HRESULT get_audio_sessions(IMMDevice *device, GUID **ret, int *ret_count);
++extern void notify_audio_session_created(struct audio_session *session);
++extern struct audio_session_wrapper *session_wrapper_create(struct audio_client *client);
+--- a/dlls/mmdevapi/session.c
++++ b/dlls/mmdevapi/session.c
+@@ -692,6 +692,7 @@
+ 
+     CoCreateGuid(&ret->grouping_param);
+ 
++    notify_audio_session_created(ret);
+     return ret;
+ }
+ 
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -1663,6 +1663,21 @@
+     }
+     if ((p = wcsrchr( buffer, '\\' ))) p++;
+     else p = buffer;
++    /* Fenix and its aircraft components enumerate PEB loader entries with
++     * case-sensitive comparisons. Match the Windows spellings for these apps. */
++    if (NtCurrentTeb()->Peb->ProcessParameters)
++    {
++        const WCHAR *image = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
++        const WCHAR *exe = image ? wcsrchr( image, '\\' ) : NULL;
++        if (exe && (!wcsicmp( exe + 1, L"Fenix.exe" ) ||
++                    !wcsicmp( exe + 1, L"FenixSystem.exe" ) ||
++                    !wcsicmp( exe + 1, L"FenixDisplay.exe" ) ||
++                    !wcsicmp( exe + 1, L"FenixCDU.exe" )))
++        {
++            if (!wcsicmp( p, L"kernel32.dll" )) memcpy( (WCHAR *)p, L"KERNEL32.DLL", sizeof(L"KERNEL32.DLL") );
++            if (!wcsicmp( p, L"kernelbase.dll" )) memcpy( (WCHAR *)p, L"KERNELBASE.dll", sizeof(L"KERNELBASE.dll") );
++        }
++    }
+     RtlInitUnicodeString( &wm->ldr.FullDllName, buffer );
+     RtlInitUnicodeString( &wm->ldr.BaseDllName, p );
+ 
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2553,6 +2553,7 @@
+     load_ntdll();
+     load_wow64_ntdll( main_image_info.Machine );
+     load_apiset_dll();
++    virtual_enable_writecopy_tracking();
+     mallopt( M_PERTURB, 0 );
+     server_init_process_done();
+ }
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -215,6 +215,7 @@
+ extern BOOL fsync_help_simulated_pulse;
+ extern BOOL localsystem_sid;
+ extern BOOL simulate_writecopy;
++extern void virtual_enable_writecopy_tracking(void);
+ extern long long ram_reporting_bias;
+ extern BOOL wine_allocs_2g_limit;
+ extern char *release_reserved_memory_low_bound;
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -294,6 +294,8 @@
+ 
+ static struct wine_rb_tree views_tree;
+ static pthread_mutex_t virtual_mutex;
++/* Opt-in while validating Windows copy-on-write protection transitions. */
++static BOOL track_writecopy;
+ 
+ static const UINT page_shift = 12;
+ static const UINT_PTR page_mask = 0xfff;
+@@ -1531,6 +1533,7 @@
+         if (vprot & VPROT_WRITE) prot |= PROT_WRITE | PROT_READ;
+         if (vprot & VPROT_WRITECOPY) prot |= PROT_WRITE | PROT_READ;
+         if (vprot & VPROT_EXEC) prot |= PROT_EXEC | PROT_READ;
++        if (track_writecopy && (vprot & VPROT_WRITECOPY) && !(vprot & VPROT_COPIED)) prot &= ~PROT_WRITE;
+         if (vprot & VPROT_WRITEWATCH) prot &= ~PROT_WRITE;
+     }
+     if (!prot) prot = PROT_NONE;
+@@ -4900,6 +4903,42 @@
+ }
+ 
+ 
++/* Enable after the PE exception dispatcher is available. */
++void virtual_enable_writecopy_tracking( void )
++{
++    const char *env = getenv( "WINE_TRACK_WRITECOPY" );
++    const WCHAR *image, *name;
++    const char *entry, *end;
++    unsigned int i, len;
++
++    track_writecopy = env && atoi( env );
++    if (!env || strncmp( env, "apps:", 5 )) return;
++    if (!NtCurrentTeb()->Peb->ProcessParameters) return;
++    image = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
++    if (!image) return;
++    name = wcsrchr( image, '\\' );
++    name = name ? name + 1 : image;
++    len = wcslen( name );
++    for (entry = env + 5; *entry; entry = *end ? end + 1 : end)
++    {
++        end = strchr( entry, ',' );
++        if (!end) end = entry + strlen( entry );
++        if (end - entry != len) continue;
++        for (i = 0; i < len; i++)
++        {
++            unsigned int a = (unsigned char)entry[i], b = name[i];
++            if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
++            if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
++            if (a != b) break;
++        }
++        if (i == len)
++        {
++            track_writecopy = TRUE;
++            return;
++        }
++    }
++}
++
+ /***********************************************************************
+  *           virtual_handle_fault
+  */
+@@ -4936,6 +4975,13 @@
+     }
+     else if (err == EXCEPTION_WRITE_FAULT)
+     {
++        if (track_writecopy && (vprot & (VPROT_COMMITTED | VPROT_WRITECOPY | VPROT_COPIED)) ==
++                              (VPROT_COMMITTED | VPROT_WRITECOPY) &&
++            !(enable_write_exceptions && is_vprot_exec_write( vprot ) && !ntdll_get_thread_data()->allow_writes))
++        {
++            set_page_vprot_bits( page, host_page_size, VPROT_COPIED, 0 );
++            mprotect_range( page, host_page_size, 0, 0 );
++        }
+         if (vprot & VPROT_WRITEWATCH)
+         {
+             if (enable_write_exceptions && is_vprot_exec_write( vprot ) && !ntdll_get_thread_data()->allow_writes)
+@@ -4953,7 +4999,8 @@
+         /* ignore fault if page is writable now */
+         if (get_unix_prot( get_host_page_vprot( page )) & PROT_WRITE)
+         {
+-            if ((vprot & VPROT_WRITEWATCH) || is_write_watch_range( page, 1 ))
++            if ((vprot & VPROT_WRITEWATCH) || is_write_watch_range( page, 1 ) ||
++                (track_writecopy && (vprot & VPROT_WRITECOPY)))
+                 ret = STATUS_SUCCESS;
+         }
+     }
+--- a/dlls/win32u/cursoricon.c
++++ b/dlls/win32u/cursoricon.c
+@@ -48,6 +48,7 @@
+     BOOL                    is_shared;  /* whether this object is shared */
+     BOOL                    is_icon;    /* whether icon or cursor */
+     BOOL                    is_ani;     /* whether this object is a static cursor or an animated cursor */
++    HANDLE                  shared;     /* image data for a cursor selected by another process */
+     UINT                    delay;      /* delay between this frame and the next (in jiffies) */
+     union
+     {
+@@ -63,6 +64,63 @@
+ 
+ static struct list icon_cache = LIST_INIT( icon_cache );
+ 
++/* No pointers or GDI handles: the reader may have a different bitness. */
++struct shared_cursor_bitmap
++{
++    int width, height;
++    unsigned int bpp, size;
++};
++
++struct shared_cursor_data
++{
++    LONG ready;
++    unsigned int size, xhotspot, yhotspot;
++    unsigned int module_size, resname_size, resid;
++    struct shared_cursor_bitmap mask, color;
++    /* module, resource name, mask bits, then color bits */
++};
++
++#define MAX_SHARED_CURSOR_SIZE (64 * 1024 * 1024)
++
++static void share_cursor( HCURSOR cursor );
++
++static void get_cursor_section_name( HCURSOR cursor, UNICODE_STRING *name, WCHAR *buffer )
++{
++    char str[128];
++
++    snprintf( str, sizeof(str), "\\Sessions\\%u\\BaseNamedObjects\\__wine_cursor_%08x",
++              NtCurrentTeb()->Peb->SessionId, HandleToUlong( cursor ));
++    name->Buffer = buffer;
++    name->MaximumLength = asciiz_to_unicode( buffer, str );
++    name->Length = name->MaximumLength - sizeof(WCHAR);
++}
++
++static unsigned int shared_cursor_bitmap_size( const struct shared_cursor_bitmap *bitmap )
++{
++    UINT64 size;
++
++    if (bitmap->width <= 0 || bitmap->width > 0x7ffffff || bitmap->height <= 0) return 0;
++    switch (bitmap->bpp)
++    {
++    case 1: case 4: case 8: case 16: case 24: case 32: break;
++    default: return 0;
++    }
++    size = (((UINT64)bitmap->width * bitmap->bpp + 15) / 16) * 2 * bitmap->height;
++    return size <= MAX_SHARED_CURSOR_SIZE ? size : 0;
++}
++
++static BOOL describe_shared_cursor_bitmap( HBITMAP handle, struct shared_cursor_bitmap *bitmap )
++{
++    BITMAP bmp;
++
++    if (!handle) return TRUE;
++    if (!NtGdiExtGetObjectW( handle, sizeof(bmp), &bmp )) return FALSE;
++    bitmap->width = bmp.bmWidth;
++    bitmap->height = bmp.bmHeight;
++    bitmap->bpp = bmp.bmBitsPixel;
++    return (bitmap->size = shared_cursor_bitmap_size( bitmap )) != 0;
++}
++
+ static struct cursoricon_object *get_icon_ptr( HICON handle )
+ {
+     struct cursoricon_object *obj = get_user_handle_ptr( handle, NTUSER_OBJ_ICON );
+@@ -113,6 +171,9 @@
+ 
+     TRACE( "%p\n", cursor );
+ 
++    /* Publish before the server forwards this handle to the window owner. */
++    if (cursor) share_cursor( cursor );
++
+     SERVER_START_REQ( set_cursor )
+     {
+         req->flags = SET_CURSOR_HANDLE;
+@@ -175,6 +236,66 @@
+     return ret;
+ }
+ 
++static void share_cursor( HCURSOR cursor )
++{
++    struct cursoricon_object *obj, *frame;
++    struct shared_cursor_data header = {0}, *data = NULL;
++    WCHAR buffer[128];
++    UNICODE_STRING name;
++    OBJECT_ATTRIBUTES attr;
++    LARGE_INTEGER size;
++    SIZE_T view_size = 0;
++    HANDLE section;
++    char *bits;
++
++    obj = get_user_handle_ptr( cursor, NTUSER_OBJ_ICON );
++    if (!obj || obj == OBJ_OTHER_PROCESS) return;
++    if (obj->is_icon || obj->shared) goto done;
++    if (!(frame = get_icon_frame_ptr( cursor, 0 ))) goto done;
++    if (!frame->frame.mask || !describe_shared_cursor_bitmap( frame->frame.mask, &header.mask ) ||
++        !describe_shared_cursor_bitmap( frame->frame.color, &header.color )) goto done_frame;
++
++    header.xhotspot = frame->frame.hotspot.x;
++    header.yhotspot = frame->frame.hotspot.y;
++    header.module_size = obj->module.Length;
++    if (IS_INTRESOURCE( obj->resname )) header.resid = LOWORD(obj->resname);
++    else header.resname_size = lstrlenW( obj->resname ) * sizeof(WCHAR);
++    size.QuadPart = sizeof(header) + (UINT64)header.module_size + header.resname_size +
++                    header.mask.size + header.color.size;
++    if (size.QuadPart > MAX_SHARED_CURSOR_SIZE) goto done_frame;
++    header.size = size.QuadPart;
++
++    get_cursor_section_name( obj->handle, &name, buffer );
++    InitializeObjectAttributes( &attr, &name, 0, NULL, NULL );
++    if (NtCreateSection( &section, SECTION_MAP_READ | SECTION_MAP_WRITE, &attr, &size,
++                         PAGE_READWRITE, SEC_COMMIT, NULL )) goto done_frame;
++    if (NtMapViewOfSection( section, GetCurrentProcess(), (void **)&data, 0, 0, NULL,
++                           &view_size, ViewUnmap, 0, PAGE_READWRITE )) goto close;
++
++    *data = header;
++    bits = (char *)(data + 1);
++    if (header.module_size) memcpy( bits, obj->module.Buffer, header.module_size );
++    bits += header.module_size;
++    if (header.resname_size) memcpy( bits, obj->resname, header.resname_size );
++    bits += header.resname_size;
++    if (NtGdiGetBitmapBits( frame->frame.mask, header.mask.size, bits ) != header.mask.size) goto unmap;
++    bits += header.mask.size;
++    if (header.color.size && NtGdiGetBitmapBits( frame->frame.color, header.color.size, bits ) != header.color.size)
++        goto unmap;
++
++    InterlockedExchange( &data->ready, 1 );
++    obj->shared = section;
++    TRACE( "shared cursor %p, %u bytes\n", obj->handle, header.size );
++unmap:
++    NtUnmapViewOfSection( GetCurrentProcess(), data );
++close:
++    if (!obj->shared) NtClose( section );
++done_frame:
++    release_user_handle_ptr( frame );
++done:
++    release_user_handle_ptr( obj );
++}
++
+ static BOOL free_icon_handle( HICON handle )
+ {
+     struct cursoricon_object *obj = free_user_handle( handle, NTUSER_OBJ_ICON );
+@@ -216,6 +337,7 @@
+         }
+         if (!IS_INTRESOURCE( obj->resname )) free( obj->resname );
+         if (obj->module.Length) free(obj->module.Buffer);
++        if (obj->shared) NtClose( obj->shared );
+         free( obj );
+         KeUserDispatchCallback( &params.dispatch, sizeof(params), &ret_ptr, &ret_len );
+         user_driver->pDestroyCursorIcon( handle );
+@@ -471,6 +593,81 @@
+     return new_bitmap;
+ }
+ 
++static BOOL get_shared_cursor_info( HCURSOR cursor, ICONINFO *info, UNICODE_STRING *module,
++                                    UNICODE_STRING *res_name )
++{
++    struct shared_cursor_data *view = NULL, *data = NULL;
++    UNICODE_STRING name;
++    OBJECT_ATTRIBUTES attr;
++    WCHAR buffer[128];
++    SIZE_T view_size = 0;
++    HANDLE section;
++    const char *bits;
++    unsigned int size;
++    ICONINFO result = {0};
++    BOOL ret = FALSE;
++
++    get_cursor_section_name( cursor, &name, buffer );
++    InitializeObjectAttributes( &attr, &name, 0, NULL, NULL );
++    if (NtOpenSection( &section, SECTION_MAP_READ, &attr )) return FALSE;
++    if (NtMapViewOfSection( section, GetCurrentProcess(), (void **)&view, 0, 0, NULL,
++                           &view_size, ViewUnmap, 0, PAGE_READONLY )) goto done;
++    if (view_size < sizeof(*view) || !ReadAcquire( &view->ready )) goto done;
++    size = view->size;
++    if (size < sizeof(*view) || size > view_size || size > MAX_SHARED_CURSOR_SIZE) goto done;
++    if (!(data = malloc( size ))) goto done;
++    memcpy( data, view, size );
++    if (sizeof(*data) + (UINT64)data->module_size + data->resname_size + data->mask.size +
++        data->color.size != size || (data->module_size | data->resname_size) % sizeof(WCHAR) ||
++        !data->mask.size || data->mask.bpp != 1 ||
++        data->mask.size != shared_cursor_bitmap_size( &data->mask ) ||
++        (data->color.size && data->color.size != shared_cursor_bitmap_size( &data->color ))) goto done;
++
++    bits = (char *)(data + 1) + data->module_size + data->resname_size;
++    result.xHotspot = data->xhotspot;
++    result.yHotspot = data->yhotspot;
++    result.hbmMask = NtGdiCreateBitmap( data->mask.width, data->mask.height, 1, 1, bits );
++    if (!result.hbmMask) goto done;
++    if (data->color.size)
++    {
++        result.hbmColor = NtGdiCreateBitmap( data->color.width, data->color.height, 1,
++                                           data->color.bpp, bits + data->mask.size );
++        if (!result.hbmColor)
++        {
++            NtGdiDeleteObjectApp( result.hbmMask );
++            goto done;
++        }
++    }
++    *info = result;
++    if (module)
++    {
++        size = min( module->MaximumLength, data->module_size );
++        if (size) memcpy( module->Buffer, data + 1, size );
++        module->Length = size / sizeof(WCHAR);
++    }
++    if (res_name)
++    {
++        if (data->module_size && data->resname_size)
++        {
++            size = min( res_name->MaximumLength, data->resname_size );
++            if (size) memcpy( res_name->Buffer, (char *)(data + 1) + data->module_size, size );
++            res_name->Length = size / sizeof(WCHAR);
++        }
++        else
++        {
++            res_name->Buffer = data->module_size ? MAKEINTRESOURCEW( data->resid ) : NULL;
++            res_name->Length = 0;
++        }
++    }
++    TRACE( "read shared cursor %p, %dx%d\n", cursor, data->mask.width, data->mask.height );
++    ret = TRUE;
++done:
++    free( data );
++    if (view) NtUnmapViewOfSection( GetCurrentProcess(), view );
++    NtClose( section );
++    return ret;
++}
++
+ /**********************************************************************
+  *           NtUserGetIconInfo (win32u.@)
+  */
+@@ -480,7 +677,13 @@
+     struct cursoricon_object *obj, *frame_obj;
+     BOOL ret = TRUE;
+ 
+-    if (!(obj = get_icon_ptr( icon )))
++    obj = get_user_handle_ptr( icon, NTUSER_OBJ_ICON );
++    if (obj == OBJ_OTHER_PROCESS)
++    {
++        if (get_shared_cursor_info( icon, info, module, res_name )) return TRUE;
++        obj = NULL;
++    }
++    if (!obj)
+     {
+         RtlSetLastWin32Error( ERROR_INVALID_CURSOR_HANDLE );
+         return FALSE;
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -1789,11 +1789,67 @@
+     return cached;
+ }
+ 
++/* Fenix renders cockpit textures offscreen. Its helper forms must remain
++ * logically visible to WinForms (startup/timers), without becoming desktop
++ * windows. Opt-in and restricted to the exact executable AND helper title. */
++static BOOL is_fenix_helper_window( HWND hwnd )
++{
++    static const WCHAR property[] = u"__wine_fenix_helper_window";
++    static const WCHAR system_prefix[] = u"FenixSim A320 System ";
++    const char *enabled = getenv( "WINE_FENIX_HELPER_WINDOWS" );
++    UNICODE_STRING image = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName;
++    WCHAR title[256], *version;
++    const WCHAR *name = NULL;
++    unsigned int i, length;
++
++    if (!enabled || strcmp( enabled, "1" )) return FALSE;
++    if (NtUserGetProp( hwnd, property )) return TRUE;
++    if (!NtUserInternalGetWindowText( hwnd, title, ARRAY_SIZE(title) )) return FALSE;
++    if (!wcscmp( title, u"ProSimA322 Display" ) || !wcscmp( title, u"Fenix Display" ))
++        name = u"FenixDisplay.exe";
++    else if (!wcscmp( title, u"ProSimA322 MCDU" )) name = u"FenixCDU.exe";
++    else if (!wcscmp( title, u"ProSimA322 System" )) name = u"FenixSystem.exe";
++    else if (!wcsncmp( title, system_prefix, ARRAY_SIZE(system_prefix) - 1 ))
++    {
++        version = title + ARRAY_SIZE(system_prefix) - 1;
++        for (;;)
++        {
++            if (*version < '0' || *version > '9') return FALSE;
++            do { ++version; } while (*version >= '0' && *version <= '9');
++            if (!*version) break;
++            if (*version++ != '.') return FALSE;
++        }
++        name = u"FenixSystem.exe";
++    }
++    if (!name) return FALSE;
++    for (i = image.Length / sizeof(WCHAR); i && image.Buffer[i - 1] != '\\'; --i) {}
++    image.Buffer += i;
++    image.Length -= i * sizeof(WCHAR);
++    image.MaximumLength = image.Length;
++    length = wcslen( name );
++    if (image.Length != length * sizeof(WCHAR)) return FALSE;
++    for (i = 0; i < length; ++i)
++    {
++        WCHAR a = image.Buffer[i], b = name[i];
++        if (a >= 'A' && a <= 'Z') a += 'a' - 'A';
++        if (b >= 'A' && b <= 'Z') b += 'a' - 'A';
++        if (a != b) return FALSE;
++    }
++    NtUserSetProp( hwnd, property, (HANDLE)1 );
++    return TRUE;
++}
++
+ static void window_set_wm_state( struct x11drv_win_data *data, UINT new_state, BOOL activate )
+ {
+     UINT old_state = data->pending_state.wm_state;
+     HWND foreground = NtUserGetForegroundWindow();
+ 
++    if (is_fenix_helper_window( data->hwnd ))
++    {
++        new_state = WithdrawnState;
++        activate = FALSE;
++    }
++
+     data->desired_state.wm_state = new_state;
+     data->desired_state.activate = activate;
+     if (data->state_locks) return; /* win32 state is being updated, delay the change */
+@@ -2959,11 +3015,17 @@
+ void X11DRV_SetWindowText( HWND hwnd, LPCWSTR text )
+ {
+     Window win;
++    struct x11drv_win_data *data;
+ 
+     if ((win = X11DRV_get_whole_window( hwnd )) && win != DefaultRootWindow(gdi_display))
+     {
+         Display *display = thread_init_display();
+         sync_window_text( display, win, text );
++        if (is_fenix_helper_window( hwnd ) && (data = get_win_data( hwnd )))
++        {
++            window_set_wm_state( data, WithdrawnState, FALSE );
++            release_win_data( data );
++        }
+         XFlush( display );
+     }
+ }
+--- a/server/completion.c
++++ b/server/completion.c
+@@ -243,7 +243,11 @@
+         close_handle( thread->process, thread->completion_wait->handle );
+         thread->completion_wait->handle = 0;
+     }
+-    if (thread->completion_wait->completion) list_remove( &thread->completion_wait->wait_queue_entry );
++    if (thread->completion_wait->completion)
++    {
++        list_remove( &thread->completion_wait->wait_queue_entry );
++        thread->completion_wait->completion = NULL;
++    }
+     release_object( &thread->completion_wait->obj );
+     thread->completion_wait = NULL;
+ }
+@@ -300,6 +304,7 @@
+ {
+     struct comp_msg *msg = mem_alloc( sizeof( *msg ) );
+     struct completion_wait *wait;
++    struct list *ptr;
+ 
+     if (!msg)
+         return;
+@@ -311,9 +316,19 @@
+ 
+     list_add_tail( &completion->queue, &msg->queue_entry );
+     completion->depth++;
+-    LIST_FOR_EACH_ENTRY( wait, &completion->wait_queue, struct completion_wait, wait_queue_entry )
++    ptr = list_head( &completion->wait_queue );
++    while (ptr)
+     {
++        wait = LIST_ENTRY( ptr, struct completion_wait, wait_queue_entry );
++        /* A failed wakeup can kill the client thread and drop its last wait
++         * reference. Keep the object alive until wake_up has finished, and
++         * restart traversal if thread cleanup removed it from the queue. */
++        grab_object( wait );
+         wake_up( &wait->obj, 1 );
++        ptr = wait->completion == completion
++            ? list_next( &completion->wait_queue, &wait->wait_queue_entry )
++            : list_head( &completion->wait_queue );
++        release_object( wait );
+         if (list_empty( &completion->queue )) return;
+     }
+     if (!list_empty( &completion->queue )) signal_sync( completion->sync );

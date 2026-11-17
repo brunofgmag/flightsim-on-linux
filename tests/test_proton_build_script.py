@@ -1,4 +1,7 @@
+import hashlib
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -9,6 +12,8 @@ SCRIPT = ROOT / "proton" / "build-proton-fs2024.sh"
 RELEASE_COMMIT = "44cf7c2042168f3b8ee37249f0a53ac091e48fd9"
 PINNED_COMMIT = "8293130ebe370b1deb761898ae0d397d680837de"
 CHOSEN_COMMIT = "0bb64c56c8f0dcc11ecc0f6c56e00e4f7bd8d506"
+FENIX_PATCH = ROOT / "patches" / "wine" / "fenix-a320-linux-patch-cachyos-11.patch"
+FENIX_UPSTREAM_SHA256 = "0992d4c491f37f041490743612b81dd5b2f79ddd618c5c57f91dc03e518373e2"
 
 
 def functions(*names):
@@ -75,6 +80,84 @@ class FindVkd3dCommitTest(unittest.TestCase):
         text = SCRIPT.read_text()
         preconditions = text[text.index("check_preconditions() {"):]
         self.assertIn("  check_vkd3d_choice\n", preconditions[:preconditions.index("\n}\n")])
+
+
+class CarriedFenixPatchTest(unittest.TestCase):
+    def setUp(self):
+        self.script = SCRIPT.read_text()
+
+    def patches_block(self):
+        start = self.script.index("PATCHES=(\n")
+        return self.script[start:self.script.index("\n)\n", start)].splitlines()[1:]
+
+    def header_and_body(self):
+        header, separator, body = FENIX_PATCH.read_bytes().partition(b"\n\n")
+        self.assertEqual(separator, b"\n\n")
+        return header.decode(), body
+
+    def test_the_first_patch_the_build_applies_is_the_carried_file(self):
+        self.assertEqual(self.patches_block()[0].strip(), '"$ROOT/patches/wine/fenix-a320-linux-patch-cachyos-11.patch"')
+
+    def test_the_build_no_longer_downloads_the_overlay_wine_patch(self):
+        self.assertNotIn("download_overlay_patch", self.script)
+        self.assertNotIn("raw.githubusercontent.com/marselnenaj", self.script)
+        self.assertNotIn("OVERLAY_PATCH_URL", self.script)
+
+    def test_the_build_checks_that_every_patch_exists_the_carried_one_included(self):
+        preconditions = self.script[self.script.index("check_preconditions() {"):]
+        self.assertIn('for patch in "${PATCHES[@]}" "${VKD3D_PATCHES[@]}"', preconditions[:preconditions.index("\n}\n")])
+
+    def test_the_carried_file_exists_and_starts_with_its_licence_and_origin(self):
+        header, _ = self.header_and_body()
+        lines = header.splitlines()
+        self.assertEqual(lines[0], "SPDX-License-Identifier: LGPL-2.1-or-later")
+        self.assertIn("https://github.com/marselnenaj/fenix-a320-linux-patch", header)
+        self.assertIn("v0.1.0-preview.7", header)
+        self.assertIn("patches/proton/cachyos-11.patch", header)
+        self.assertIn(FENIX_UPSTREAM_SHA256, header)
+        self.assertIn("Copyright (c) 2026 Fenix A320 Linux Patch contributors", header)
+        self.assertIn("GloriousEggroll", header)
+        self.assertIn("patch -p1 --forward --fuzz=0 -i <this file>", lines[-1])
+
+    def test_no_header_line_looks_like_a_patch_line(self):
+        header, _ = self.header_and_body()
+        for line in header.splitlines():
+            self.assertIsNone(re.match(r"^(--- |\+\+\+ |\*\*\* |diff |Index:|Prereq:|@@ )", line), line)
+
+    @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
+    def test_patch_itself_skips_the_header_and_applies_what_follows(self):
+        header, _ = self.header_and_body()
+        diff = "--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n"
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "x.txt").write_text("old\n")
+            carried = Path(temp) / "carried.patch"
+            carried.write_text(f"{header}\n\n{diff}")
+            result = subprocess.run(["patch", "--batch", "--forward", "--fuzz=0", "-p1", "--dry-run", "-i", str(carried)], cwd=temp, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_the_body_of_the_carried_file_is_the_upstream_file_byte_for_byte(self):
+        _, body = self.header_and_body()
+        self.assertEqual(hashlib.sha256(body).hexdigest(), FENIX_UPSTREAM_SHA256)
+
+    def test_the_manifest_still_records_the_overlay_line_that_addons_read(self):
+        self.assertIn('OVERLAY_TAG="v0.1.0-preview.7"', self.script)
+        self.assertIn('OVERLAY_VARIANT="cachyos-11"', self.script)
+        self.assertIn('echo "overlay fenix-a320-linux-patch $OVERLAY_TAG $OVERLAY_VARIANT"', self.script)
+
+    def run_guard(self, release):
+        guard = next(line.strip() for line in self.script.splitlines() if line.strip().startswith('[[ "$RELEASE" == cachyos-11.*'))
+        text = "\n".join(["set -euo pipefail", functions("die"), f'RELEASE="{release}"', guard])
+        return subprocess.run(["bash", "-c", text], capture_output=True, text=True)
+
+    def test_a_release_other_than_cachyos_11_stops_and_names_the_carried_patch(self):
+        result = self.run_guard("cachyos-10.0-x")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("patches/wine/", result.stderr)
+        self.assertIn("cachyos-10.0-x", result.stderr)
+
+    def test_a_cachyos_11_release_passes_the_guard(self):
+        result = self.run_guard("cachyos-11.0-20261015-slr")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

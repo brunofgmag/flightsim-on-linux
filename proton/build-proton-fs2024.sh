@@ -13,11 +13,9 @@ JOBS="${JOBS:-$(nproc)}"
 
 OVERLAY_TAG="v0.1.0-preview.7"
 OVERLAY_VARIANT="cachyos-11"
-OVERLAY_PATCH_URL="https://raw.githubusercontent.com/marselnenaj/fenix-a320-linux-patch/$OVERLAY_TAG/patches/proton/$OVERLAY_VARIANT.patch"
-OVERLAY_PATCH_SHA256="0992d4c491f37f041490743612b81dd5b2f79ddd618c5c57f91dc03e518373e2"
 
 PATCHES=(
-  "$DOWNLOADS/fenix-a320-linux-patch-$OVERLAY_TAG-$OVERLAY_VARIANT.patch"
+  "$ROOT/patches/wine/fenix-a320-linux-patch-cachyos-11.patch"
   "$ROOT/patches/wine/gdiplus-path-gradient-and-centered-text.patch"
   "$ROOT/patches/wine/shell32-notifyicon-guid.patch"
   "$ROOT/patches/wine/explorer-tray-click-grants-foreground.patch"
@@ -202,7 +200,7 @@ has_idl_compiler() {
 
 check_preconditions() {
   step "Checking the starting point"
-  [[ "$RELEASE" == cachyos-11.* ]] || die "only cachyos-11 releases have an overlay variant; $RELEASE does not"
+  [[ "$RELEASE" == cachyos-11.* ]] || die "only cachyos-11 releases are supported: the Fenix patch carried in patches/wine/ is the cachyos-11 variant, and $RELEASE needs it rebased there"
   [ "$RELEASE" = "$VERIFIED_RELEASE" ] || echo "note: $RELEASE is not $VERIFIED_RELEASE, the release this project verified; the patches may not apply"
   check_vkd3d_choice
   local tool
@@ -215,7 +213,7 @@ check_preconditions() {
     pkg-config --exists "$package" || die "missing development files for $package, which the Steam overlay bridge needs"
   done
   local patch
-  for patch in "${PATCHES[@]:1}" "${VKD3D_PATCHES[@]}" "${DXVK_PATCHES[@]}" "${PROTON_PATCHES[@]}" "${PROTON_FILES[@]}"; do
+  for patch in "${PATCHES[@]}" "${VKD3D_PATCHES[@]}" "${DXVK_PATCHES[@]}" "${PROTON_PATCHES[@]}" "${PROTON_FILES[@]}"; do
     [ -f "$patch" ] || die "missing patch $patch"
   done
   STEAM="$(find_steam)"
@@ -246,17 +244,6 @@ download_release() {
   TARBALL_SHA512="$(sha512sum "$TARBALL" | cut -d' ' -f1)"
   [ "$TARBALL_SHA512" = "$expected" ] || die "$TARBALL does not match the release sha512; delete it and run again"
   echo "sha512 ok: $TARBALL"
-}
-
-download_overlay_patch() {
-  step "Downloading the fenix-a320-linux-patch $OVERLAY_TAG patch for $OVERLAY_VARIANT"
-  local target="${PATCHES[0]}"
-  if [ ! -f "$target" ]; then
-    curl -fsSL --retry 3 -o "$target.part" "$OVERLAY_PATCH_URL"
-    mv "$target.part" "$target"
-  fi
-  [ "$(sha256sum "$target" | cut -d' ' -f1)" = "$OVERLAY_PATCH_SHA256" ] || die "$target does not match the pinned sha256; delete it and run again"
-  echo "sha256 ok: $target"
 }
 
 find_wine_commit() {
@@ -736,7 +723,6 @@ trap explain_cleanup EXIT
 
 check_preconditions
 download_release
-download_overlay_patch
 find_wine_commit
 check_release_leaves_vkd3d_alone
 fetch_source

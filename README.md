@@ -49,7 +49,7 @@ Fixes were found and measured on one machine: CachyOS, KDE Plasma on Wayland, an
 
 ## Credits
 
-Proton FS2024 is built on the [fenix-a320-linux-patch](https://github.com/marselnenaj/fenix-a320-linux-patch) overlay by its authors, on [Proton-CachyOS](https://github.com/CachyOS/proton-cachyos), on [Wine](https://www.winehq.org/) and on [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton). This project downloads them from their own releases and doesn't redistribute them.
+Proton FS2024 is built on the [fenix-a320-linux-patch](https://github.com/marselnenaj/fenix-a320-linux-patch) overlay by its authors, on [Proton-CachyOS](https://github.com/CachyOS/proton-cachyos), on [Wine](https://www.winehq.org/) and on [vkd3d-proton](https://github.com/HansKristian-Work/vkd3d-proton). The build downloads Proton-CachyOS, Wine and vkd3d-proton from their own releases. The overlay's Wine patch is the exception: it lives in `patches/wine/fenix-a320-linux-patch-cachyos-11.patch`, unchanged, with its origin in the file header, so the Proton base can change without waiting for the overlay's authors to publish a variant. Its `dlls/win32u/cursoricon.c` hunks are GloriousEggroll's patch from GE-Proton. The build's check step, `checks/check-proton.sh`, still downloads one file from the overlay project: the source of its loader probe, taken from the same tag.
 
 Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-on developer.
 
@@ -57,6 +57,6 @@ Not affiliated with Microsoft, Valve, CodeWeavers, the Wine project or any add-o
 
 - Code (`bin/`, `fsol/`, `proton/`, `checks/`, `addons/`, `shims/`, `tools/`, `tests/`): MIT, in `LICENSE`.
 - Text of the site and the guides (`site/`, `docs/`, the Markdown files): CC BY 4.0, in `LICENSE-docs`.
-- Wine patches (`patches/wine/`): LGPL-2.1-or-later, like Wine itself, in `patches/wine/COPYING`.
+- Wine patches (`patches/wine/`): LGPL-2.1-or-later, like Wine itself, in `patches/wine/COPYING`. `fenix-a320-linux-patch-cachyos-11.patch` is the fenix-a320-linux-patch project's file, copyright (c) 2026 Fenix A320 Linux Patch contributors (MIT licence for the project, LGPL-2.1-or-later for its Wine patches), with GloriousEggroll's cursor hunks inside.
 - vkd3d-proton patches (`patches/vkd3d-proton/`): LGPL-2.1, like vkd3d-proton itself, in `patches/vkd3d-proton/COPYING`.
 - OpenDeck patches (`addons/opendeck/patches/`): GPL-3.0, like OpenDeck itself, in `addons/opendeck/patches/COPYING`.
