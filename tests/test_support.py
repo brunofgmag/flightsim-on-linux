@@ -48,8 +48,7 @@ class StandInTest(unittest.TestCase):
         process = self.start("token")
         path = Path(f"/proc/{process.pid}/cmdline")
         deadline = time.monotonic() + 5
-        while b"sleep" in path.read_bytes().split(b"\0")[0] or not path.read_bytes():
-            self.assertLess(time.monotonic(), deadline)
+        while path.read_bytes().split(b"\0")[0].decode(errors="replace") != PROGRAM and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertEqual(path.read_bytes().split(b"\0")[0].decode(), PROGRAM)
 

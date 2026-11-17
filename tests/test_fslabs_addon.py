@@ -353,7 +353,7 @@ EXE = "drive_c/FlightSimLabs/ControlCenter/FSLControlCenter.exe"
 
 
 def recording(file, after=""):
-    return f'#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "{file}"\nprintf "%s\\n" "cwd=$PWD" >> "{file}"\nenv >> "{file}.env"\n{after}'
+    return f'#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "{file}"\nenv >> "{file}.env"\nprintf "%s\\n" "cwd=$PWD" >> "{file}"\n{after}'
 
 
 def stub(path, text):

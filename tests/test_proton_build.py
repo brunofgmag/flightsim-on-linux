@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PATCH = "windows-storage-applicationdata-no-package.patch"
 MODULE = "lib/wine/x86_64-windows/windows.storage.applicationdata.dll"
 GOOD = "the module is the patched one"
+DOWNLOADED_FENIX_PATCH = "fenix-a320-linux-patch-v0.1.0-preview.7-cachyos-11.patch"
+CARRIED_FENIX_PATCH = "fenix-a320-linux-patch-cachyos-11.patch"
 
 
 def sha256(data):
@@ -45,6 +47,19 @@ class CheckCommandTest(unittest.TestCase):
 
     def test_a_build_that_lists_the_patch_and_carries_its_module_passes(self):
         self.assertEqual(self.check_proton()[:2], (0, [f"ok {GOOD}"]))
+
+    def add_record_lines(self, *lines):
+        file = self.proton / "fs2024-build.txt"
+        file.write_text(file.read_text() + "\n".join(lines) + "\n")
+
+    def test_a_build_made_when_the_fenix_patch_was_downloaded_still_passes(self):
+        self.add_record_lines(f"patch {'1' * 64} {DOWNLOADED_FENIX_PATCH}", "overlay fenix-a320-linux-patch v0.1.0-preview.7 cachyos-11")
+        self.assertEqual(self.check_proton()[:2], (0, [f"ok {GOOD}"]))
+
+    def test_a_build_that_lists_the_carried_fenix_patch_by_its_sha_has_it_listed(self):
+        carried = sha256((ROOT / "patches" / "wine" / CARRIED_FENIX_PATCH).read_bytes())
+        self.add_record_lines(f"patch {carried} {CARRIED_FENIX_PATCH}")
+        self.assertEqual(proton_build.listed_line(self.proton, CARRIED_FENIX_PATCH, GOOD), (True, GOOD))
 
     def test_a_proton_without_a_build_record_fails_and_says_to_build(self):
         (self.proton / "fs2024-build.txt").unlink()

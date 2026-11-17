@@ -482,7 +482,7 @@ class BridgeLaunchTest(P42Case):
         stub(self.root / "cli", CLI_STUB % {"root": str(ROOT), "record": str(self.record), "proc": str(self.fake.proc), "home": str(self.fake.home), "dev": str(self.fake.dev), "runtime": str(self.fake.runtime), "drm": str(self.fake.drm)})
 
     def wine_stub(self):
-        return super().wine_stub() + f'env | grep -E "{WINE_ENV_PATTERN}" | sort > "{self.record}.wine-env"\n'
+        return super().wine_stub() + f'env | grep -E "{WINE_ENV_PATTERN}" | sort > "{self.record}.wine-env.part" && mv "{self.record}.wine-env.part" "{self.record}.wine-env"\n'
 
     def wait_for(self, condition, seconds=5):
         deadline = time.monotonic() + seconds
