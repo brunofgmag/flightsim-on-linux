@@ -17,9 +17,9 @@ ROOT = PARTS.parents[2]
 sys.path.insert(0, str(ROOT))
 machine = importlib.import_module("fsol.machine")
 
-RELEASE = "1.7.1-xmx.4"
+RELEASE = "1.7.1-xmx.5"
 PROXY = "version.dll"
-PROXY_SHA256 = "dbc19741fb4eea8841f86212e0c79f4f319636fdea07eb4de90bf4882188a7ee"
+PROXY_SHA256 = "ab908356731f0d5fdd848e01b5e951e640ac974dc8beef6b37b5de456a199097"
 ARCHIVE_MEMBER = "MFGUnlocker.dll"
 XESS_FOLDER = "RTXMFG-XeSS"
 XESS_SDK = "XeSS SDK 3.0.2"
@@ -318,6 +318,10 @@ def multiplier_suffix(data):
     return ""
 
 
+def xmx_generator(data):
+    return "FSR MFG (AMD's FSR 3.1)" if is_number(data.get("xmxModel"), 1) else "Intel's XeFG"
+
+
 def config_lines(sim):
     try:
         text = read_config(sim)
@@ -339,7 +343,7 @@ def config_lines(sim):
         ),
         verdict(
             is_number(data.get("xmx"), 1),
-            f'"xmx" is 1 in {CONFIG}: Intel\'s XeFG draws the generated frames',
+            f'"xmx" is 1 in {CONFIG}: {xmx_generator(data)} draws the generated frames',
             f'"xmx" is {json.dumps(data.get("xmx"))} in {CONFIG}, so NVIDIA\'s generator makes the frames and Intel\'s XeFG is not used; run: {APPLY}',
         ),
         verdict(

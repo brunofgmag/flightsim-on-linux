@@ -22,9 +22,9 @@ PAGE = ROOT / "site" / "pages" / "mfg-unlocker.html"
 RTX_5080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 5080", "0x10de", "0x2c02")
 RTX_4090_LAPTOP = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce RTX 4090 Laptop GPU", "0x10de", "0x2757")
 GTX_1080 = ("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU", "NVIDIA GeForce GTX 1080", "0x10de", "0x1b80")
-ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.4/MFGUnlocker-v1.7.1-xmx.4.zip"
-ZIP_SHA256 = "49ba1a69dd43281effd033f3f49207c9520edaae71dd63545aa1bfcd6d6c6146"
-DLL_SHA256 = "dbc19741fb4eea8841f86212e0c79f4f319636fdea07eb4de90bf4882188a7ee"
+ZIP_URL = "https://github.com/brunofgmag/MFG-Unlocker/releases/download/v1.7.1-xmx.5/MFGUnlocker-v1.7.1-xmx.5.zip"
+ZIP_SHA256 = "d45b568883ebe229627eaf05ce71381a5c8a9da4bd0b1934969e4290e88bed81"
+DLL_SHA256 = "ab908356731f0d5fdd848e01b5e951e640ac974dc8beef6b37b5de456a199097"
 SDK_URL = "https://github.com/intel/xess/releases/download/v3.0.2/XeSS_SDK_3.0.2.zip"
 SDK_SHA256 = "88b8a373f30e33f3558a77a93e634f11b8132fc3047ea1a8edeead32b8471990"
 XESS_FG_SHA256 = "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"
@@ -74,7 +74,7 @@ def make_zip(path, members):
 class MfgShapeTest(unittest.TestCase):
     def test_the_manifest_says_what_the_add_on_needs(self):
         addon = addons.load(MFG)
-        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.4", "2026-11-16", True))
+        self.assertEqual((addon.id, addon.name, addon.tested_version, addon.tested_on, addon.touches_addon_files), ("mfg-unlocker", "MFG Unlocker", "1.7.1-xmx.5", "2026-11-17", True))
         self.assertEqual(addon.needs, ["simulator-closed"])
         self.assertEqual(addon.installed, {"sim": ["version.dll"]})
         self.assertEqual(addon.install, {"from": "https://github.com/brunofgmag/MFG-Unlocker/releases", "kind": "native"})
@@ -83,14 +83,14 @@ class MfgShapeTest(unittest.TestCase):
 
     def test_the_pinned_downloads_are_the_forks_release_and_intels_sdk(self):
         text = (MFG / "install").read_text()
-        self.assertIn('MFG_VERSION="1.7.1-xmx.4"', text)
+        self.assertIn('MFG_VERSION="1.7.1-xmx.5"', text)
         self.assertIn("https://github.com/brunofgmag/MFG-Unlocker/releases/download/v$MFG_VERSION/MFGUnlocker-v$MFG_VERSION.zip", text)
         self.assertIn(f'MFG_SHA256="{ZIP_SHA256}"', text)
         self.assertIn(f'XESS_URL="{SDK_URL}"', text)
         self.assertIn(f'XESS_SHA256="{SDK_SHA256}"', text)
 
     def test_the_helper_pins_the_release_dll_and_the_two_intel_files(self):
-        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.4")
+        self.assertEqual(mfg.RELEASE, "1.7.1-xmx.5")
         self.assertEqual(mfg.PROXY_SHA256, DLL_SHA256)
         self.assertEqual(mfg.XESS_FILES, {"libxess_fg.dll": XESS_FG_SHA256, "libxell.dll": XELL_SHA256})
         self.assertEqual(mfg.XESS_FOLDER, XESS_FOLDER)
@@ -533,7 +533,7 @@ class MfgCheckTest(MfgCase):
 
     def test_the_dll_line_says_it_is_the_fork(self):
         _, lines = self.check()
-        self.assertIn("1.7.1-xmx.4", lines[1])
+        self.assertIn("1.7.1-xmx.5", lines[1])
 
     def test_without_the_intel_folder_both_libraries_fail_and_say_to_install(self):
         shutil.rmtree(self.xess)
@@ -692,6 +692,20 @@ class MfgCheckTest(MfgCase):
         code, lines = self.check()
         self.only_failure(code, lines)
         self.assertIn('"xmx" is true', self.failing(lines)[0])
+
+    def test_the_xmx_line_names_fsr_mfg_when_the_menu_picked_it(self):
+        self.configured(FIXED.replace('"xmx":1', '"xmx":1,"xmxModel":1'))
+        _, lines = self.check()
+        line = next(line for line in lines if '"xmx" is 1' in line)
+        self.assertIn("FSR MFG", line)
+        self.assertNotIn("XeFG", line)
+
+    def test_the_xmx_line_names_xefg_without_the_model_key(self):
+        self.configured(FIXED)
+        _, lines = self.check()
+        line = next(line for line in lines if '"xmx" is 1' in line)
+        self.assertIn("Intel's XeFG", line)
+        self.assertNotIn("FSR MFG", line)
 
     def test_the_xell_key_left_off_fails_alone_and_says_what_it_does(self):
         self.configured(FIXED.replace('"xmxXell":1', '"xmxXell":0'))
@@ -1104,7 +1118,7 @@ class MfgPageTest(unittest.TestCase):
             self.assertIn(needed, self.text)
 
     def test_it_says_what_the_fork_is_and_where_it_lives(self):
-        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.4", "dashdogy", "mavismmg", "XeMFG DLSS-G", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
+        for needed in ("https://github.com/brunofgmag/MFG-Unlocker", "releases/tag/v1.7.1-xmx.5", "dashdogy", "mavismmg", "XeMFG DLSS-G", "FSR MFG", '"xmxModel"', "xmxTensorCores", "XeLL sleep", "940 MB", "PAGE_WRITECOPY", "Michael Robles"):
             self.assertIn(needed, self.text)
 
     def test_it_says_how_to_go_back_to_upstream(self):
